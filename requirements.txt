@@ -1,0 +1,98 @@
+# ==========================================
+# Contact Lens Color Inspection System
+# Python Dependencies
+# ==========================================
+# Python 3.10+ required
+
+# ------------------------------------------
+# Image Processing & Computer Vision
+# ------------------------------------------
+opencv-python>=4.8.0,<4.13.0
+opencv-contrib-python>=4.8.0,<4.13.0
+# scikit-image>=0.24.0  # Optional: uncomment if needed (requires C compiler on some systems)
+Pillow>=10.0.0
+
+# ------------------------------------------
+# Numerical Computing
+# ------------------------------------------
+numpy>=1.24.0  # Flexible version for Python 3.13 compatibility
+scipy>=1.11.0
+
+# ------------------------------------------
+# Color Science
+# ------------------------------------------
+colormath==3.0.0
+
+# ------------------------------------------
+# Visualization
+# ------------------------------------------
+matplotlib>=3.8.0
+seaborn>=0.13.0
+plotly>=5.18.0
+
+# ------------------------------------------
+# GUI Framework
+# ------------------------------------------
+PyQt6>=6.6.0
+pyqtgraph>=0.13.0
+
+# ------------------------------------------
+# Data Management
+# ------------------------------------------
+pandas>=2.1.0
+h5py>=3.10.0
+SQLAlchemy>=2.0.0
+
+# ------------------------------------------
+# Configuration Management
+# ------------------------------------------
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# ------------------------------------------
+# Logging & Monitoring
+# ------------------------------------------
+loguru>=0.7.0
+
+# ------------------------------------------
+# Testing
+# ------------------------------------------
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# ------------------------------------------
+# Code Quality & Linting
+# ------------------------------------------
+black>=23.0.0
+flake8>=7.0.0
+mypy>=1.8.0
+isort>=5.13.0
+
+# ------------------------------------------
+# Camera Integration (Optional)
+# ------------------------------------------
+# Uncomment based on your camera hardware:
+# pypylon==3.0.1              # For Basler cameras
+# harvesters==1.4.2           # For GenICam-compliant cameras
+# opencv-python should work with most USB cameras
+
+# ------------------------------------------
+# Additional Utilities
+# ------------------------------------------
+tqdm>=4.66.0                 # Progress bars
+python-dateutil>=2.8.0       # Date/time utilities
+tabulate>=0.9.0              # Pretty-print tables
+
+# ------------------------------------------
+# Development Tools (Optional)
+# ------------------------------------------
+jupyter>=1.0.0               # Jupyter Notebook for prototyping
+ipykernel>=6.27.0            # Jupyter kernel
+notebook>=7.0.0              # Notebook interface
+
+# ------------------------------------------
+# Documentation (Optional)
+# ------------------------------------------
+# sphinx==7.2.6              # For auto-generating docs
+# sphinx-rtd-theme==2.0.0    # ReadTheDocs theme
