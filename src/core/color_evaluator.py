@@ -56,6 +56,9 @@ class InspectionResult:
         zone_results: Zone별 결과 리스트
         ng_reasons: NG 이유 목록
         confidence: 판정 신뢰도 (0.0~1.0)
+        lens_detection: 렌즈 검출 결과 (시각화용, optional)
+        zones: Zone 리스트 (시각화용, optional)
+        image: 원본 이미지 (시각화용, optional)
     """
     sku: str
     timestamp: datetime
@@ -64,6 +67,9 @@ class InspectionResult:
     zone_results: List[ZoneResult]
     ng_reasons: List[str]
     confidence: float
+    lens_detection: Optional[Any] = None  # LensDetection
+    zones: Optional[List[Zone]] = None
+    image: Optional[Any] = None  # np.ndarray
 
 
 class ColorEvaluationError(Exception):

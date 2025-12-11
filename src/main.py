@@ -20,6 +20,7 @@ from src.sku_manager import (
     InvalidSkuDataError,
     InsufficientSamplesError
 )
+from src.visualizer import InspectionVisualizer, VisualizerConfig
 
 
 # 로깅 설정
@@ -135,6 +136,53 @@ def process_single_image(args):
 
         logger.info(f"Result saved to {output_path}")
 
+    # 시각화 (옵션)
+    if hasattr(args, 'visualize') and args.visualize:
+        visualizer = InspectionVisualizer(VisualizerConfig())
+
+        viz_output = Path(args.viz_output) if hasattr(args, 'viz_output') and args.viz_output else None
+
+        if args.visualize == 'zone_overlay':
+            viz_img = visualizer.visualize_zone_overlay(
+                result.image,
+                result.lens_detection,
+                result.zones,
+                result,
+                show_result=True
+            )
+            if viz_output:
+                visualizer.save_visualization(viz_img, viz_output)
+                logger.info(f"Zone overlay saved to {viz_output}")
+
+        elif args.visualize == 'comparison':
+            viz_fig = visualizer.visualize_comparison(result.zones, result)
+            if viz_output:
+                visualizer.save_visualization(viz_fig, viz_output)
+                logger.info(f"Comparison chart saved to {viz_output}")
+            else:
+                import matplotlib.pyplot as plt
+                plt.show()
+
+        elif args.visualize == 'all':
+            # Zone overlay
+            viz_img = visualizer.visualize_zone_overlay(
+                result.image,
+                result.lens_detection,
+                result.zones,
+                result,
+                show_result=True
+            )
+            overlay_path = viz_output.parent / f"{viz_output.stem}_overlay{viz_output.suffix}" if viz_output else Path('results') / 'overlay.png'
+            overlay_path.parent.mkdir(parents=True, exist_ok=True)
+            visualizer.save_visualization(viz_img, overlay_path)
+            logger.info(f"Zone overlay saved to {overlay_path}")
+
+            # Comparison chart
+            viz_fig = visualizer.visualize_comparison(result.zones, result)
+            comparison_path = viz_output.parent / f"{viz_output.stem}_comparison{viz_output.suffix}" if viz_output else Path('results') / 'comparison.png'
+            visualizer.save_visualization(viz_fig, comparison_path)
+            logger.info(f"Comparison chart saved to {comparison_path}")
+
     return 0 if result.judgment == 'OK' else 1
 
 
@@ -191,6 +239,19 @@ def process_batch(args):
         print(f"  Results saved: {args.output}")
 
     print("="*60 + "\n")
+
+    # 배치 시각화 (옵션)
+    if hasattr(args, 'visualize') and args.visualize and results:
+        visualizer = InspectionVisualizer(VisualizerConfig())
+
+        viz_output = Path(args.viz_output) if hasattr(args, 'viz_output') and args.viz_output else Path('results') / 'dashboard.png'
+        viz_output.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info("Generating dashboard visualization...")
+        viz_fig = visualizer.visualize_dashboard(results)
+        visualizer.save_visualization(viz_fig, viz_output)
+        logger.info(f"Dashboard saved to {viz_output}")
+        print(f"  Dashboard:     {viz_output}")
 
     return 0 if ng_count == 0 else 1
 
@@ -459,6 +520,8 @@ Examples:
     inspect_parser.add_argument('--sku', required=True, help='SKU code')
     inspect_parser.add_argument('--output', help='Output JSON file path')
     inspect_parser.add_argument('--save-intermediates', action='store_true', help='Save intermediate results')
+    inspect_parser.add_argument('--visualize', choices=['zone_overlay', 'comparison', 'all'], help='Generate visualization (zone_overlay, comparison, or all)')
+    inspect_parser.add_argument('--viz-output', help='Visualization output path (PNG or PDF)')
 
     # ========== batch 명령어 (배치 처리) ==========
     batch_parser = subparsers.add_parser(
@@ -475,6 +538,8 @@ Examples:
     batch_parser.add_argument('--sku', required=True, help='SKU code')
     batch_parser.add_argument('--output', help='Output CSV file path')
     batch_parser.add_argument('--continue-on-error', action='store_true', default=True, help='Continue on error')
+    batch_parser.add_argument('--visualize', action='store_true', help='Generate dashboard visualization')
+    batch_parser.add_argument('--viz-output', help='Dashboard output path (PNG or PDF)')
 
     # ========== sku 명령어 (SKU 관리) ==========
     sku_parser = subparsers.add_parser(

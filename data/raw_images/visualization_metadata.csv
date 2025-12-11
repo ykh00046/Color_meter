@@ -1,0 +1,7 @@
+file_name,sku,judgment,description
+VIS_OK_001.jpg,VIS_TEST,OK,Blue lens normal sample
+VIS_OK_002.jpg,VIS_TEST,OK,Green lens normal sample
+VIS_OK_003.jpg,VIS_TEST,OK,Red lens normal sample
+VIS_NG_001.jpg,VIS_TEST,NG,Blue lens with scratch
+VIS_NG_002.jpg,VIS_TEST,NG,Green lens with dot missing
+VIS_NG_003.jpg,VIS_TEST,NG,Red lens with color mismatch

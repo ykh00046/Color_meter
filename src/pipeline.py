@@ -124,6 +124,11 @@ class InspectionPipeline:
                 self.sku_config
             )
 
+            # 시각화를 위한 데이터 추가
+            inspection_result.lens_detection = lens_detection
+            inspection_result.zones = zones
+            inspection_result.image = image  # 원본 이미지 (전처리 전)
+
             # 처리 시간 계산
             processing_time = (datetime.now() - start_time).total_seconds() * 1000  # ms
 
