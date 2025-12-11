@@ -1,0 +1,21 @@
+{
+  "sku_code": "SKU001",
+  "description": "3-zone colored contact lens (dummy test data)",
+  "default_threshold": 3.5,
+  "zones": {
+    "A": {
+      "L": 72.2,
+      "a": 137.3,
+      "b": 122.8,
+      "threshold": 4.0,
+      "description": "Main zone (measured from OK samples)"
+    }
+  },
+  "metadata": {
+    "created_at": "2025-12-11",
+    "baseline_samples": 5,
+    "last_updated": "2025-12-11T10:10:00",
+    "calibration_method": "Measured from dummy data OK_001-005.jpg",
+    "notes": "Dummy data only has single zone due to low color variation. Real lens images will have multiple zones."
+  }
+}
