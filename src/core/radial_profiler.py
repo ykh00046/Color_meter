@@ -34,17 +34,17 @@ class RadialProfiler:
     def extract_profile(self, image: np.ndarray, lens: LensDetection) -> RadialProfile:
         if image is None: raise ValueError("Input image cannot be None.")
         if not lens: raise ValueError("LensDetection object cannot be None.")
-        
+
         cx, cy, radius = lens.center_x, lens.center_y, lens.radius
         r_samples = int(radius / self.config.r_step_pixels)
         if r_samples < 1: r_samples = 1
-        
+
         polar_image = cv2.warpPolar(
             image, (r_samples, self.config.theta_samples),
             (cx, cy), radius,
             cv2.WARP_POLAR_LINEAR + cv2.WARP_FILL_OUTLIERS
         )
-        
+
         if polar_image.size == 0:
             dummy_r = np.linspace(0, 1, 10)
             zeros = np.zeros_like(dummy_r)
@@ -60,7 +60,7 @@ class RadialProfiler:
         std_L = polar_lab[:, :, 0].std(axis=1)
         std_a = polar_lab[:, :, 1].std(axis=1)
         std_b = polar_lab[:, :, 2].std(axis=1)
-        
+
         pixel_count = np.full_like(L_profile, self.config.theta_samples)
         r_normalized = np.linspace(0.0, 1.0, r_samples)
         

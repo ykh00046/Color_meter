@@ -1,15 +1,16 @@
 """
 Zone Segmenter Module
 
-변곡점 기반 자동 Zone 분할 모듈.
-RadialProfile의 a* 그래디언트 분석을 통해 잉크 영역을 자동 분할한다.
+RadialProfile의 색상 변화를 기반으로 동심원 영역을 분할합니다.
+회전 불변성을 유지하는 polar 프로파일을 이용해 변곡점(gradient/ΔE)을 찾고,
+필요 시 expected_zones 힌트를 활용해 균등 분할 fallback을 수행합니다.
 """
 
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
-from scipy.signal import find_peaks, savgol_filter
+from typing import List, Optional
 import logging
+import numpy as np
+from scipy.signal import find_peaks, savgol_filter
 
 from src.core.radial_profiler import RadialProfile
 
@@ -18,21 +19,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Zone:
-    """
-    색상 영역 데이터 클래스.
+    """색상 영역 데이터"""
 
-    Attributes:
-        name: Zone 이름 ('A', 'A-B', 'B', 'B-C', 'C' 등)
-        r_start: 시작 반경 (정규화, 0.0~1.0)
-        r_end: 종료 반경 (정규화, 0.0~1.0)
-        mean_L: 평균 L* 값
-        mean_a: 평균 a* 값
-        mean_b: 평균 b* 값
-        std_L: L* 표준편차
-        std_a: a* 표준편차
-        std_b: b* 표준편차
-        zone_type: 'pure' (순수 영역) 또는 'mix' (혼합 영역)
-    """
     name: str
     r_start: float
     r_end: float
@@ -47,323 +35,214 @@ class Zone:
 
 @dataclass
 class SegmenterConfig:
-    """
-    ZoneSegmenter 설정.
+    """ZoneSegmenter 설정"""
 
-    Attributes:
-        detection_method: 변곡점 검출 방법 ('gradient' 또는 'delta_e')
-        min_zone_width: 최소 zone 폭 (정규화, 0.0~1.0)
-        smoothing_window: 그래디언트 스무딩 윈도우 크기 (홀수)
-        min_gradient: 최소 그래디언트 크기 (피크 검출 임계값)
-    """
-    detection_method: str = 'gradient'
-    min_zone_width: float = 0.05  # 최소 5% 폭
-    smoothing_window: int = 11    # Savitzky-Golay 윈도우
-    min_gradient: float = 0.5     # 최소 그래디언트
+    detection_method: str = "hybrid"  # gradient, delta_e, hybrid
+    min_zone_width: float = 0.03      # 최소 3% 폭
+    smoothing_window: int = 11        # Savitzky-Golay 윈도우
+    polyorder: int = 3                # Savitzky-Golay 차수
+    min_gradient: float = 0.25        # 그래디언트 피크 하한
+    min_delta_e: float = 2.0          # ΔE 피크 하한
+    expected_zones: Optional[int] = None  # 잉크 수 힌트(1~3)
+    transition_buffer_px: int = 0     # 혼합 구간 버퍼(미사용 시 0)
 
 
 class ZoneSegmentationError(Exception):
-    """Zone 분할 실패 시 발생하는 예외"""
-    pass
+    """Zone 분할 실패 예외"""
 
 
 class ZoneSegmenter:
-    """
-    변곡점 기반 Zone 자동 분할 클래스.
-
-    RadialProfile의 a* 프로파일에서 그래디언트 급변 지점을 검출하여
-    잉크 영역을 자동으로 분할한다.
-    """
+    """동심원 색상 프로파일을 zone 단위로 분할"""
 
     def __init__(self, config: SegmenterConfig = SegmenterConfig()):
-        """
-        ZoneSegmenter 초기화.
-
-        Args:
-            config: Segmenter 설정
-        """
         self.config = config
 
-    def segment(self, profile: RadialProfile) -> List[Zone]:
-        """
-        프로파일을 Zone으로 분할.
-
-        Args:
-            profile: 색상 프로파일 (RadialProfile 객체)
-
-        Returns:
-            Zone 리스트 (바깥쪽 → 안쪽 순서)
-
-        Raises:
-            ZoneSegmentationError: Zone 분할 실패 시
-        """
+    def segment(self, profile: RadialProfile, expected_zones: Optional[int] = None) -> List[Zone]:
         if profile is None:
             raise ValueError("Profile cannot be None")
 
-        # 1. 변곡점 검출
-        inflections = self._detect_inflection_points(profile)
+        hint_zones = expected_zones or self.config.expected_zones
 
-        logger.debug(f"Detected {len(inflections)} inflection points: {inflections}")
+        # 1) 프로파일 평활화
+        smooth_profile = self._smooth_profile(profile)
 
-        # 2. 경계점 정렬 (바깥 → 안쪽, 즉 큰 r → 작은 r)
-        boundaries = sorted(inflections, reverse=True)
+        # 2) 변곡점 검출 (그래디언트 + ΔE)
+        grad_pts = self._detect_by_gradient(smooth_profile)
+        de_pts = self._detect_by_delta_e(smooth_profile)
 
-        # 시작/끝 추가 (전체 범위 포함)
-        r_max = profile.r_normalized[-1]  # 가장 큰 r (바깥쪽)
-        r_min = profile.r_normalized[0]   # 가장 작은 r (안쪽)
+        boundaries = sorted(list(set(grad_pts + de_pts)), reverse=True)
+        boundaries = self._merge_close_boundaries(boundaries, self.config.min_zone_width)
+
+        # 3) 힌트 기반 개수 보정 또는 fallback
+        if hint_zones and hint_zones > 0:
+            desired = hint_zones - 1
+            if len(boundaries) != desired:
+                logger.info(f"Boundary count mismatch (found {len(boundaries)}, expected {desired}); using uniform split.")
+                boundaries = self._uniform_boundaries(hint_zones)
+        else:
+            if not boundaries:
+                logger.warning("No boundaries detected and no hint provided. Using default 3-zone split.")
+                boundaries = self._uniform_boundaries(3)
+
+        # 4) r 범위 포함 및 최소 폭 병합
+        r_max = float(profile.r_normalized[-1])
+        r_min = float(profile.r_normalized[0])
         boundaries = [r_max] + boundaries + [r_min]
+        boundaries = self._merge_close_boundaries(boundaries, self.config.min_zone_width)
 
-        logger.debug(f"Zone boundaries: {boundaries}")
-
-        # 3. 각 구간을 Zone으로 변환
-        zones = []
-        zone_labels = self._generate_zone_labels(len(boundaries) - 1)
+        # 5) Zone 생성
+        zones: List[Zone] = []
+        labels = self._generate_zone_labels(len(boundaries) - 1)
 
         for i in range(len(boundaries) - 1):
             r_start = boundaries[i]
             r_end = boundaries[i + 1]
-
-            # 해당 구간의 평균 색상 계산
             mask = (profile.r_normalized >= r_end) & (profile.r_normalized < r_start)
-
             if np.sum(mask) == 0:
-                logger.warning(f"No data points in zone {zone_labels[i]} ({r_start:.3f} - {r_end:.3f})")
+                logger.warning(f"No data points in zone {labels[i]} ({r_start:.3f}-{r_end:.3f})")
                 continue
 
-            mean_L = np.mean(profile.L[mask])
-            mean_a = np.mean(profile.a[mask])
-            mean_b = np.mean(profile.b[mask])
-            std_L = np.std(profile.L[mask])
-            std_a = np.std(profile.a[mask])
-            std_b = np.std(profile.b[mask])
+            mean_L = float(np.mean(profile.L[mask]))
+            mean_a = float(np.mean(profile.a[mask]))
+            mean_b = float(np.mean(profile.b[mask]))
+            std_L = float(np.std(profile.L[mask]))
+            std_a = float(np.std(profile.a[mask]))
+            std_b = float(np.std(profile.b[mask]))
 
-            zone = Zone(
-                name=zone_labels[i],
-                r_start=r_start,
-                r_end=r_end,
-                mean_L=mean_L,
-                mean_a=mean_a,
-                mean_b=mean_b,
-                std_L=std_L,
-                std_a=std_a,
-                std_b=std_b,
-                zone_type='pure' if '-' not in zone_labels[i] else 'mix'
+            zones.append(
+                Zone(
+                    name=labels[i],
+                    r_start=r_start,
+                    r_end=r_end,
+                    mean_L=mean_L,
+                    mean_a=mean_a,
+                    mean_b=mean_b,
+                    std_L=std_L,
+                    std_a=std_a,
+                    std_b=std_b,
+                    zone_type="pure" if "-" not in labels[i] else "mix",
+                )
             )
-            zones.append(zone)
 
-        if len(zones) == 0:
+        if not zones:
             raise ZoneSegmentationError("No zones created after segmentation")
 
         logger.info(f"Segmented into {len(zones)} zones: {[z.name for z in zones]}")
-
         return zones
 
-    def _detect_inflection_points(self, profile: RadialProfile) -> List[float]:
-        """
-        변곡점 r 값 검출.
-
-        a* 프로파일의 그래디언트 급변 지점을 찾아 반환.
-        a* 값이 색상 변화를 가장 잘 나타냄 (빨강-초록 축).
-
-        Args:
-            profile: 색상 프로파일
-
-        Returns:
-            변곡점의 r 값 리스트
-        """
-        if self.config.detection_method == 'gradient':
-            return self._detect_by_gradient(profile)
-        elif self.config.detection_method == 'delta_e':
-            return self._detect_by_delta_e(profile)
+    def _smooth_profile(self, profile: RadialProfile) -> RadialProfile:
+        window = min(self.config.smoothing_window, len(profile.a) - (len(profile.a) + 1) % 2)
+        if window >= self.config.polyorder + 2:
+            a = savgol_filter(profile.a, window_length=window, polyorder=self.config.polyorder)
+            L = savgol_filter(profile.L, window_length=window, polyorder=self.config.polyorder)
+            b = savgol_filter(profile.b, window_length=window, polyorder=self.config.polyorder)
         else:
-            raise ValueError(f"Unknown detection method: {self.config.detection_method}")
+            a, L, b = profile.a, profile.L, profile.b
 
-    def _detect_by_gradient(self, profile: RadialProfile) -> List[float]:
-        """
-        a* 그래디언트 기반 변곡점 검출.
-
-        Args:
-            profile: 색상 프로파일
-
-        Returns:
-            변곡점의 r 값 리스트
-        """
-        # a* 1차 미분 (그래디언트)
-        gradient_a = np.gradient(profile.a)
-
-        # 스무딩 (노이즈 제거)
-        if len(gradient_a) >= self.config.smoothing_window:
-            gradient_smooth = savgol_filter(
-                gradient_a,
-                window_length=self.config.smoothing_window,
-                polyorder=2
-            )
-        else:
-            # 데이터 포인트가 윈도우보다 작으면 스무딩 스킵
-            gradient_smooth = gradient_a
-
-        # 그래디언트 절댓값에서 피크 검출
-        min_distance_points = int(self.config.min_zone_width * len(profile.r_normalized))
-
-        peaks, properties = find_peaks(
-            np.abs(gradient_smooth),
-            height=self.config.min_gradient,
-            distance=max(1, min_distance_points)  # 최소 1 픽셀
+        return RadialProfile(
+            r_normalized=profile.r_normalized,
+            L=L,
+            a=a,
+            b=b,
+            std_L=profile.std_L,
+            std_a=profile.std_a,
+            std_b=profile.std_b,
+            pixel_count=profile.pixel_count,
         )
 
-        # 피크에 해당하는 r 값
-        if len(peaks) > 0:
-            inflection_r = profile.r_normalized[peaks]
-            return inflection_r.tolist()
-        else:
-            # 변곡점이 없으면 빈 리스트 반환 (단일 zone)
-            logger.warning("No inflection points detected")
+    def _detect_by_gradient(self, profile: RadialProfile) -> List[float]:
+        grad = np.gradient(profile.a)
+        if grad.size == 0:
             return []
+        # 평활화된 그래디언트로 적응형 임계값 계산
+        window = min(self.config.smoothing_window, len(grad) - (len(grad) + 1) % 2)
+        if window >= self.config.polyorder + 2:
+            grad = savgol_filter(grad, window_length=window, polyorder=self.config.polyorder)
+        abs_grad = np.abs(grad)
+        adaptive = max(self.config.min_gradient, np.percentile(abs_grad, 75))
+        distance = max(1, int(self.config.min_zone_width * len(profile.r_normalized)))
+        peaks, _ = find_peaks(abs_grad, height=adaptive, distance=distance)
+        return profile.r_normalized[peaks].tolist() if len(peaks) > 0 else []
 
     def _detect_by_delta_e(self, profile: RadialProfile) -> List[float]:
-        """
-        ΔE 기반 변곡점 검출.
-
-        연속된 두 반경 간 ΔE를 계산하여 급변 지점을 찾음.
-
-        Args:
-            profile: 색상 프로파일
-
-        Returns:
-            변곡점의 r 값 리스트
-        """
         from src.utils.color_delta import delta_e_cie2000
 
         r = profile.r_normalized
-        L = profile.L
-        a = profile.a
-        b = profile.b
-
-        # 각 r에서 다음 r까지의 ΔE 계산
+        if len(r) < 2:
+            return []
         delta_e_profile = []
         for i in range(len(r) - 1):
-            lab1 = (L[i], a[i], b[i])
-            lab2 = (L[i+1], a[i+1], b[i+1])
-            de = delta_e_cie2000(lab1, lab2)
-            delta_e_profile.append(de)
+            lab1 = (profile.L[i], profile.a[i], profile.b[i])
+            lab2 = (profile.L[i + 1], profile.a[i + 1], profile.b[i + 1])
+            delta_e_profile.append(delta_e_cie2000(lab1, lab2))
 
         delta_e_profile = np.array(delta_e_profile)
-
-        # ΔE 피크 검출
-        min_distance_points = int(self.config.min_zone_width * len(r))
-
-        peaks, _ = find_peaks(
-            delta_e_profile,
-            height=5.0,  # 최소 ΔE = 5.0 (시각적으로 구별 가능)
-            distance=max(1, min_distance_points)
-        )
-
-        if len(peaks) > 0:
-            inflection_r = r[peaks]
-            return inflection_r.tolist()
-        else:
-            logger.warning("No inflection points detected by delta_e method")
+        if delta_e_profile.size == 0:
             return []
 
+        adaptive = max(self.config.min_delta_e, np.percentile(delta_e_profile, 75))
+        distance = max(1, int(self.config.min_zone_width * len(r)))
+        peaks, _ = find_peaks(delta_e_profile, height=adaptive, distance=distance)
+        return r[peaks].tolist() if len(peaks) > 0 else []
+
+    def _merge_close_boundaries(self, boundaries: List[float], min_width: float) -> List[float]:
+        if len(boundaries) <= 1:
+            return boundaries
+        merged = sorted(boundaries, reverse=True)
+        i = 0
+        while i < len(merged) - 1:
+            width = merged[i] - merged[i + 1]
+            if width < min_width and len(merged) > 2:
+                merged.pop(i + 1)
+                continue
+            i += 1
+        return merged
+
+    def _uniform_boundaries(self, zones: int) -> List[float]:
+        if zones <= 0:
+            return []
+        return np.linspace(1.0, 0.0, zones + 1)[1:-1].tolist()  # 내부 경계만 반환
+
     def _generate_zone_labels(self, n_zones: int) -> List[str]:
+        base = ["A", "B", "C", "D", "E"]
+        labels = []
+        for i in range(n_zones):
+            if i < len(base):
+                labels.append(base[i])
+            else:
+                labels.append(f"Z{i+1}")
+        return labels
+
+    def evaluate_mix_zone(self, mix_zone: Zone, prev_pure: Zone, next_pure: Zone) -> dict:
         """
-        Zone 개수에 따라 레이블 생성.
-
-        Args:
-            n_zones: Zone 개수
-
-        Returns:
-            Zone 레이블 리스트
-
-        Examples:
-            5개 → ['A', 'A-B', 'B', 'B-C', 'C']
-            3개 → ['A', 'B', 'C']
-            7개 → ['A', 'A-B', 'B', 'B-C', 'C', 'C-D', 'D']
+        믹스 존이 양 끝 순수 존 사이의 선형 보간 범위 안에 있는지 평가.
         """
-        if n_zones == 5:
-            return ['A', 'A-B', 'B', 'B-C', 'C']
-        elif n_zones == 3:
-            return ['A', 'B', 'C']
-        elif n_zones == 7:
-            # 4색 잉크인 경우
-            return ['A', 'A-B', 'B', 'B-C', 'C', 'C-D', 'D']
-        elif n_zones == 1:
-            # 변곡점 없음 (단일 zone)
-            return ['A']
-        else:
-            # 일반적: 번호로 레이블
-            return [f'Zone{i+1}' for i in range(n_zones)]
+        import numpy.linalg as LA
 
-    def evaluate_mix_zone(
-        self,
-        mix_zone: Zone,
-        pure_zone_before: Zone,
-        pure_zone_after: Zone
-    ) -> dict:
-        """
-        혼합 영역의 색상이 두 순수 영역 사이에 있는지 검증.
+        p = np.array([prev_pure.mean_L, prev_pure.mean_a, prev_pure.mean_b], dtype=float)
+        n = np.array([next_pure.mean_L, next_pure.mean_a, next_pure.mean_b], dtype=float)
+        m = np.array([mix_zone.mean_L, mix_zone.mean_a, mix_zone.mean_b], dtype=float)
 
-        Args:
-            mix_zone: 혼합 영역
-            pure_zone_before: 이전 순수 영역
-            pure_zone_after: 다음 순수 영역
+        pn = n - p
+        if LA.norm(pn) == 0:
+            return {"is_valid": False, "blend_ratio": 0.0, "distance_from_line": float("inf")}
 
-        Returns:
-            dict:
-                - is_valid: 혼합이 정상인지 여부
-                - distance_from_line: 이론 혼합선으로부터의 거리
-                - blend_ratio: 혼합 비율 추정 (0~1)
-        """
-        # 두 순수 영역의 LAB 값
-        lab1 = np.array([pure_zone_before.mean_L,
-                         pure_zone_before.mean_a,
-                         pure_zone_before.mean_b])
-        lab2 = np.array([pure_zone_after.mean_L,
-                         pure_zone_after.mean_a,
-                         pure_zone_after.mean_b])
+        t = float(np.clip(np.dot(m - p, pn) / (LA.norm(pn) ** 2), 0.0, 1.0))
+        projection = p + t * pn
+        distance = float(LA.norm(m - projection))
 
-        # Mix zone의 LAB 값
-        lab_mix = np.array([mix_zone.mean_L,
-                            mix_zone.mean_a,
-                            mix_zone.mean_b])
-
-        # 직선 lab1 - lab2 위의 가장 가까운 점 찾기
-        line_vec = lab2 - lab1
-        mix_vec = lab_mix - lab1
-
-        # 투영
-        line_length_sq = np.dot(line_vec, line_vec)
-        if line_length_sq < 1e-6:
-            # 두 순수 영역이 거의 같은 색상
-            return {
-                'is_valid': True,
-                'distance_from_line': 0.0,
-                'blend_ratio': 0.5
-            }
-
-        t = np.dot(mix_vec, line_vec) / line_length_sq
-        t = np.clip(t, 0, 1)  # 0~1 범위로 제한
-
-        closest_point = lab1 + t * line_vec
-
-        # 거리 계산
-        distance = np.linalg.norm(lab_mix - closest_point)
-
-        # 허용 거리: 두 순수 영역 표준편차의 평균
-        avg_std = (
-            (pure_zone_before.std_L + pure_zone_after.std_L +
-             pure_zone_before.std_a + pure_zone_after.std_a +
-             pure_zone_before.std_b + pure_zone_after.std_b) / 6.0
+        tol = float(
+            np.mean(
+                [
+                    prev_pure.std_L,
+                    prev_pure.std_a,
+                    prev_pure.std_b,
+                    next_pure.std_L,
+                    next_pure.std_a,
+                    next_pure.std_b,
+                ]
+            )
+            + 3.0
         )
 
-        # 정상 판정: 거리가 3*표준편차 이내
-        is_valid = distance <= (3.0 * avg_std)
-
-        logger.debug(f"Mix zone {mix_zone.name}: distance={distance:.2f}, "
-                     f"blend_ratio={t:.2f}, is_valid={is_valid}")
-
-        return {
-            'is_valid': is_valid,
-            'distance_from_line': distance,
-            'blend_ratio': t
-        }
+        return {"is_valid": distance <= tol, "blend_ratio": t, "distance_from_line": distance}

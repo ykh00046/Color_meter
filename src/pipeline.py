@@ -59,7 +59,12 @@ class InspectionPipeline:
         self.image_loader = ImageLoader(image_config or ImageConfig())
         self.lens_detector = LensDetector(detector_config or DetectorConfig())
         self.radial_profiler = RadialProfiler(profiler_config or ProfilerConfig())
-        self.zone_segmenter = ZoneSegmenter(segmenter_config or SegmenterConfig())
+        seg_cfg = segmenter_config or SegmenterConfig()
+        # SKU 설정에 expected_zones 힌트가 있으면 주입
+        if sku_config and hasattr(seg_cfg, "expected_zones"):
+            if isinstance(sku_config, dict) and "expected_zones" in sku_config:
+                seg_cfg.expected_zones = sku_config.get("expected_zones")
+        self.zone_segmenter = ZoneSegmenter(seg_cfg)
         self.color_evaluator = ColorEvaluator(sku_config)
 
         logger.info("InspectionPipeline initialized")
@@ -114,7 +119,13 @@ class InspectionPipeline:
 
             # 4. Zone 분할
             logger.debug("Step 4: Segmenting zones")
-            zones = self.zone_segmenter.segment(radial_profile)
+            
+            # SKU 설정에서 기대 Zone 개수 힌트 추출
+            expected_zones = self.sku_config.get('params', {}).get('expected_zones')
+            if expected_zones:
+                logger.debug(f"Using expected_zones hint: {expected_zones}")
+            
+            zones = self.zone_segmenter.segment(radial_profile, expected_zones=expected_zones)
 
             # 5. 색상 평가 및 판정
             logger.debug("Step 5: Evaluating color quality")
@@ -176,38 +187,76 @@ class InspectionPipeline:
         image_paths: List[str],
         sku: str,
         output_csv: Optional[Path] = None,
-        continue_on_error: bool = True
+        continue_on_error: bool = True,
+        parallel: bool = False,
+        max_workers: int = 4
     ) -> List[InspectionResult]:
         """
-        배치 처리.
+        배치 처리 (옵션으로 병렬 처리 지원).
 
         Args:
             image_paths: 입력 이미지 경로 리스트
             sku: SKU 코드
             output_csv: 결과 CSV 저장 경로 (옵션)
             continue_on_error: 오류 발생 시 계속 진행 여부
+            parallel: 병렬 처리 사용 여부 (기본값: False)
+            max_workers: 병렬 처리 시 최대 워커 수 (기본값: 4)
 
         Returns:
             List[InspectionResult]: 검사 결과 리스트
         """
-        logger.info(f"Batch processing {len(image_paths)} images")
+        logger.info(f"Batch processing {len(image_paths)} images (parallel={parallel})")
 
         results = []
         errors = []
 
-        for i, image_path in enumerate(image_paths):
-            logger.info(f"Processing {i+1}/{len(image_paths)}: {image_path}")
+        if parallel and len(image_paths) > 1:
+            # Parallel processing using ThreadPoolExecutor
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            import gc
 
-            try:
-                result = self.process(image_path, sku)
-                results.append(result)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                future_to_path = {
+                    executor.submit(self.process, path, sku): path
+                    for path in image_paths
+                }
 
-            except PipelineError as e:
-                logger.error(f"Error processing {image_path}: {e}")
-                errors.append((image_path, str(e)))
+                # Collect results as they complete
+                for i, future in enumerate(as_completed(future_to_path)):
+                    image_path = future_to_path[future]
+                    logger.info(f"Processing {i+1}/{len(image_paths)}: {image_path}")
 
-                if not continue_on_error:
-                    raise
+                    try:
+                        result = future.result()
+                        results.append(result)
+
+                    except Exception as e:
+                        logger.error(f"Error processing {image_path}: {e}")
+                        errors.append((image_path, str(e)))
+
+                        if not continue_on_error:
+                            raise PipelineError(f"Batch processing failed: {e}")
+
+                    # Release memory periodically
+                    if i % 10 == 0:
+                        gc.collect()
+
+        else:
+            # Sequential processing (original behavior)
+            for i, image_path in enumerate(image_paths):
+                logger.info(f"Processing {i+1}/{len(image_paths)}: {image_path}")
+
+                try:
+                    result = self.process(image_path, sku)
+                    results.append(result)
+
+                except PipelineError as e:
+                    logger.error(f"Error processing {image_path}: {e}")
+                    errors.append((image_path, str(e)))
+
+                    if not continue_on_error:
+                        raise
 
         logger.info(
             f"Batch processing complete: {len(results)} succeeded, {len(errors)} failed"

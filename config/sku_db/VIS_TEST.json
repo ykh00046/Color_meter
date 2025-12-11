@@ -28,5 +28,6 @@
     "baseline_samples": 3,
     "calibration_method": "manual",
     "notes": "Test SKU for visualization validation"
-  }
+  },
+  "expected_zones": 3
 }

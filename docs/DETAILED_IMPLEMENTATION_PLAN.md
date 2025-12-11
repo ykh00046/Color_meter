@@ -866,236 +866,355 @@ class ZoneSegmenter:
         """
         Args:
             config:
-                - detection_method: 'gradient' or 'delta_e'
                 - min_zone_width: 최소 zone 폭 (정규화)
-                - smoothing_window: 그래디언트 스무딩 윈도우
+                - smoothing_window: 프로파일 스무딩 윈도우
+                - polyorder: Savitzky-Golay 필터 다항식 차수
+                - min_gradient_threshold: 그래디언트 피크 검출 최소 임계값
+                - min_delta_e_threshold: ΔE 피크 검출 최소 임계값
+                - transition_buffer_px: 혼합 구간 버퍼 (픽셀)
         """
         self.config = config
 
     def segment(self,
-                profile: RadialProfile) -> List[Zone]:
+                profile: RadialProfile,
+                expected_zones: int = None) -> List[Zone]:
         """
         프로파일을 Zone으로 분할
 
         Args:
             profile: 색상 프로파일
+            expected_zones: 기대하는 Zone 개수 (SKU 설정으로부터의 힌트)
 
         Returns:
             Zone 리스트 (바깥→안쪽 순서)
         """
         pass
 
-    def _detect_inflection_points(self,
-                                  profile: RadialProfile) -> List[float]:
-        """변곡점 r 값 검출"""
+    def _detect_boundaries_gradient(self, profile: RadialProfile) -> List[float]:
+        """그래디언트 기반 경계 검출"""
         pass
 
-    def _classify_zones(self,
-                        boundaries: List[float]) -> List[str]:
-        """경계점으로부터 zone 분류 (pure/mix)"""
+    def _detect_boundaries_delta_e(self, profile: RadialProfile) -> List[float]:
+        """ΔE 기반 경계 검출"""
+        pass
+
+    def _detect_boundaries_kmeans(self, profile: RadialProfile, k: int) -> List[float]:
+        """K-means 클러스터링 기반 경계 검출"""
+        pass
+
+    def _fallback_uniform_split(self, profile: RadialProfile, n_zones: int) -> List[float]:
+        """균등 분할 Fallback"""
+        pass
+
+    def _merge_narrow_zones(self, zones: List[Zone]) -> List[Zone]:
+        """최소 폭 미만 Zone 병합"""
+        pass
+
+    def _apply_transition_buffer(self,
+                                 zones: List[Zone],
+                                 profile_r_length: int) -> List[Zone]:
+        """Transition buffer 적용"""
         pass
 ```
 
-**상세 구현**:
+**상세 구현 (개선된 ZoneSegmenter)**:
 
-1. **a* 기반 그래디언트 방법** (추천)
-   ```python
-   def _detect_inflection_points(self,
-                                 profile: RadialProfile) -> List[float]:
-       """
-       a* 프로파일의 그래디언트 급변 지점 검출
+1.  **전처리 (Smoothing)**
+    ```python
+    def segment(self,
+                profile: RadialProfile,
+                expected_zones: int = None) -> List[Zone]:
+        """
+        메인 Zone 분할 함수 (개선된 로직)
+        """
+        # 1. 프로파일 스무딩 (노이즈 제거)
+        from scipy.signal import savgol_filter
+        
+        # NaN 값 처리: 선형 보간 또는 NaN 포함 값은 Zone 분할에서 제외
+        L_profile_clean = np.nan_to_num(profile.L_profile, nan=np.nanmean(profile.L_profile))
+        a_profile_clean = np.nan_to_num(profile.a_profile, nan=np.nanmean(profile.a_profile))
+        b_profile_clean = np.nan_to_num(profile.b_profile, nan=np.nanmean(profile.b_profile))
 
-       a* 값이 색상 변화를 가장 잘 나타냄 (빨강-초록)
-       """
-       from scipy.signal import find_peaks
+        profile_L_smooth = savgol_filter(L_profile_clean, self.config.smoothing_window, self.config.polyorder)
+        profile_a_smooth = savgol_filter(a_profile_clean, self.config.smoothing_window, self.config.polyorder)
+        profile_b_smooth = savgol_filter(b_profile_clean, self.config.smoothing_window, self.config.polyorder)
 
-       # a* 1차 미분 (그래디언트)
-       gradient_a = np.gradient(profile.a_profile)
+        # 스무딩된 프로파일로 임시 RadialProfile 객체 생성 (경계 검출용)
+        smoothed_profile_for_detection = RadialProfile(
+            r_normalized=profile.r_normalized,
+            L_profile=profile_L_smooth,
+            a_profile=profile_a_smooth,
+            b_profile=profile_b_smooth,
+            std_L=profile.std_L, # 표준편차는 원본 사용
+            std_a=profile.std_a,
+            std_b=profile.std_b,
+            pixel_count=profile.pixel_count
+        )
 
-       # 스무딩 (노이즈 제거)
-       from scipy.signal import savgol_filter
-       gradient_smooth = savgol_filter(
-           gradient_a,
-           window_length=self.config.smoothing_window,
-           polyorder=2
-       )
+        boundaries = []
 
-       # 그래디언트 절댓값에서 피크 검출
-       peaks, properties = find_peaks(
-           np.abs(gradient_smooth),
-           height=self.config.min_gradient,     # 최소 기울기
-           distance=self.config.min_zone_width * len(profile.r_normalized)
-       )
+        # 2. 경계 검출 전략 (우선순위 기반)
+        # 2.1. Gradient 및 Delta E 기반 (Hybrid)
+        gradient_boundaries = self._detect_boundaries_gradient(smoothed_profile_for_detection)
+        delta_e_boundaries = self._detect_boundaries_delta_e(smoothed_profile_for_detection)
 
-       # 피크에 해당하는 r 값
-       inflection_r = profile.r_normalized[peaks]
+        # 두 방법의 경계점을 통합하고 중복 제거
+        combined_boundaries_r_norm = np.unique(np.concatenate((gradient_boundaries, delta_e_boundaries)))
+        
+        # 3. K-means 클러스터링 기반 Zone 분할 (fallback 혹은 refine)
+        if expected_zones and len(combined_boundaries_r_norm) != expected_zones - 1:
+            # 예상 Zone 개수와 다르면 K-means로 재시도
+            kmeans_boundaries = self._detect_boundaries_kmeans(profile, expected_zones)
+            if kmeans_boundaries:
+                boundaries = kmeans_boundaries
+            else:
+                # 4. Fallback 1: 예상 Zone 개수 기반 균등 분할
+                boundaries = self._fallback_uniform_split(profile, expected_zones)
+        elif len(combined_boundaries_r_norm) > 0:
+            boundaries = combined_boundaries_r_norm
+        else:
+            # 5. Fallback 2: 기대 Zone 개수(힌트)가 없거나 검출된 경계가 없는 경우
+            # (기본 3분할 혹은 expected_zones 기반 균등 분할)
+            n_fallback_zones = expected_zones if expected_zones else 3
+            boundaries = self._fallback_uniform_split(profile, n_fallback_zones)
 
-       return inflection_r.tolist()
-   ```
+        # 6. 경계점 정렬 (바깥 → 안쪽)
+        boundaries = sorted(list(set(boundaries)), reverse=True) # 중복 제거 후 정렬
 
-2. **ΔE 기반 방법** (대안)
-   ```python
-   def _detect_by_delta_e(self,
-                          profile: RadialProfile) -> List[float]:
-       """
-       연속된 두 반경 간 ΔE 계산, 급변 지점 검출
-       """
-       from colormath.color_objects import LabColor
-       from colormath.color_diff import delta_e_cie2000
+        # 7. Zone 생성 및 레이블링 (기존 로직 활용)
+        zones = []
+        # ... (기존 Zone 생성 및 평균 색상 계산 로직)
+        # 이 부분은 변경이 없으므로, 기존 코드를 재사용하거나 새롭게 정의
+        # 편의상, 이 문서에서는 Zone 생성 및 평균 색상 계산 로직을 간략히 생략하고
+        # _create_zones_from_boundaries 헬퍼 함수를 가정합니다.
+        zones = self._create_zones_from_boundaries(boundaries, profile)
 
-       r = profile.r_normalized
-       L = profile.L_profile
-       a = profile.a_profile
-       b = profile.b_profile
 
-       # 각 r에서 다음 r까지의 ΔE 계산
-       delta_e_profile = []
-       for i in range(len(r) - 1):
-           color1 = LabColor(L[i], a[i], b[i])
-           color2 = LabColor(L[i+1], a[i+1], b[i+1])
-           de = delta_e_cie2000(color1, color2)
-           delta_e_profile.append(de)
+        # 8. 최소 폭 미만 Zone 병합 (기존 로직 유지)
+        zones = self._merge_narrow_zones(zones)
 
-       delta_e_profile = np.array(delta_e_profile)
+        # 9. Transition Buffer 적용
+        zones = self._apply_transition_buffer(zones, len(profile.r_normalized))
 
-       # ΔE 피크 검출
-       from scipy.signal import find_peaks
-       peaks, _ = find_peaks(
-           delta_e_profile,
-           height=self.config.min_delta_e,  # 최소 ΔE (예: 5.0)
-           distance=int(self.config.min_zone_width * len(r))
-       )
+        return zones
 
-       inflection_r = r[peaks]
-       return inflection_r.tolist()
-   ```
+    def _create_zones_from_boundaries(self, boundaries: List[float], profile: RadialProfile) -> List[Zone]:
+        # (기존 Zone 생성 및 평균 색상 계산 로직)
+        # 이 헬퍼 함수는 위에 정의된 `segment` 함수의 기존 Zone 생성 로직을 캡슐화합니다.
+        # 실제 구현에서는 `segment` 함수 내부에 이 로직이 직접 포함되거나
+        # 이 헬퍼 함수가 RadialProfile, boundaries를 받아 List[Zone]을 반환하도록 구현됩니다.
+        
+        # 임시 구현 (실제 로직으로 대체 필요)
+        all_zones = []
+        if not boundaries: # 경계가 없으면 전체를 하나의 Zone으로
+            mean_L, mean_a, mean_b, std_L, std_a, std_b = self._calculate_zone_stats(profile, 0, len(profile.r_normalized))
+            all_zones.append(Zone(
+                name="Full", r_start=profile.r_normalized[0], r_end=profile.r_normalized[-1],
+                mean_L=mean_L, mean_a=mean_a, mean_b=mean_b, std_L=std_L, std_a=std_a, std_b=std_b,
+                zone_type='pure'
+            ))
+            return all_zones
 
-3. **Zone 분류 및 레이블링**
-   ```python
-   def segment(self,
-               profile: RadialProfile) -> List[Zone]:
-       """
-       변곡점 검출 → Zone 생성
-       """
-       # 1. 변곡점 검출
-       inflections = self._detect_inflection_points(profile)
+        
+        # 경계점을 기준으로 Zone 생성
+        # boundaries 리스트에는 r_normalized의 값이 들어있다.
+        # 이 값은 프로파일의 인덱스와 매칭시켜야 한다.
+        r_indices = np.searchsorted(profile.r_normalized, boundaries)
+        
+        # 시작과 끝 인덱스 추가
+        all_indices = np.unique(np.concatenate(([0], r_indices, [len(profile.r_normalized) - 1])))
+        all_indices = sorted(all_indices)
 
-       # 2. 경계점 정렬 (바깥 → 안쪽)
-       boundaries = sorted(inflections, reverse=True)
+        for i in range(len(all_indices) - 1):
+            start_idx = all_indices[i]
+            end_idx = all_indices[i+1]
+            
+            # Zone의 반경 범위는 r_normalized의 실제 값을 사용
+            r_start_norm = profile.r_normalized[start_idx]
+            r_end_norm = profile.r_normalized[end_idx]
 
-       # 시작/끝 추가
-       boundaries = [profile.r_normalized[-1]] + boundaries + \
-                    [profile.r_normalized[0]]
+            mean_L, mean_a, mean_b, std_L, std_a, std_b = self._calculate_zone_stats(profile, start_idx, end_idx)
+            
+            # 레이블 생성 로직은 나중에 추가
+            zone_name = f"Zone{i+1}"
+            
+            all_zones.append(Zone(
+                name=zone_name,
+                r_start=r_start_norm,
+                r_end=r_end_norm,
+                mean_L=mean_L,
+                mean_a=mean_a,
+                mean_b=mean_b,
+                std_L=std_L,
+                std_a=std_a,
+                std_b=std_b,
+                zone_type='pure' # 초기화는 pure, 나중에 mix 판단
+            ))
+            
+        return all_zones
+    
+    def _calculate_zone_stats(self, profile: RadialProfile, start_idx: int, end_idx: int):
+        # 주어진 인덱스 범위에 해당하는 프로파일 통계 계산
+        L_slice = profile.L_profile[start_idx:end_idx]
+        a_slice = profile.a_profile[start_idx:end_idx]
+        b_slice = profile.b_profile[start_idx:end_idx]
+        
+        # NaN이 포함될 수 있으므로 nanmean 사용
+        mean_L = np.nanmean(L_slice)
+        mean_a = np.nanmean(a_slice)
+        mean_b = np.nanmean(b_slice)
+        
+        std_L = np.nanstd(L_slice)
+        std_a = np.nanstd(a_slice)
+        std_b = np.nanstd(b_slice)
+        
+        return mean_L, mean_a, mean_b, std_L, std_a, std_b
 
-       # 3. 각 구간을 Zone으로 변환
-       zones = []
-       zone_labels = self._generate_zone_labels(len(boundaries) - 1)
 
-       for i in range(len(boundaries) - 1):
-           r_start = boundaries[i]
-           r_end = boundaries[i+1]
+    def _detect_boundaries_gradient(self,
+                                  profile: RadialProfile) -> List[float]:
+        """
+        a* 프로파일의 그래디언트 급변 지점 검출 (스무딩된 프로파일 사용)
+        """
+        from scipy.signal import find_peaks
 
-           # 해당 구간의 평균 색상 계산
-           mask = (profile.r_normalized >= r_end) & \
-                  (profile.r_normalized < r_start)
+        gradient_a = np.gradient(profile.a_profile)
+        
+        # 노이즈가 이미 스무딩되어 있으므로 추가 스무딩은 생략
+        # 그래디언트 절댓값에서 피크 검출
+        peaks, properties = find_peaks(
+            np.abs(gradient_a),
+            height=self.config.min_gradient_threshold,     # 최소 기울기 임계값
+            distance=int(self.config.min_zone_width * len(profile.r_normalized)) # 최소 Zone 폭
+        )
 
-           if np.sum(mask) == 0:
-               continue
+        inflection_r = profile.r_normalized[peaks]
+        return inflection_r.tolist()
 
-           mean_L = np.mean(profile.L_profile[mask])
-           mean_a = np.mean(profile.a_profile[mask])
-           mean_b = np.mean(profile.b_profile[mask])
-           std_L = np.std(profile.L_profile[mask])
-           std_a = np.std(profile.a_profile[mask])
-           std_b = np.std(profile.b_profile[mask])
+    def _detect_boundaries_delta_e(self,
+                                  profile: RadialProfile) -> List[float]:
+        """
+        연속된 두 반경 간 ΔE 계산, 급변 지점 검출 (스무딩된 프로파일 사용)
+        """
+        from colormath.color_objects import LabColor
+        from colormath.color_diff import delta_e_cie2000
 
-           zone = Zone(
-               name=zone_labels[i],
-               r_start=r_start,
-               r_end=r_end,
-               mean_L=mean_L,
-               mean_a=mean_a,
-               mean_b=mean_b,
-               std_L=std_L,
-               std_a=std_a,
-               std_b=std_b,
-               zone_type='pure' if '-' not in zone_labels[i] else 'mix'
-           )
-           zones.append(zone)
+        r = profile.r_normalized
+        L = profile.L_profile
+        a = profile.a_profile
+        b = profile.b_profile
 
-       return zones
+        delta_e_profile = []
+        for i in range(len(r) - 1):
+            color1 = LabColor(L[i], a[i], b[i])
+            color2 = LabColor(L[i+1], a[i+1], b[i+1])
+            de = delta_e_cie2000(color1, color2)
+            delta_e_profile.append(de)
 
-   def _generate_zone_labels(self, n_zones: int) -> List[str]:
-       """
-       Zone 개수에 따라 레이블 생성
+        delta_e_profile = np.array(delta_e_profile)
 
-       예: 5개 → ['A', 'A-B', 'B', 'B-C', 'C']
-           3개 → ['A', 'B', 'C']
-       """
-       if n_zones == 5:
-           return ['A', 'A-B', 'B', 'B-C', 'C']
-       elif n_zones == 3:
-           return ['A', 'B', 'C']
-       elif n_zones == 7:
-           # 4색 잉크인 경우
-           return ['A', 'A-B', 'B', 'B-C', 'C', 'C-D', 'D']
-       else:
-           # 일반적: 번호로 레이블
-           return [f'Zone{i}' for i in range(n_zones)]
-   ```
+        from scipy.signal import find_peaks
+        peaks, _ = find_peaks(
+            delta_e_profile,
+            height=self.config.min_delta_e_threshold,  # 최소 ΔE 임계값
+            distance=int(self.config.min_zone_width * len(r))
+        )
 
-4. **Mix Zone 품질 평가**
-   ```python
-   def evaluate_mix_zone(self,
-                         mix_zone: Zone,
-                         pure_zone_before: Zone,
-                         pure_zone_after: Zone) -> dict:
-       """
-       혼합 영역의 색상이 두 순수 영역 사이에 있는지 검증
+        inflection_r = r[peaks]
+        return inflection_r.tolist()
 
-       Returns:
-           {
-               'is_valid': bool,
-               'distance_from_line': float,  # 이론 혼합선으로부터 거리
-               'blend_ratio': float          # 혼합 비율 추정
-           }
-       """
-       # 두 순수 영역의 LAB 값
-       lab1 = np.array([pure_zone_before.mean_L,
-                        pure_zone_before.mean_a,
-                        pure_zone_before.mean_b])
-       lab2 = np.array([pure_zone_after.mean_L,
-                        pure_zone_after.mean_a,
-                        pure_zone_after.mean_b])
+    def _detect_boundaries_kmeans(self, profile: RadialProfile, k: int) -> List[float]:
+        """
+        K-means 클러스터링 기반 경계 검출
+        프로파일 데이터를 K개의 색상 그룹으로 군집화하여 경계를 찾음.
+        """
+        if k <= 1: # Zone이 1개 이하면 경계가 없음
+            return []
 
-       # Mix zone의 LAB 값
-       lab_mix = np.array([mix_zone.mean_L,
-                           mix_zone.mean_a,
-                           mix_zone.mean_b])
+        from sklearn.cluster import KMeans
 
-       # 직선 lab1 - lab2 위의 가장 가까운 점 찾기
-       # (점-직선 거리 계산)
-       line_vec = lab2 - lab1
-       mix_vec = lab_mix - lab1
+        # LAB 프로파일 데이터를 클러스터링에 사용
+        # L, a, b 값을 함께 사용하여 K-means를 수행
+        lab_data = np.stack([profile.L_profile, profile.a_profile, profile.b_profile], axis=-1)
+        
+        # NaN 값은 클러스터링에 방해가 되므로 제거하거나 보간
+        # 여기서는 간단하게 NaN을 제외하고 클러스터링을 수행
+        valid_indices = ~np.isnan(lab_data).any(axis=1)
+        valid_lab_data = lab_data[valid_indices]
+        valid_r_normalized = profile.r_normalized[valid_indices]
 
-       # 투영
-       t = np.dot(mix_vec, line_vec) / np.dot(line_vec, line_vec)
-       t = np.clip(t, 0, 1)  # 0~1 범위로 제한
+        if len(valid_lab_data) < k: # 유효한 데이터가 클러스터 수보다 적으면 클러스터링 불가
+            return []
 
-       closest_point = lab1 + t * line_vec
+        kmeans = KMeans(n_clusters=k, random_state=0, n_init=10)
+        kmeans.fit(valid_lab_data)
+        labels = kmeans.labels_
 
-       # 거리 계산
-       distance = np.linalg.norm(lab_mix - closest_point)
+        # 레이블이 변경되는 지점을 경계로 간주
+        boundaries_r = []
+        for i in range(1, len(labels)):
+            if labels[i] != labels[i-1]:
+                # 경계는 두 레이블의 중간 지점으로 (반경 정규화 값)
+                boundaries_r.append((valid_r_normalized[i] + valid_r_normalized[i-1]) / 2)
+        
+        return sorted(list(set(boundaries_r)))
 
-       # 검증: 거리가 임계값 이하여야 정상
-       is_valid = distance < self.config.max_mix_deviation
 
-       return {
-           'is_valid': is_valid,
-           'distance_from_line': distance,
-           'blend_ratio': t
-       }
-   ```
+    def _fallback_uniform_split(self, profile: RadialProfile, n_zones: int) -> List[float]:
+        """
+        주어진 Zone 개수에 따라 프로파일을 균등 분할
+        """
+        if n_zones <= 1:
+            return []
+        
+        # 0 (중심)부터 1 (외곽)까지 균등하게 분할
+        # n_zones 개수만큼 영역을 만들려면 n_zones - 1 개의 경계가 필요
+        boundaries = np.linspace(profile.r_normalized[0], profile.r_normalized[-1], n_zones + 1)
+        
+        # 시작과 끝을 제외한 경계점 반환
+        return boundaries[1:-1].tolist()
+    
+    def _merge_narrow_zones(self, zones: List[Zone]) -> List[Zone]:
+        """
+        최소 폭 미만 Zone을 인접 Zone과 병합 (구현 예정)
+        """
+        merged_zones = []
+        # (TODO: 구현 필요)
+        # self.config.min_zone_width를 활용하여 Zone 폭이 너무 좁은 경우 병합
+        return zones
+
+    def _apply_transition_buffer(self,
+                                 zones: List[Zone],
+                                 profile_r_length: int) -> List[Zone]:
+        """
+        Transition buffer (혼합 구간) 적용
+        경계 주변 픽셀을 색상 평가에서 제외하거나 가중치를 낮춤
+        """
+        if not self.config.transition_buffer_px or self.config.transition_buffer_px <= 0:
+            return zones # 버퍼 설정이 없으면 변경 없음
+
+        buffered_zones = []
+        # 각 Zone의 r_start, r_end를 픽셀 인덱스로 변환해야함
+        # 프로파일의 총 길이(profile_r_length)를 활용
+        
+        # 이 로직은 Zone의 r_start, r_end가 정규화된 값임을 가정하고
+        # 이를 다시 픽셀 인덱스로 변환하여 버퍼를 적용해야 함
+        
+        # (TODO: 구현 필요)
+        # for zone in zones:
+        #     # r_start, r_end를 픽셀 인덱스로 변환
+        #     start_px = int(zone.r_start * profile_r_length)
+        #     end_px = int(zone.r_end * profile_r_length)
+            
+        #     # 버퍼 적용 (예: start_px + buffer_px, end_px - buffer_px)
+        #     # 버퍼가 Zone의 폭보다 커지지 않도록 주의
+        #     new_start_px = start_px + self.config.transition_buffer_px
+        #     new_end_px = end_px - self.config.transition_buffer_px
+            
+        #     # ... 새로운 Zone 객체 생성 및 반환
+            
+        return zones
+
 
 #### 3.2.5 ColorEvaluator (색상 평가 및 판정)
 
