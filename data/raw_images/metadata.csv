@@ -1,11 +1,51 @@
 file_name,sku,judgment,description
-OK_001.jpg,SKU001,OK,Normal sample
-OK_002.jpg,SKU001,OK,Normal sample
-OK_003.jpg,SKU001,OK,Normal sample
-OK_004.jpg,SKU001,OK,Normal sample
-OK_005.jpg,SKU001,OK,Normal sample
-NG_001.jpg,SKU001,NG,scratch
-NG_002.jpg,SKU001,NG,dot_missing
-NG_003.jpg,SKU001,NG,color_mismatch
-NG_004.jpg,SKU001,NG,scratch
-NG_005.jpg,SKU001,NG,color_mismatch
+SKU001_OK_001.jpg,SKU001,OK,Normal sample
+SKU001_OK_002.jpg,SKU001,OK,Normal sample
+SKU001_OK_003.jpg,SKU001,OK,Normal sample
+SKU001_OK_004.jpg,SKU001,OK,Normal sample
+SKU001_OK_005.jpg,SKU001,OK,Normal sample
+SKU001_NG_001.jpg,SKU001,NG,scratch
+SKU001_NG_002.jpg,SKU001,NG,dot_missing
+SKU001_NG_003.jpg,SKU001,NG,color_mismatch
+SKU001_NG_004.jpg,SKU001,NG,scratch
+SKU001_NG_005.jpg,SKU001,NG,color_mismatch
+SKU002_OK_001.jpg,SKU002,OK,Normal sample
+SKU002_OK_002.jpg,SKU002,OK,Normal sample
+SKU002_OK_003.jpg,SKU002,OK,Normal sample
+SKU002_OK_004.jpg,SKU002,OK,Normal sample
+SKU002_OK_005.jpg,SKU002,OK,Normal sample
+SKU002_OK_006.jpg,SKU002,OK,Normal sample
+SKU002_OK_007.jpg,SKU002,OK,Normal sample
+SKU002_OK_008.jpg,SKU002,OK,Normal sample
+SKU002_OK_009.jpg,SKU002,OK,Normal sample
+SKU002_OK_010.jpg,SKU002,OK,Normal sample
+SKU002_NG_001.jpg,SKU002,NG,scratch
+SKU002_NG_002.jpg,SKU002,NG,dot_missing
+SKU002_NG_003.jpg,SKU002,NG,color_mismatch
+SKU002_NG_004.jpg,SKU002,NG,scratch
+SKU002_NG_005.jpg,SKU002,NG,color_mismatch
+SKU002_NG_006.jpg,SKU002,NG,scratch
+SKU002_NG_007.jpg,SKU002,NG,dot_missing
+SKU002_NG_008.jpg,SKU002,NG,color_mismatch
+SKU002_NG_009.jpg,SKU002,NG,scratch
+SKU002_NG_010.jpg,SKU002,NG,color_mismatch
+SKU003_OK_001.jpg,SKU003,OK,Normal sample
+SKU003_OK_002.jpg,SKU003,OK,Normal sample
+SKU003_OK_003.jpg,SKU003,OK,Normal sample
+SKU003_OK_004.jpg,SKU003,OK,Normal sample
+SKU003_OK_005.jpg,SKU003,OK,Normal sample
+SKU003_OK_006.jpg,SKU003,OK,Normal sample
+SKU003_OK_007.jpg,SKU003,OK,Normal sample
+SKU003_OK_008.jpg,SKU003,OK,Normal sample
+SKU003_OK_009.jpg,SKU003,OK,Normal sample
+SKU003_OK_010.jpg,SKU003,OK,Normal sample
+SKU003_NG_001.jpg,SKU003,NG,scratch
+SKU003_NG_002.jpg,SKU003,NG,dot_missing
+SKU003_NG_003.jpg,SKU003,NG,color_mismatch
+SKU003_NG_004.jpg,SKU003,NG,scratch
+SKU003_NG_005.jpg,SKU003,NG,color_mismatch
+SKU003_NG_006.jpg,SKU003,NG,scratch
+SKU003_NG_007.jpg,SKU003,NG,dot_missing
+SKU003_NG_008.jpg,SKU003,NG,color_mismatch
+SKU003_NG_009.jpg,SKU003,NG,scratch
+SKU003_NG_010.jpg,SKU003,NG,color_mismatch

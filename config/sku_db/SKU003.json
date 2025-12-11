@@ -1,0 +1,31 @@
+{
+    "sku_code": "SKU003",
+    "description": "Brown colored contact lens",
+    "default_threshold": 3.5,
+    "zones": {
+        "A": {
+            "L": 67.0,
+            "a": 134.3,
+            "b": 133.9,
+            "threshold": 3.5,
+            "description": "Zone A (auto-generated)"
+        }
+    },
+    "metadata": {
+        "created_at": "2025-12-11T11:07:27.081841",
+        "last_updated": "2025-12-11T11:07:27.081841",
+        "baseline_samples": 10,
+        "calibration_method": "auto_generated",
+        "threshold_method": "mean_plus_2std",
+        "author": "system",
+        "statistics": {
+            "zone_A": {
+                "L_std": 0.0,
+                "a_std": 0.0,
+                "b_std": 0.0,
+                "samples": 10
+            }
+        },
+        "notes": "Generated from 10 OK samples"
+    }
+}
