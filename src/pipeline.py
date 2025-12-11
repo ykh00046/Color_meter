@@ -95,17 +95,69 @@ class InspectionPipeline:
         logger.info(f"Processing image: {image_path}, SKU: {sku}")
 
         try:
-            # 1. 이미지 로드 및 전처리
+            # 1. 이미지 로드 및 전처리 (retry 로직 포함)
             logger.debug("Step 1: Loading and preprocessing image")
-            image = self.image_loader.load_from_file(image_path)
-            processed_image = self.image_loader.preprocess(image)
+            max_retries = 3
+            image = None
 
-            # 2. 렌즈 검출
+            for attempt in range(max_retries):
+                try:
+                    image = self.image_loader.load_from_file(image_path)
+
+                    # None 체크
+                    if image is None:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Image load attempt {attempt+1}/{max_retries} returned None, retrying...")
+                            continue
+                        else:
+                            raise ValueError(f"Image loader returned None")
+
+                    processed_image = self.image_loader.preprocess(image)
+
+                    # Preprocess 결과도 체크
+                    if processed_image is None:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"Image preprocess attempt {attempt+1}/{max_retries} returned None, retrying...")
+                            continue
+                        else:
+                            raise ValueError(f"Image preprocess returned None")
+
+                    break
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Image load attempt {attempt+1}/{max_retries} failed: {e}, retrying...")
+                        continue
+                    else:
+                        logger.error(f"Failed to load image after {max_retries} attempts: {image_path}")
+                        # 파일 존재 여부 확인
+                        if not image_path.exists():
+                            raise PipelineError(
+                                f"Image file not found\n"
+                                f"  File: {image_path}\n"
+                                f"  Suggestion: Check if the file path is correct"
+                            )
+                        else:
+                            raise PipelineError(
+                                f"Image load failed: {e}\n"
+                                f"  File: {image_path}\n"
+                                f"  Suggestion: Check if file is readable and is a valid image format (JPG, PNG, etc.)"
+                            )
+
+            # 2. 렌즈 검출 (상세 에러 메시지)
             logger.debug("Step 2: Detecting lens")
             lens_detection = self.lens_detector.detect(processed_image)
 
             if lens_detection is None:
-                raise PipelineError("Lens detection failed")
+                import cv2
+                img_h, img_w = processed_image.shape[:2]
+                raise PipelineError(
+                    f"Lens detection failed\n"
+                    f"  File: {image_path}\n"
+                    f"  Image size: {img_w}x{img_h}\n"
+                    f"  Suggestion: Check if image contains a clear circular lens. "
+                    f"Try adjusting detector parameters (min_radius, max_radius) in config."
+                )
 
             if lens_detection.confidence < 0.5:
                 logger.warning(f"Low lens detection confidence: {lens_detection.confidence:.2f}")
@@ -168,19 +220,57 @@ class InspectionPipeline:
 
         except LensDetectionError as e:
             logger.error(f"Lens detection failed: {e}")
-            raise PipelineError(f"Pipeline failed at lens detection: {e}")
+            raise PipelineError(
+                f"Pipeline failed at lens detection\n"
+                f"  Image: {image_path}\n"
+                f"  Error: {e}\n"
+                f"  Suggestion: Check image quality, adjust detector config, or verify lens is visible"
+            )
 
         except ZoneSegmentationError as e:
             logger.error(f"Zone segmentation failed: {e}")
-            raise PipelineError(f"Pipeline failed at zone segmentation: {e}")
+            # Zone 분할 실패 시 복구 시도: expected_zones 힌트 사용
+            if expected_zones is None:
+                logger.info("Attempting recovery with default 3-zone segmentation")
+                try:
+                    zones = self.zone_segmenter.segment(radial_profile, expected_zones=3)
+                    logger.info(f"Recovery successful: segmented into {len(zones)} zones")
+                    # 처리 계속 진행
+                    inspection_result = self.color_evaluator.evaluate(zones, sku, self.sku_config)
+                    inspection_result.lens_detection = lens_detection
+                    inspection_result.zones = zones
+                    inspection_result.image = image
+                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                    logger.info(f"Processing complete (with recovery): {inspection_result.judgment}, time={processing_time:.1f}ms")
+                    return inspection_result
+                except Exception as recovery_error:
+                    logger.error(f"Recovery failed: {recovery_error}")
+
+            raise PipelineError(
+                f"Pipeline failed at zone segmentation\n"
+                f"  Image: {image_path}\n"
+                f"  Error: {e}\n"
+                f"  Suggestion: Add 'expected_zones' hint to SKU config, or check radial profile quality"
+            )
 
         except ColorEvaluationError as e:
             logger.error(f"Color evaluation failed: {e}")
-            raise PipelineError(f"Pipeline failed at color evaluation: {e}")
+            raise PipelineError(
+                f"Pipeline failed at color evaluation\n"
+                f"  Image: {image_path}\n"
+                f"  SKU: {sku}\n"
+                f"  Error: {e}\n"
+                f"  Suggestion: Verify SKU config has baseline values for all detected zones"
+            )
 
         except Exception as e:
             logger.error(f"Unexpected error in pipeline: {e}", exc_info=True)
-            raise PipelineError(f"Pipeline failed: {e}")
+            raise PipelineError(
+                f"Pipeline failed with unexpected error\n"
+                f"  Image: {image_path}\n"
+                f"  Error: {e}\n"
+                f"  Suggestion: Check logs for detailed traceback"
+            )
 
     def process_batch(
         self,

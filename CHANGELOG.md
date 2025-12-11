@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Patch] - 2025-12-11 - 시스템 개선 및 품질 향상
+
+### Fixed
+- DEPLOYMENT.md 한글 인코딩 깨짐 수정 (Notes 섹션)
+- Windows 콘솔 UTF-8 로그 출력 문제 해결 (ΔE 기호 정상 표시)
+- SKU001.json에 `expected_zones: 1` 추가로 over-segmentation 방지
+
+### Changed
+- 에러 핸들링 대폭 개선:
+  - 이미지 로드 실패 시 3회 retry 로직 추가
+  - 파일 없음 에러 명확한 메시지 ("Image file not found")
+  - 렌즈 검출 실패 시 이미지 정보 포함 (크기, 경로)
+  - Zone 분할 실패 시 3-zone fallback 자동 복구 시도
+  - 모든 에러에 "Suggestion" 제공으로 문제 해결 용이성 향상
+- 로깅 설정 개선: UTF-8 인코딩 명시, Windows 호환성 강화
+
+### Added
+- DEPLOYMENT.md에 Troubleshooting 섹션 추가
+
+### Tested
+- SKU001 OK/NG 샘플 E2E 검증 완료
+- 시각화 기능 정상 동작 확인
+- 배치 처리 (112 images) 정상 동작 확인
+- 에러 케이스 (파일 없음) 핸들링 검증 완료
+
+---
+
 ## [Day 5] - 2025-12-11 - 성능 최적화 및 프로덕션 준비
 
 ### Added

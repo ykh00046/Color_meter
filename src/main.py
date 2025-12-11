@@ -25,12 +25,34 @@ from src.visualizer import InspectionVisualizer, VisualizerConfig
 
 # 로깅 설정
 def setup_logging(debug: bool = False):
-    """로깅 설정"""
+    """로깅 설정 (UTF-8 인코딩 지원)"""
+    import sys
+
     level = logging.DEBUG if debug else logging.INFO
+
+    # Windows 콘솔 UTF-8 지원
+    if sys.platform == 'win32':
+        try:
+            # Python 3.7+: UTF-8 모드 활성화
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8')
+                sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass  # 실패해도 계속 진행
+
+    # 로깅 핸들러 설정 (UTF-8 인코딩 명시)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(
+        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    ))
+
+    # 기본 로거 설정
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        handlers=[handler],
+        force=True  # 기존 핸들러 제거
     )
 
 
