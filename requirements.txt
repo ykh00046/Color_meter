@@ -15,13 +15,13 @@ Pillow>=10.0.0
 # ------------------------------------------
 # Numerical Computing
 # ------------------------------------------
-numpy>=1.24.0  # Flexible version for Python 3.13 compatibility
+numpy>=1.24.0  # NumPy 2.x compatible (Python 3.13+)
 scipy>=1.11.0
 
 # ------------------------------------------
 # Color Science
 # ------------------------------------------
-colormath==3.0.0
+# colormath==3.0.0  # Replaced with custom implementation in src/utils/color_delta.py
 
 # ------------------------------------------
 # Visualization

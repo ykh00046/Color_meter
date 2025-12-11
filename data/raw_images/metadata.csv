@@ -1,0 +1,11 @@
+file_name,sku,judgment,description
+OK_001.jpg,SKU001,OK,Normal sample
+OK_002.jpg,SKU001,OK,Normal sample
+OK_003.jpg,SKU001,OK,Normal sample
+OK_004.jpg,SKU001,OK,Normal sample
+OK_005.jpg,SKU001,OK,Normal sample
+NG_001.jpg,SKU001,NG,scratch
+NG_002.jpg,SKU001,NG,dot_missing
+NG_003.jpg,SKU001,NG,color_mismatch
+NG_004.jpg,SKU001,NG,scratch
+NG_005.jpg,SKU001,NG,color_mismatch
