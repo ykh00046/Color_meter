@@ -11,9 +11,12 @@
             "description": "Zone A (auto-generated)"
         }
     },
+    "params": {
+        "expected_zones": 1
+    },
     "metadata": {
         "created_at": "2025-12-11T11:07:18.176519",
-        "last_updated": "2025-12-11T11:07:18.176519",
+        "last_updated": "2025-12-11T22:05:30",
         "baseline_samples": 10,
         "calibration_method": "auto_generated",
         "threshold_method": "mean_plus_2std",
@@ -26,6 +29,6 @@
                 "samples": 10
             }
         },
-        "notes": "Generated from 10 OK samples"
+        "notes": "Generated from 10 OK samples. Single zone lens."
     }
 }

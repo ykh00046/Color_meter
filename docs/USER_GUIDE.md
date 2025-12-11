@@ -171,9 +171,44 @@ python src/main.py --image data/raw_images/ng_sample.jpg --sku SKU001 --visualiz
 *   `transition_buffer_px` 값을 조정하여 혼합 구간의 영향을 조절해 보세요.
 
 ### Q4. Zone 분할이 정확하지 않습니다 (Zone 개수가 틀리거나 경계가 부정확).
-*   SKU JSON 설정 파일의 `params` 내 `expected_zones` 값을 실제 렌즈의 Zone 개수에 맞춰 정확히 설정했는지 확인하세요. 이 힌트는 `ZoneSegmenter`의 성능을 크게 향상시킵니다.
-*   `ZoneSegmenter`는 `expected_zones`를 힌트로 사용하여 `gradient` 기반 검출, `ΔE` 기반 보조 검출, 그리고 `expected_zones` 기반 균등 분할 및 최소 폭 병합 등 다양한 Fallback 전략을 순차적으로 시도합니다.
-*   입력 이미지의 노이즈가 심한 경우, `ZoneSegmenter`의 내부 스무딩 파라미터 튜닝이 필요할 수 있습니다.
+
+**✅ 해결 방법 (중요도 순):**
+
+1. **`expected_zones` 설정 (필수)**
+   - SKU JSON 설정 파일의 `params.expected_zones` 값을 **반드시 설정**하세요.
+   - 실제 렌즈의 Zone 개수에 맞춰 정확히 지정합니다 (예: 1-zone 렌즈 → `expected_zones: 1`).
+   - **현재 시스템은 expected_zones 힌트에 의존**하도록 설계되어 있습니다.
+
+2. **Zone 분할 전략 이해**
+
+   시스템은 다음 순서로 Zone 분할을 시도합니다:
+
+   a. **Primary 전략 (권장)**: `expected_zones` 힌트 기반 균등 분할
+      - 변곡점 검출이 실패하거나 expected_zones와 일치하지 않으면 자동 적용
+      - 가장 안정적이고 예측 가능한 결과 제공
+
+   b. **Secondary 전략**: Gradient 및 ΔE 기반 변곡점 자동 검출
+      - 실제 이미지에서는 대부분 작동하지 않음 (노이즈, 도트 인쇄 등)
+      - 실험적 기능으로 간주
+
+   c. **Fallback 전략**: expected_zones 없고 변곡점 검출 실패 시 → default 3-zone 분할
+
+3. **추가 튜닝 (고급)**
+   - 입력 이미지의 노이즈가 심한 경우, `ZoneSegmenter`의 내부 스무딩 파라미터 조정 가능
+   - `min_gradient`, `min_delta_e` 값 조정 (권장하지 않음)
+
+**예시 설정:**
+```json
+{
+  "sku_code": "SKU001",
+  "zones": {
+    "A": { "L": 72.2, "a": 137.3, "b": 122.8, "threshold": 4.0 }
+  },
+  "params": {
+    "expected_zones": 1  // 필수! 실제 zone 개수 지정
+  }
+}
+```
 
 ### Q5. 프로그램 실행 속도가 느립니다.
 *   이미지 해상도가 너무 높은 경우 처리 속도가 느려질 수 있습니다.

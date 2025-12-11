@@ -60,10 +60,7 @@ class InspectionPipeline:
         self.lens_detector = LensDetector(detector_config or DetectorConfig())
         self.radial_profiler = RadialProfiler(profiler_config or ProfilerConfig())
         seg_cfg = segmenter_config or SegmenterConfig()
-        # SKU 설정에 expected_zones 힌트가 있으면 주입
-        if sku_config and hasattr(seg_cfg, "expected_zones"):
-            if isinstance(sku_config, dict) and "expected_zones" in sku_config:
-                seg_cfg.expected_zones = sku_config.get("expected_zones")
+        # Note: expected_zones는 process() 메서드에서 params.expected_zones로 읽어서 segment()에 전달
         self.zone_segmenter = ZoneSegmenter(seg_cfg)
         self.color_evaluator = ColorEvaluator(sku_config)
 

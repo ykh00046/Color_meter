@@ -117,6 +117,26 @@ SKU를 관리합니다.
 *   `list`: 등록된 SKU 목록 표시
 *   `create`: (구현 예정) 새로운 SKU 기준값 생성
 
+### SKU 설정 (중요)
+
+각 SKU의 JSON 설정 파일(`config/sku_db/<SKU_CODE>.json`)에는 **`params.expected_zones`를 반드시 설정**해야 합니다:
+
+```json
+{
+  "sku_code": "SKU001",
+  "zones": {
+    "A": { "L": 72.2, "a": 137.3, "b": 122.8, "threshold": 4.0 }
+  },
+  "params": {
+    "expected_zones": 1  // 필수! 실제 zone 개수
+  }
+}
+```
+
+- `expected_zones`: 렌즈의 실제 Zone 개수 (1, 2, 3 등)
+- Zone 분할 정확도를 크게 향상시키는 필수 설정값입니다.
+- 자세한 내용은 [사용자 가이드](docs/USER_GUIDE.md)를 참조하세요.
+
 ---
 
 ## 📞 지원 및 문의
