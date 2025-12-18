@@ -47,6 +47,18 @@
     - **핵심 알고리즘 검증**: GMM 클러스터링, Mixing correction, 픽셀 샘플링, 판정 로직, 4단계 판정, Confidence 계산
     - **핵심 모듈 커버리지**: ink_estimator 87.39%, zone_analyzer_2d 77.43%
     - **CI/CD 준비 완료**: pytest 실행 시간 55.8초
+*   **🔄 STD 기반 비교 시스템 (2025-12-18)** ✅ NEW:
+    - **M3 - Ink Comparison**: GMM 기반 잉크 색상 비교
+      - Weight-based ink matching (pixel ratio 기준 페어링)
+      - Color score (70%) + Weight score (30%) 혼합 평가
+      - ink_score (0-100) 계산 및 total_score 통합
+      - 불일치 시 상세 메시지 제공
+    - **P1-2 - Radial Profile Comparison**: 1D 프로파일 유사도 분석
+      - Pearson correlation coefficient (L, a, b 채널별)
+      - Structural similarity (1D SSIM 근사)
+      - Gradient similarity (변화 패턴 매칭)
+      - Profile length mismatch 자동 보간
+      - profile_score (0-100) 계산 및 total_score 통합 (zone 35%, ink 25%, profile 25%, confidence 15%)
 
 ---
 
@@ -118,10 +130,18 @@ uvicorn src.web.app:app --port 8000
 - 🔵 **Inspection System** (단일 분석): 운영 중
 - 🟢 **Comparison System** (STD 비교): MVP 개발 중 (Week 1-6)
 
-### 🟢 비교 시스템 (신규 개발 중)
-*   [**🎯 MVP 로드맵**](docs/planning/2_comparison/ROADMAP_REVIEW_AND_ARCHITECTURE.md): Week 6 MVP 달성 계획 (최우선 읽기)
-*   [**✅ Week 1 체크리스트**](docs/planning/2_comparison/WEEK1_M0_READINESS_CHECKLIST.md): 현재 진행 상황
-*   [**⭐ 판정 기준 워크샵**](docs/planning/2_comparison/JUDGMENT_CRITERIA_WORKSHOP.md): Week 1 필수 협의 사항
+### 🟢 비교 시스템 (개발 완료: M0~M3, P1-2) ✅
+**완료된 기능:**
+*   **M0**: Database & Migration (Alembic, SQLAlchemy)
+*   **M1**: STD Registration (기준 모델 등록 및 프로파일 저장)
+*   **M2**: Comparison & Judgment (Zone-based 비교, PASS/FAIL/RETAKE/MANUAL_REVIEW)
+*   **M3**: Ink Comparison (GMM 기반 잉크 색상 비교, ink_score 통합) ✅ NEW
+*   **P1-2**: Radial Profile Comparison (Pearson correlation, SSIM, gradient similarity) ✅ NEW
+
+**주요 문서:**
+*   [**🎯 MVP 로드맵**](docs/planning/2_comparison/ROADMAP_REVIEW_AND_ARCHITECTURE.md): Week 6 MVP 달성 계획
+*   [**📊 M3 완료 보고서**](docs/planning/2_comparison/M3_COMPLETION_REPORT.md): 잉크 비교 구현 내역
+*   [**📈 P1-2 계획서**](docs/planning/2_comparison/P1-2_RADIAL_PROFILE_PLAN.md): Radial profile 비교 구현 내역
 
 ### 🔵 단일 분석 시스템 (운영 중)
 #### 사용자 가이드
