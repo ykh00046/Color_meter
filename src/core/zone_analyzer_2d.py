@@ -1309,27 +1309,26 @@ def _calculate_confidence_wrapper(
     return confidence, confidence_factors, lens_conf, sector_uniformity_score
 
 
-def _determine_judgment_with_retake(
-    judgment: str,
-    ng_reasons: List[str],
-    zone_results_raw: List[Dict],
-    zone_specs: List,
-    confidence: float,
+def _check_retake_conditions(
     lens_conf: float,
+    zone_results_raw: List[Dict],
     print_band_area: int,
-) -> Tuple[str, List[Dict], Dict, List[str], List[str], List[str], bool, bool]:
+    used_fallback_B: bool,
+    confidence: float,
+) -> List[Dict]:
     """
-    RETAKE 조건 체크, 판정 결정, decision_trace 생성
+    RETAKE 조건을 체크하여 retake_reasons 리스트 반환
+
+    Args:
+        lens_conf: 렌즈 검출 신뢰도
+        zone_results_raw: Zone 분석 결과
+        print_band_area: 프린트 밴드 면적
+        used_fallback_B: B zone fallback 사용 여부
+        confidence: 전체 신뢰도
 
     Returns:
-        judgment (updated), retake_reasons, decision_trace, next_actions, ok_context, warning_reasons,
-        zones_all_ok, used_fallback_B
+        retake_reasons 리스트
     """
-    # used_fallback_B 계산
-    B_selected_range = [zone_specs[1].r_start_norm, zone_specs[1].r_end_norm]
-    used_fallback_B = abs(B_selected_range[0] - 0.38) < 0.01 and abs(B_selected_range[1] - 0.61) < 0.01
-
-    # RETAKE 조건 체크 (운영 UX 개선)
     retake_reasons = []
 
     # R1_DetectionLow: 렌즈 검출 신뢰도 낮음
@@ -1379,6 +1378,160 @@ def _determine_judgment_with_retake(
             }
         )
 
+    return retake_reasons
+
+
+def _check_warning_conditions(
+    zone_results_raw: List[Dict],
+    used_fallback_B: bool,
+    confidence: float,
+) -> List[str]:
+    """
+    OK 상태에서 경고 조건을 체크하여 warning_reasons 리스트 반환
+
+    Args:
+        zone_results_raw: Zone 분석 결과
+        used_fallback_B: B zone fallback 사용 여부
+        confidence: 전체 신뢰도
+
+    Returns:
+        warning_reasons 리스트
+    """
+    warning_reasons = []
+
+    max_std_l = max([zr.get("std_lab", [0])[0] for zr in zone_results_raw if zr.get("std_lab")], default=0.0)
+
+    # 1. 각도 균일성 경고 (10.0~12.0)
+    if 10.0 < max_std_l <= 12.0:
+        warning_reasons.append(f"각도 균일성 경계값 근접 (std_L={max_std_l:.1f})")
+
+    # 2. B zone fallback 경고
+    if used_fallback_B and confidence < 0.85:
+        warning_reasons.append("Zone B 경계 탐지 불확실 (fallback 사용)")
+
+    # 3. Confidence 경계값 경고
+    if 0.6 < confidence < 0.7:
+        warning_reasons.append(f"신뢰도 경계값 근접 (confidence={confidence:.2f})")
+
+    return warning_reasons
+
+
+def _build_ok_context(zone_results_raw: List[Dict], confidence: float) -> List[str]:
+    """
+    OK/OK_WITH_WARNING 상태의 컨텍스트 정보 생성
+
+    Args:
+        zone_results_raw: Zone 분석 결과
+        confidence: 전체 신뢰도
+
+    Returns:
+        ok_context 리스트
+    """
+    ok_context = []
+
+    # 1. Zone별 여유도
+    margins = []
+    for zr in zone_results_raw:
+        if zr["delta_e"] is not None and zr["threshold"] is not None:
+            margin = zr["threshold"] - zr["delta_e"]
+            margin_pct = (margin / zr["threshold"]) * 100
+            margins.append(f"{zr['zone_name']}:ΔE={zr['delta_e']:.1f}(여유 {margin_pct:.0f}%)")
+
+    if margins:
+        ok_context.append(f"Zone 여유도: {', '.join(margins)}")
+
+    # 2. 신뢰도
+    ok_context.append(f"신뢰도: {confidence:.2f} ({'재촬영 불필요' if confidence >= 0.7 else '경계값'})")
+
+    return ok_context
+
+
+def _build_decision_trace_and_actions(
+    judgment: str,
+    ng_reasons: List[str],
+    retake_reasons: List[Dict],
+    warning_reasons: List[str],
+    zones_all_ok: bool,
+) -> Tuple[Dict, List[str]]:
+    """
+    decision_trace와 next_actions 생성
+
+    Args:
+        judgment: 최종 판정
+        ng_reasons: NG 이유 리스트
+        retake_reasons: RETAKE 이유 리스트
+        warning_reasons: 경고 이유 리스트
+        zones_all_ok: Zone 판정이 모두 OK인지 여부
+
+    Returns:
+        (decision_trace, next_actions) 튜플
+    """
+    decision_trace: Dict[str, Any] = {"final": judgment, "because": [], "overrides": None}
+    next_actions: List[str] = []
+
+    if judgment == "RETAKE":
+        # RETAKE 이유 코드 수집
+        decision_trace["because"] = [r["code"] for r in retake_reasons]
+        if zones_all_ok:
+            decision_trace["overrides"] = "zones_all_ok"
+        # next_actions: RETAKE reasons의 actions 통합
+        for r in retake_reasons:
+            next_actions.extend(r["actions"])
+
+    elif judgment == "NG":
+        # NG 이유 수집
+        decision_trace["because"] = ng_reasons
+        # next_actions: 공정 조정 권장
+        next_actions.append("공정 파라미터 확인 및 조정")
+        next_actions.append("ΔE 초과 Zone의 색상 변화 방향 확인 (diff)")
+
+    elif judgment == "OK_WITH_WARNING":
+        # 경고 이유 수집
+        decision_trace["because"] = warning_reasons
+        decision_trace["overrides"] = None
+        # next_actions: 예방 조치
+        next_actions.append("경고 사항 모니터링")
+        if "균일성" in ", ".join(warning_reasons):
+            next_actions.append("조명 균일성 확인")
+        if "fallback" in ", ".join(warning_reasons):
+            next_actions.append("샘플 재촬영 권장")
+
+    elif judgment == "OK":
+        decision_trace["because"] = ["모든 Zone이 허용 범위 내"]
+        next_actions.append("정상 판정 - 추가 조치 불필요")
+
+    return decision_trace, next_actions
+
+
+def _determine_judgment_with_retake(
+    judgment: str,
+    ng_reasons: List[str],
+    zone_results_raw: List[Dict],
+    zone_specs: List,
+    confidence: float,
+    lens_conf: float,
+    print_band_area: int,
+) -> Tuple[str, List[Dict], Dict, List[str], List[str], List[str], bool, bool]:
+    """
+    RETAKE 조건 체크, 판정 결정, decision_trace 생성
+
+    Returns:
+        judgment (updated), retake_reasons, decision_trace, next_actions, ok_context, warning_reasons,
+        zones_all_ok, used_fallback_B
+    """
+    # used_fallback_B 계산
+    B_selected_range = [zone_specs[1].r_start_norm, zone_specs[1].r_end_norm]
+    used_fallback_B = abs(B_selected_range[0] - 0.38) < 0.01 and abs(B_selected_range[1] - 0.61) < 0.01
+
+    # RETAKE 조건 체크
+    retake_reasons = _check_retake_conditions(
+        lens_conf=lens_conf,
+        zone_results_raw=zone_results_raw,
+        print_band_area=print_band_area,
+        used_fallback_B=used_fallback_B,
+        confidence=confidence,
+    )
+
     # 판정 순서: RETAKE > NG > OK_WITH_WARNING > OK
     ok_context = []
     warning_reasons = []
@@ -1393,17 +1546,11 @@ def _determine_judgment_with_retake(
         pass
     elif judgment == "OK":
         # OK 상태에서 경고 조건 체크
-        # 1. 각도 균일성 경고 (10.0~12.0)
-        if 10.0 < max_std_l <= 12.0:
-            warning_reasons.append(f"각도 균일성 경계값 근접 (std_L={max_std_l:.1f})")
-
-        # 2. B zone fallback 경고
-        if used_fallback_B and confidence < 0.85:
-            warning_reasons.append("Zone B 경계 탐지 불확실 (fallback 사용)")
-
-        # 3. Confidence 경계값 경고
-        if 0.6 < confidence < 0.7:
-            warning_reasons.append(f"신뢰도 경계값 근접 (confidence={confidence:.2f})")
+        warning_reasons = _check_warning_conditions(
+            zone_results_raw=zone_results_raw,
+            used_fallback_B=used_fallback_B,
+            confidence=confidence,
+        )
 
         # 경고가 있으면 OK_WITH_WARNING
         if warning_reasons:
@@ -1411,52 +1558,16 @@ def _determine_judgment_with_retake(
             ok_context.append(f"경고: {', '.join(warning_reasons)}")
 
         # OK / OK_WITH_WARNING 공통 컨텍스트
-        # 1. Zone별 여유도
-        margins = []
-        for zr in zone_results_raw:
-            if zr["delta_e"] is not None and zr["threshold"] is not None:
-                margin = zr["threshold"] - zr["delta_e"]
-                margin_pct = (margin / zr["threshold"]) * 100
-                margins.append(f"{zr['zone_name']}:ΔE={zr['delta_e']:.1f}(여유 {margin_pct:.0f}%)")
+        ok_context.extend(_build_ok_context(zone_results_raw=zone_results_raw, confidence=confidence))
 
-        if margins:
-            ok_context.append(f"Zone 여유도: {', '.join(margins)}")
-
-        # 2. 신뢰도
-        ok_context.append(f"신뢰도: {confidence:.2f} ({'재촬영 불필요' if confidence >= 0.7 else '경계값'})")
-
-    # decision_trace 및 next_actions 생성 (운영 UX 개선)
-    decision_trace: Dict[str, Any] = {"final": judgment, "because": [], "overrides": None}
-
-    next_actions: List[str] = []
-
-    if judgment == "RETAKE":
-        # RETAKE 이유 코드 수집
-        decision_trace["because"] = [r["code"] for r in retake_reasons]
-        if zones_all_ok:
-            decision_trace["overrides"] = "zones_all_ok"
-        # next_actions: RETAKE reasons의 actions 통합
-        for r in retake_reasons:
-            next_actions.extend(r["actions"])
-    elif judgment == "NG":
-        # NG 이유 수집
-        decision_trace["because"] = ng_reasons
-        # next_actions: 공정 조정 권장
-        next_actions.append("공정 파라미터 확인 및 조정")
-        next_actions.append("ΔE 초과 Zone의 색상 변화 방향 확인 (diff)")
-    elif judgment == "OK_WITH_WARNING":
-        # 경고 이유 수집
-        decision_trace["because"] = warning_reasons
-        decision_trace["overrides"] = None
-        # next_actions: 예방 조치
-        next_actions.append("경고 사항 모니터링")
-        if "균일성" in ", ".join(warning_reasons):
-            next_actions.append("조명 균일성 확인")
-        if "fallback" in ", ".join(warning_reasons):
-            next_actions.append("샘플 재촬영 권장")
-    elif judgment == "OK":
-        decision_trace["because"] = ["모든 Zone이 허용 범위 내"]
-        next_actions.append("정상 판정 - 추가 조치 불필요")
+    # decision_trace 및 next_actions 생성
+    decision_trace, next_actions = _build_decision_trace_and_actions(
+        judgment=judgment,
+        ng_reasons=ng_reasons,
+        retake_reasons=retake_reasons,
+        warning_reasons=warning_reasons,
+        zones_all_ok=zones_all_ok,
+    )
 
     return (
         judgment,
