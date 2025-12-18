@@ -11,7 +11,7 @@
 현재 개발의 기준이 되는 문서들입니다. 구현 시 반드시 이 문서들의 내용을 최우선으로 준수해야 합니다.
 
 ### 1. Planning & Direction
-*   **[README.md](../../README.md)**: 프로젝트 개요, 설치 및 실행 방법 (✅ M3, P1-2 업데이트 완료)
+*   **[README.md](../../README.md)**: 프로젝트 개요, 설치 및 실행 방법 (✅ M3, P1-2, P2 업데이트 완료)
 *   **[ORGANIZATION_AND_DIRECTION_SUMMARY.md](../planning/ORGANIZATION_AND_DIRECTION_SUMMARY.md)**: 프로젝트의 핵심 방향성 (Analysis-first, Judgment-optional).
 
 ### 2. Comparison System (STD-based QC) ✅ 최신 업데이트
@@ -21,10 +21,12 @@
 *   **M2**: Comparison & Judgment ✅ 완료
 *   **M3**: Ink Comparison ✅ 완료 (2025-12-18)
 *   **P1-2**: Radial Profile Comparison ✅ 완료 (2025-12-18)
+*   **P2**: Worst-Case Metrics ✅ 완료 (2025-12-19)
 
 관련 문서:
 *   **[M3_COMPLETION_REPORT.md](2_comparison/M3_COMPLETION_REPORT.md)**: 잉크 비교 구현 완료 보고서
 *   **[P1-2_RADIAL_PROFILE_PLAN.md](2_comparison/P1-2_RADIAL_PROFILE_PLAN.md)**: Radial profile 비교 계획 및 구현
+*   **[P2_COMPLETION_REPORT.md](2_comparison/P2_COMPLETION_REPORT.md)**: 통계적 품질 분석 완료 보고서
 
 ### 3. Implementation Roadmap (Priority Order)
 작업자는 자신의 역할(Backend/UI)에 따라 아래 문서들을 참조하십시오.

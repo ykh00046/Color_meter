@@ -59,6 +59,12 @@
       - Gradient similarity (변화 패턴 매칭)
       - Profile length mismatch 자동 보간
       - profile_score (0-100) 계산 및 total_score 통합 (zone 35%, ink 25%, profile 25%, confidence 15%)
+    - **P2 - Worst-Case Metrics**: 통계적 품질 분석 (2025-12-19)
+      - Percentile statistics (mean, median, p95, p99, max, std)
+      - Hotspot detection (Connected Components Analysis)
+      - Severity classification (CRITICAL/HIGH/MEDIUM)
+      - Coverage ratio (임계값 초과 영역 비율)
+      - Worst zone identification (최악 존 자동 식별)
 
 ---
 
