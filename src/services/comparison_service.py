@@ -111,9 +111,38 @@ class ComparisonService:
                 test_zones=test_analysis.get("zone_results", []), std_zones=std_analysis.get("zone_results", [])
             )
 
+            # 4.5. Compare inks (M3)
+            ink_details = None
+            if test_analysis.get("ink_analysis") and std_analysis.get("ink_analysis"):
+                logger.info("Running ink comparison (M3)")
+                ink_details = self._compare_inks(
+                    test_ink_analysis=test_analysis["ink_analysis"], std_ink_analysis=std_analysis["ink_analysis"]
+                )
+                logger.info(
+                    f"Ink comparison complete: ink_score={ink_details.get('ink_score', 0.0) if ink_details else 0.0}"
+                )
+            else:
+                logger.warning("Ink analysis not available in test or STD sample")
+
+            # 4.6. Compare radial profiles (P1-2)
+            profile_details = None
+            if test_analysis.get("radial_profile") and std_analysis.get("radial_profile"):
+                logger.info("Running radial profile comparison (P1-2)")
+                profile_details = self._compare_radial_profiles(
+                    test_radial_profile=test_analysis["radial_profile"],
+                    std_radial_profile=std_analysis["radial_profile"],
+                )
+                profile_score_value = profile_details.get("profile_score", 0.0) if profile_details else 0.0
+                logger.info(f"Profile comparison complete: profile_score={profile_score_value}")
+            else:
+                logger.warning("Radial profile not available in test or STD sample")
+
             # 5. Calculate scores
             scores = self._calculate_scores(
-                zone_details=zone_details, test_confidence=test_analysis.get("confidence", 0)
+                zone_details=zone_details,
+                test_confidence=test_analysis.get("confidence", 0),
+                ink_details=ink_details,
+                profile_details=profile_details,
             )
 
             # 6. Determine judgment
@@ -132,13 +161,15 @@ class ComparisonService:
                 std_model_id=std_model_id,
                 total_score=scores["total_score"],
                 zone_score=scores["zone_score"],
-                ink_score=0.0,  # MVP: not implemented yet
+                ink_score=scores.get("ink_score", 0.0),  # M3: ink comparison
+                profile_score=scores.get("profile_score", 0.0),  # P1-2: radial profile comparison
                 confidence_score=scores["confidence_score"],
                 judgment=judgment,
                 top_failure_reasons=failure_reasons,
                 defect_classifications=None,  # P1: not implemented
                 zone_details=zone_details,
-                ink_details=None,  # MVP: not implemented
+                ink_details=ink_details,  # M3: ink comparison details
+                profile_details=profile_details,  # P1-2: radial profile comparison details
                 alignment_details=None,  # P1: not implemented
                 worst_case_metrics=None,  # P2: not implemented
                 created_at=datetime.utcnow(),
@@ -306,18 +337,31 @@ class ComparisonService:
 
         return zone_details
 
-    def _calculate_scores(self, zone_details: Dict[str, Any], test_confidence: float) -> Dict[str, float]:
+    def _calculate_scores(
+        self,
+        zone_details: Dict[str, Any],
+        test_confidence: float,
+        ink_details: Optional[Dict[str, Any]] = None,
+        profile_details: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, float]:
         """
         Calculate total scores.
+
+        M3 Update: Includes ink_score in total_score calculation.
+        P1-2 Update: Includes profile_score in total_score calculation.
 
         Args:
             zone_details: Zone comparison details
             test_confidence: InspectionPipeline confidence (0.0-1.0)
+            ink_details: Ink comparison details (M3, optional)
+            profile_details: Radial profile comparison details (P1-2, optional)
 
         Returns:
             {
                 "zone_score": 82.5,
-                "total_score": 82.5,
+                "ink_score": 88.0,  # M3
+                "profile_score": 89.5,  # P1-2
+                "total_score": 85.0,  # P1-2: weighted average
                 "confidence_score": 88.0
             }
         """
@@ -325,13 +369,38 @@ class ComparisonService:
         zone_scores = [z["total_score"] for z in zone_details.values()]
         zone_score = sum(zone_scores) / len(zone_scores) if zone_scores else 0.0
 
-        # Total score (MVP: zone_score와 동일)
-        total_score = zone_score
+        # Ink score (M3)
+        ink_score = ink_details.get("ink_score", 0.0) if ink_details else 0.0
 
-        # Confidence score (InspectionPipeline 신뢰도)
+        # Profile score (P1-2)
+        profile_score = profile_details.get("profile_score", 0.0) if profile_details else 0.0
+
+        # Confidence score
         confidence_score = test_confidence * 100.0 if test_confidence else 0.0
 
-        return {"zone_score": zone_score, "total_score": total_score, "confidence_score": confidence_score}
+        # Total score calculation with fallback logic
+        if profile_details:
+            # P1-2: Include profile_score
+            # Weights: zone 35%, ink 25%, profile 25%, confidence 15%
+            total_score = zone_score * 0.35 + ink_score * 0.25 + profile_score * 0.25 + confidence_score * 0.15
+            logger.info("Using P1-2 total_score formula (zone 35%, ink 25%, profile 25%, confidence 15%)")
+        elif ink_details and ink_details.get("ink_count_match"):
+            # M3 fallback: Include ink_score but no profile
+            # Weights: zone 50%, ink 30%, confidence 20%
+            total_score = zone_score * 0.5 + ink_score * 0.3 + confidence_score * 0.2
+            logger.info("Using M3 total_score formula (zone 50%, ink 30%, confidence 20%)")
+        else:
+            # M2 fallback: zone_score only (no ink or profile data)
+            total_score = zone_score
+            logger.info("Using M2 total_score formula (zone 100%)")
+
+        return {
+            "zone_score": zone_score,
+            "ink_score": ink_score,
+            "profile_score": profile_score,
+            "total_score": total_score,
+            "confidence_score": confidence_score,
+        }
 
     def _determine_judgment(
         self, total_score: float, zone_details: Dict[str, Any], lens_detected: bool
@@ -436,3 +505,324 @@ class ComparisonService:
             issue["rank"] = i + 1
 
         return issues[:3]
+
+    def _calculate_delta_e(self, lab1: List[float], lab2: List[float]) -> float:
+        """
+        Calculate CIEDE76 color difference.
+
+        Args:
+            lab1: First LAB color [L, a, b]
+            lab2: Second LAB color [L, a, b]
+
+        Returns:
+            Delta E value
+        """
+        import numpy as np
+
+        return float(np.sqrt(sum((a - b) ** 2 for a, b in zip(lab1, lab2))))
+
+    def _compare_inks(self, test_ink_analysis: Dict[str, Any], std_ink_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compare ink analysis results between test and STD.
+
+        Uses image-based GMM ink estimation for comparison.
+
+        Args:
+            test_ink_analysis: Test sample ink_analysis
+            std_ink_analysis: STD sample ink_analysis
+
+        Returns:
+            Ink comparison details including:
+            - ink_count_match: bool
+            - ink_pairs: List of matched ink pairs with scores
+            - ink_score: Overall ink similarity score (0-100)
+        """
+        # Extract image-based ink data
+        test_image_based = test_ink_analysis.get("image_based", {})
+        std_image_based = std_ink_analysis.get("image_based", {})
+
+        test_count = test_image_based.get("ink_count", 0)
+        std_count = std_image_based.get("ink_count", 0)
+
+        test_inks = test_image_based.get("inks", [])
+        std_inks = std_image_based.get("inks", [])
+
+        logger.info(f"Comparing inks: TEST={test_count}, STD={std_count}")
+
+        # Check ink count match
+        if test_count != std_count:
+            logger.warning(f"Ink count mismatch: TEST={test_count} != STD={std_count}")
+            return {
+                "ink_count_match": False,
+                "test_ink_count": test_count,
+                "std_ink_count": std_count,
+                "ink_pairs": [],
+                "avg_delta_e": 0.0,
+                "max_delta_e": 0.0,
+                "ink_score": 0.0,
+                "message": f"Ink count mismatch: TEST={test_count}, STD={std_count}",
+            }
+
+        # No inks to compare
+        if test_count == 0:
+            logger.warning("No inks detected in both samples")
+            return {
+                "ink_count_match": True,
+                "test_ink_count": 0,
+                "std_ink_count": 0,
+                "ink_pairs": [],
+                "avg_delta_e": 0.0,
+                "max_delta_e": 0.0,
+                "ink_score": 100.0,  # No inks = perfect match
+                "message": "No inks detected",
+            }
+
+        # Sort inks by weight (descending) for matching
+        test_inks_sorted = sorted(test_inks, key=lambda x: x.get("weight", 0), reverse=True)
+        std_inks_sorted = sorted(std_inks, key=lambda x: x.get("weight", 0), reverse=True)
+
+        # Match inks by rank (weight-based pairing)
+        ink_pairs = []
+        color_scores = []
+        weight_scores = []
+        delta_es = []
+
+        for rank, (test_ink, std_ink) in enumerate(zip(test_inks_sorted, std_inks_sorted), start=1):
+            # Extract data
+            test_lab = test_ink.get("lab", [0, 0, 0])
+            std_lab = std_ink.get("lab", [0, 0, 0])
+            test_weight = test_ink.get("weight", 0.0)
+            std_weight = std_ink.get("weight", 0.0)
+
+            # Calculate color difference
+            delta_e = self._calculate_delta_e(test_lab, std_lab)
+            delta_es.append(delta_e)
+
+            # Color score: ΔE=0 → 100, ΔE=10 → 0
+            color_score = max(0.0, 100.0 - delta_e * 10.0)
+            color_scores.append(color_score)
+
+            # Weight difference
+            weight_diff = abs(test_weight - std_weight)
+
+            # Weight score: diff=0 → 100, diff=0.3 → 0
+            weight_score = max(0.0, 100.0 - weight_diff * 333.0)
+            weight_scores.append(weight_score)
+
+            # Pair score (weighted average)
+            pair_score = color_score * 0.7 + weight_score * 0.3
+
+            ink_pairs.append(
+                {
+                    "rank": rank,
+                    "test_ink": {
+                        "weight": float(test_weight),
+                        "lab": [float(v) for v in test_lab],
+                        "hex": test_ink.get("hex", "#000000"),
+                    },
+                    "std_ink": {
+                        "weight": float(std_weight),
+                        "lab": [float(v) for v in std_lab],
+                        "hex": std_ink.get("hex", "#000000"),
+                    },
+                    "delta_e": float(delta_e),
+                    "weight_diff": float(weight_diff),
+                    "color_score": float(color_score),
+                    "weight_score": float(weight_score),
+                    "pair_score": float(pair_score),
+                }
+            )
+
+        # Calculate overall ink score
+        avg_color = sum(color_scores) / len(color_scores) if color_scores else 0.0
+        avg_weight = sum(weight_scores) / len(weight_scores) if weight_scores else 0.0
+        ink_score = avg_color * 0.7 + avg_weight * 0.3
+
+        result = {
+            "ink_count_match": True,
+            "test_ink_count": test_count,
+            "std_ink_count": std_count,
+            "ink_pairs": ink_pairs,
+            "avg_delta_e": float(sum(delta_es) / len(delta_es)) if delta_es else 0.0,
+            "max_delta_e": float(max(delta_es)) if delta_es else 0.0,
+            "ink_score": float(ink_score),
+        }
+
+        logger.info(
+            f"Ink comparison complete: ink_score={ink_score:.1f}, "
+            f"avg_ΔE={result['avg_delta_e']:.2f}, "
+            f"count_match={result['ink_count_match']}"
+        )
+
+        return result
+
+    def _compare_radial_profiles(
+        self, test_radial_profile: Dict[str, Any], std_radial_profile: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Compare radial profiles between test and STD using correlation and structural similarity.
+
+        Args:
+            test_radial_profile: Test sample radial profile dict
+            std_radial_profile: STD radial profile dict
+
+        Returns:
+            Profile comparison details including:
+            - correlation: Pearson correlation for L, a, b
+            - structural_similarity: SSIM for L, a, b
+            - gradient_similarity: Gradient correlation for L, a, b
+            - profile_score: Overall similarity score (0-100)
+        """
+        import numpy as np
+        from scipy.stats import pearsonr
+
+        logger.info("Comparing radial profiles (P1-2)")
+
+        # Extract profile data
+        test_L = np.array(test_radial_profile.get("L", []))
+        test_a = np.array(test_radial_profile.get("a", []))
+        test_b = np.array(test_radial_profile.get("b", []))
+
+        std_L = np.array(std_radial_profile.get("L", []))
+        std_a = np.array(std_radial_profile.get("a", []))
+        std_b = np.array(std_radial_profile.get("b", []))
+
+        test_length = len(test_L)
+        std_length = len(std_L)
+        length_match = test_length == std_length
+
+        # Handle length mismatch with interpolation
+        if not length_match:
+            logger.warning(f"Profile length mismatch: test={test_length}, std={std_length}. " "Using interpolation.")
+            # Interpolate shorter profile to match longer one
+            if test_length < std_length:
+                x_old = np.linspace(0, 1, test_length)
+                x_new = np.linspace(0, 1, std_length)
+                test_L = np.interp(x_new, x_old, test_L)
+                test_a = np.interp(x_new, x_old, test_a)
+                test_b = np.interp(x_new, x_old, test_b)
+            else:
+                x_old = np.linspace(0, 1, std_length)
+                x_new = np.linspace(0, 1, test_length)
+                std_L = np.interp(x_new, x_old, std_L)
+                std_a = np.interp(x_new, x_old, std_a)
+                std_b = np.interp(x_new, x_old, std_b)
+
+        # 1. Pearson Correlation Coefficient
+        def safe_pearsonr(arr1: np.ndarray, arr2: np.ndarray) -> float:
+            """Calculate Pearson correlation with error handling"""
+            if len(arr1) < 2 or len(arr2) < 2:
+                return 0.0
+            if np.std(arr1) == 0 or np.std(arr2) == 0:
+                return 1.0 if np.allclose(arr1, arr2) else 0.0
+            corr, _ = pearsonr(arr1, arr2)
+            return float(corr)
+
+        corr_L = safe_pearsonr(test_L, std_L)
+        corr_a = safe_pearsonr(test_a, std_a)
+        corr_b = safe_pearsonr(test_b, std_b)
+        corr_avg = (corr_L + corr_a + corr_b) / 3.0
+
+        # 2. Structural Similarity (1D SSIM approximation)
+        def safe_ssim_1d(arr1: np.ndarray, arr2: np.ndarray) -> float:
+            """Calculate 1D SSIM-like metric"""
+            if len(arr1) < 2 or len(arr2) < 2:
+                return 0.0
+
+            # Normalize to 0-1 range
+            min_val = min(arr1.min(), arr2.min())
+            max_val = max(arr1.max(), arr2.max())
+            range_val = max_val - min_val
+
+            if range_val < 1e-8:
+                return 1.0 if np.allclose(arr1, arr2) else 0.0
+
+            arr1_norm = (arr1 - min_val) / range_val
+            arr2_norm = (arr2 - min_val) / range_val
+
+            # SSIM components: luminance, contrast, structure
+            mu1 = np.mean(arr1_norm)
+            mu2 = np.mean(arr2_norm)
+            sigma1 = np.std(arr1_norm)
+            sigma2 = np.std(arr2_norm)
+            sigma12 = np.mean((arr1_norm - mu1) * (arr2_norm - mu2))
+
+            C1 = 0.01
+            C2 = 0.03
+
+            luminance = (2 * mu1 * mu2 + C1) / (mu1**2 + mu2**2 + C1)
+            contrast = (2 * sigma1 * sigma2 + C2) / (sigma1**2 + sigma2**2 + C2)
+            structure = (sigma12 + C2 / 2) / (sigma1 * sigma2 + C2 / 2)
+
+            ssim = luminance * contrast * structure
+            return float(np.clip(ssim, -1.0, 1.0))
+
+        ssim_L = safe_ssim_1d(test_L, std_L)
+        ssim_a = safe_ssim_1d(test_a, std_a)
+        ssim_b = safe_ssim_1d(test_b, std_b)
+        ssim_avg = (ssim_L + ssim_a + ssim_b) / 3.0
+
+        # 3. Gradient Similarity
+        grad_test_L = np.gradient(test_L)
+        grad_test_a = np.gradient(test_a)
+        grad_test_b = np.gradient(test_b)
+
+        grad_std_L = np.gradient(std_L)
+        grad_std_a = np.gradient(std_a)
+        grad_std_b = np.gradient(std_b)
+
+        grad_corr_L = safe_pearsonr(grad_test_L, grad_std_L)
+        grad_corr_a = safe_pearsonr(grad_test_a, grad_std_a)
+        grad_corr_b = safe_pearsonr(grad_test_b, grad_std_b)
+        grad_corr_avg = (grad_corr_L + grad_corr_a + grad_corr_b) / 3.0
+
+        # 4. Calculate profile_score
+        # Convert correlation/SSIM from [-1, 1] to [0, 100]
+        corr_score = (corr_avg + 1) * 50.0  # -1→0, 0→50, 1→100
+        ssim_score = (ssim_avg + 1) * 50.0
+        grad_score = (grad_corr_avg + 1) * 50.0
+
+        # Weighted average: correlation 50%, SSIM 30%, gradient 20%
+        profile_score = corr_score * 0.5 + ssim_score * 0.3 + grad_score * 0.2
+        profile_score = max(0.0, min(100.0, profile_score))
+
+        # Generate message
+        if corr_avg >= 0.9:
+            message = f"Excellent correlation (r={corr_avg:.3f})"
+        elif corr_avg >= 0.7:
+            message = f"Good correlation (r={corr_avg:.3f})"
+        elif corr_avg >= 0.5:
+            message = f"Moderate correlation (r={corr_avg:.3f})"
+        else:
+            message = f"Low correlation (r={corr_avg:.3f})"
+
+        if not length_match:
+            message += f" [Length adjusted: {test_length}→{std_length}]"
+
+        result = {
+            "correlation": {"L": float(corr_L), "a": float(corr_a), "b": float(corr_b), "avg": float(corr_avg)},
+            "structural_similarity": {
+                "L": float(ssim_L),
+                "a": float(ssim_a),
+                "b": float(ssim_b),
+                "avg": float(ssim_avg),
+            },
+            "gradient_similarity": {
+                "L": float(grad_corr_L),
+                "a": float(grad_corr_a),
+                "b": float(grad_corr_b),
+                "avg": float(grad_corr_avg),
+            },
+            "profile_score": float(profile_score),
+            "length_match": length_match,
+            "test_length": int(test_length),
+            "std_length": int(std_length),
+            "message": message,
+        }
+
+        logger.info(
+            f"Profile comparison complete: profile_score={profile_score:.1f}, "
+            f"corr={corr_avg:.3f}, ssim={ssim_avg:.3f}, grad_corr={grad_corr_avg:.3f}"
+        )
+
+        return result

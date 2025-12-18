@@ -111,6 +111,7 @@ class ComparisonResult(Base):
     total_score = Column(Float, nullable=False, index=True)
     zone_score = Column(Float, nullable=False)  # Zone-based (structure)
     ink_score = Column(Float, nullable=False)  # Ink-based (color)
+    profile_score = Column(Float, nullable=False, default=0.0)  # P1-2: Radial profile similarity (0-100)
     confidence_score = Column(Float)  # Confidence (0-100)
 
     # Judgment
@@ -145,6 +146,19 @@ class ComparisonResult(Base):
     #   "matched_delta_e": [2.1, 3.4],
     #   "color_scores": [79, 66],
     #   "matching": [[0, 0], [1, 1]]
+    # }
+
+    profile_details = Column(JSON)
+    # P1-2: Radial profile comparison details
+    # Example: {
+    #   "correlation": {"L": 0.95, "a": 0.92, "b": 0.90, "avg": 0.92},
+    #   "structural_similarity": {"L": 0.88, "a": 0.85, "b": 0.87, "avg": 0.87},
+    #   "gradient_similarity": {"L": 0.82, "a": 0.80, "b": 0.83, "avg": 0.82},
+    #   "profile_score": 89.5,
+    #   "length_match": true,
+    #   "test_length": 348,
+    #   "std_length": 348,
+    #   "message": "High correlation (r=0.92)"
     # }
 
     alignment_details = Column(JSON)
@@ -213,6 +227,7 @@ class ComparisonResult(Base):
             "defect_classifications": self.defect_classifications,
             "zone_details": self.zone_details,
             "ink_details": self.ink_details,
+            "profile_details": self.profile_details,
             "alignment_details": self.alignment_details,
             "worst_case_metrics": self.worst_case_metrics,
             "created_at": self.created_at.isoformat() if self.created_at else None,

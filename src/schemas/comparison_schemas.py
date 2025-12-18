@@ -25,7 +25,8 @@ class ScoresData(BaseModel):
 
     total: float = Field(..., description="Total score (0-100)", ge=0, le=100)
     zone: float = Field(..., description="Zone score (0-100)", ge=0, le=100)
-    ink: float = Field(..., description="Ink score (0-100, MVP: 0)", ge=0, le=100)
+    ink: float = Field(..., description="Ink score (0-100)", ge=0, le=100)
+    profile: float = Field(0.0, description="Radial profile score (0-100, P1-2)", ge=0, le=100)
     confidence: float = Field(..., description="Confidence score (0-100)", ge=0, le=100)
 
 
@@ -38,6 +39,77 @@ class FailureReason(BaseModel):
     message: str = Field(..., description="Failure message")
     severity: float = Field(..., description="Severity (0-100)", ge=0, le=100)
     score: float = Field(..., description="Related score", ge=0, le=100)
+
+
+# M3: Ink Comparison Schemas
+
+
+class InkData(BaseModel):
+    """Individual ink data"""
+
+    weight: float = Field(..., description="Ink pixel ratio (0-1)")
+    lab: List[float] = Field(..., description="LAB color [L, a, b]")
+    hex: str = Field(..., description="HEX color code")
+
+
+class InkPairData(BaseModel):
+    """Ink pair comparison data"""
+
+    rank: int = Field(..., description="Ink rank (1=primary, 2=secondary, etc.)", ge=1)
+    test_ink: InkData = Field(..., description="Test sample ink")
+    std_ink: InkData = Field(..., description="STD ink")
+    delta_e: float = Field(..., description="Color difference (CIEDE76)", ge=0)
+    weight_diff: float = Field(..., description="Weight difference (absolute)", ge=0)
+    color_score: float = Field(..., description="Color similarity score (0-100)", ge=0, le=100)
+    weight_score: float = Field(..., description="Weight similarity score (0-100)", ge=0, le=100)
+    pair_score: float = Field(..., description="Overall pair score (0-100)", ge=0, le=100)
+
+
+class InkDetailsData(BaseModel):
+    """Ink comparison details (M3)"""
+
+    ink_count_match: bool = Field(..., description="Whether ink counts match")
+    test_ink_count: int = Field(..., description="Test sample ink count", ge=0)
+    std_ink_count: int = Field(..., description="STD ink count", ge=0)
+    ink_pairs: List[InkPairData] = Field(..., description="Ink pair comparisons")
+    avg_delta_e: float = Field(..., description="Average ink ΔE", ge=0)
+    max_delta_e: float = Field(..., description="Maximum ink ΔE", ge=0)
+    ink_score: float = Field(..., description="Overall ink score (0-100)", ge=0, le=100)
+    message: Optional[str] = Field(None, description="Message (e.g., mismatch reason)")
+
+
+# P1-2: Radial Profile Comparison Schemas
+
+
+class CorrelationData(BaseModel):
+    """Correlation coefficients for radial profile comparison"""
+
+    L: float = Field(..., description="L* channel correlation", ge=-1, le=1)
+    a: float = Field(..., description="a* channel correlation", ge=-1, le=1)
+    b: float = Field(..., description="b* channel correlation", ge=-1, le=1)
+    avg: float = Field(..., description="Average correlation across channels", ge=-1, le=1)
+
+
+class StructuralSimilarityData(BaseModel):
+    """Structural similarity metrics for radial profile comparison"""
+
+    L: float = Field(..., description="L* channel SSIM", ge=-1, le=1)
+    a: float = Field(..., description="a* channel SSIM", ge=-1, le=1)
+    b: float = Field(..., description="b* channel SSIM", ge=-1, le=1)
+    avg: float = Field(..., description="Average SSIM across channels", ge=-1, le=1)
+
+
+class ProfileDetailsData(BaseModel):
+    """Radial profile comparison details (P1-2)"""
+
+    correlation: CorrelationData = Field(..., description="Pearson correlation coefficients")
+    structural_similarity: StructuralSimilarityData = Field(..., description="Structural similarity (SSIM)")
+    gradient_similarity: CorrelationData = Field(..., description="Gradient correlation coefficients")
+    profile_score: float = Field(..., description="Overall profile similarity score (0-100)", ge=0, le=100)
+    length_match: bool = Field(..., description="Whether profile lengths match")
+    test_length: int = Field(..., description="Test profile length (number of points)", ge=0)
+    std_length: int = Field(..., description="STD profile length (number of points)", ge=0)
+    message: Optional[str] = Field(None, description="Summary message")
 
 
 class CompareResponse(BaseModel):
@@ -93,7 +165,8 @@ class ComparisonDetailResponse(BaseModel):
     needs_action: bool = Field(..., description="Whether needs operator action")
     top_failure_reasons: Optional[List[Dict[str, Any]]] = Field(None, description="Top failure reasons")
     zone_details: Dict[str, Any] = Field(..., description="Zone-by-zone details")
-    ink_details: Optional[Dict[str, Any]] = Field(None, description="Ink comparison details (MVP: None)")
+    ink_details: Optional[InkDetailsData] = Field(None, description="Ink comparison details (M3)")
+    profile_details: Optional[ProfileDetailsData] = Field(None, description="Radial profile comparison details (P1-2)")
     created_at: datetime = Field(..., description="Created timestamp")
     processing_time_ms: int = Field(..., description="Processing time (milliseconds)")
 
