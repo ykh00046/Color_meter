@@ -32,8 +32,8 @@ class InkColor:
 
 
 class InkEstimator:
-    def __init__(self, random_seed: int = 42):
-        self.random_seed = random_seed
+    def __init__(self, random_seed: int = 42) -> None:
+        self.random_seed: int = random_seed
 
     def lab_to_rgb_hex(self, lab: np.ndarray) -> Tuple[Tuple[int, int, int], str]:
         """Convert CIELAB (L:0-100, a,b:-128-127) to sRGB and HEX."""
@@ -82,7 +82,7 @@ class InkEstimator:
         L_max: float = 98.0,
         L_dark_thresh: float = 45.0,
         downscale_max: int = 1200,
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         이미지에서 잉크로 추정되는 픽셀만 샘플링합니다.
         WARNING: 입력 이미지는 WB가 보정된 상태여야 합니다.
@@ -428,7 +428,7 @@ class InkEstimator:
         L_max: float = 98.0,
         merge_de_thresh: float = 5.0,
         linearity_thresh: float = 3.0,
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """
         numpy array 이미지에서 잉크를 추정하는 메인 함수.
 
@@ -502,7 +502,7 @@ class InkEstimator:
         L_max: float = 98.0,
         merge_de_thresh: float = 5.0,
         linearity_thresh: float = 3.0,
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """
         이미지 파일에서 잉크를 추정하는 메인 함수.
 

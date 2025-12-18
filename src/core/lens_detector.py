@@ -43,8 +43,8 @@ class DetectorConfig:
 
 
 class LensDetector:
-    def __init__(self, config: DetectorConfig = DetectorConfig()):
-        self.config = config
+    def __init__(self, config: DetectorConfig = DetectorConfig()) -> None:
+        self.config: DetectorConfig = config
 
     def detect(self, image: np.ndarray) -> LensDetection:
         if image is None:

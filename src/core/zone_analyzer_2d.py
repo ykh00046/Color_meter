@@ -1970,7 +1970,7 @@ def _assemble_result(
 def analyze_lens_zones_2d(
     img_bgr: np.ndarray,
     lens_detection: LensDetection,
-    sku_config: dict,
+    sku_config: Dict[str, Any],
     ink_mask_config: Optional[InkMaskConfig] = None,
     save_debug: bool = False,
     debug_prefix: str = "debug_2d",

@@ -8,7 +8,7 @@ CIEDE2000 색차 계산을 통해 SKU 기준 대비 품질을 평가한다.
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -70,14 +70,14 @@ class ZoneResult:
     """
 
     zone_name: str
-    measured_lab: tuple  # (L*, a*, b*)
-    target_lab: tuple  # (L*, a*, b*)
+    measured_lab: Tuple[float, float, float]  # (L*, a*, b*)
+    target_lab: Tuple[float, float, float]  # (L*, a*, b*)
     delta_e: float
     threshold: float
     is_ok: bool
     pixel_count: int = 0  # Zone 평균 계산에 사용된 픽셀 수
     diff: Optional[Dict[str, Any]] = None  # 색상 변화 상세 (운영 UX)
-    std_lab: Optional[tuple] = None  # (std_L, std_a, std_b) - PHASE7 Priority 6
+    std_lab: Optional[Tuple[float, float, float]] = None  # (std_L, std_a, std_b) - PHASE7 Priority 6
     chroma_stats: Optional[Dict[str, float]] = None  # {q25, median, q75, iqr} - PHASE7 Priority 6
     internal_uniformity: Optional[float] = None  # 0~1 - PHASE7 Priority 6
     uniformity_grade: Optional[str] = None  # Good/Medium/Poor - PHASE7 Priority 6
@@ -153,7 +153,7 @@ class ColorEvaluator:
     SKU 기준 값과 비교하여 품질을 평가한다.
     """
 
-    def __init__(self, sku_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, sku_config: Optional[Dict[str, Any]] = None) -> None:
         """
         ColorEvaluator 초기화.
 
@@ -169,7 +169,7 @@ class ColorEvaluator:
                     }
                 }
         """
-        self.sku_config = sku_config or {}
+        self.sku_config: Dict[str, Any] = sku_config or {}
 
     def evaluate(self, zones: List[Zone], sku: str, sku_config: Optional[Dict[str, Any]] = None) -> InspectionResult:
         """
@@ -322,7 +322,9 @@ class ColorEvaluator:
 
         return result
 
-    def calculate_delta_e(self, lab1: tuple, lab2: tuple, method: str = "cie2000") -> float:
+    def calculate_delta_e(
+        self, lab1: Tuple[float, float, float], lab2: Tuple[float, float, float], method: str = "cie2000"
+    ) -> float:
         """
         색차(ΔE) 계산.
 
