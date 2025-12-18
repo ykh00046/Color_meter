@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Chart.js Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; }
+        .status { padding: 1rem; margin: 1rem 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Chart.js v3.9.1 Test</h1>
+    <div id="status"></div>
+    <canvas id="testChart" width="600" height="300"></canvas>
+
+    <script>
+        const statusEl = document.getElementById('status');
+
+        // Check Chart.js loaded
+        if (typeof Chart === 'undefined') {
+            statusEl.className = 'status error';
+            statusEl.textContent = '❌ ERROR: Chart.js not loaded!';
+        } else {
+            statusEl.className = 'status success';
+            statusEl.innerHTML = `✓ Chart.js loaded successfully<br>Version: ${Chart.version}`;
+
+            // Create test chart
+            try {
+                const ctx = document.getElementById('testChart').getContext('2d');
+                const testData = {
+                    labels: ['0', '0.2', '0.4', '0.6', '0.8', '1.0'],
+                    datasets: [{
+                        label: 'Test Data',
+                        data: [10, 20, 15, 25, 22, 30],
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.3
+                    }]
+                };
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: testData,
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: true }
+                        }
+                    }
+                });
+
+                statusEl.innerHTML += '<br>✓ Chart created successfully!';
+            } catch (err) {
+                statusEl.className = 'status error';
+                statusEl.innerHTML += `<br>❌ Chart creation failed: ${err.message}`;
+                console.error('Chart error:', err);
+            }
+        }
+    </script>
+</body>
+</html>

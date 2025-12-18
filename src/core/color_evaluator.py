@@ -105,6 +105,8 @@ class InspectionResult:
         diagnostics: 진단 정보 목록 (PHASE7 Priority 5) - 각 단계별 처리 결과
         warnings: 경고 목록 (PHASE7 Priority 5) - 잠재적 문제점
         suggestions: 제안 목록 (PHASE7 Priority 5) - 개선/해결 방법
+        ink_analysis: 잉크 색 분석 결과 (M3) - zone_based, image_based
+        radial_profile: Radial profile 데이터 (P1-2) - r_normalized, L, a, b, std 등
         lens_detection: 렌즈 검출 결과 (시각화용, optional)
         zones: Zone 리스트 (시각화용, optional)
         image: 원본 이미지 (시각화용, optional)
@@ -129,6 +131,7 @@ class InspectionResult:
     warnings: Optional[List[str]] = None  # PHASE7 Priority 5: 경고
     suggestions: Optional[List[str]] = None  # PHASE7 Priority 5: 제안
     ink_analysis: Optional[Dict[str, Any]] = None  # 잉크 색 도출 (사용자 목표)
+    radial_profile: Optional[Dict[str, Any]] = None  # P1-2: Radial profile data for comparison
     lens_detection: Optional[Any] = None  # LensDetection
     zones: Optional[List[Zone]] = None
     image: Optional[Any] = None  # np.ndarray

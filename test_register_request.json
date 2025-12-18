@@ -1,0 +1,8 @@
+{
+  "sku_code": "SKU001",
+  "image_path": "data/raw_images/SKU001_OK_002.jpg",
+  "batch_number": "B001",
+  "sample_id": "SKU001-B001-001",
+  "operator": "홍길동",
+  "notes": "양산 샘플 검사"
+}

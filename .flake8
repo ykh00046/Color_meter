@@ -1,0 +1,51 @@
+[flake8]
+# Flake8 configuration for Color Meter project
+max-line-length = 120
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    venv,
+    .venv,
+    build,
+    dist,
+    *.egg-info
+
+# Error codes to ignore
+ignore =
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E501: line too long (we set max-line-length instead)
+    # E501,
+    # Temporary ignores (to be removed gradually):
+    # E226: missing whitespace around arithmetic operator
+    E226,
+    # E402: module level import not at top (needed for tools)
+    E402,
+    # F401: unused imports (to be cleaned up)
+    F401,
+    # F841: unused variables (to be cleaned up)
+    F841,
+    # E722: bare except (to be fixed)
+    E722,
+    # E712: comparison to True (to be fixed)
+    E712,
+    # F541: f-string missing placeholders (to be fixed)
+    F541,
+
+# Maximum complexity (temporarily disabled, will be enforced after refactoring in Task 3.4)
+# max-complexity = 15
+
+# Per-file ignores
+per-file-ignores =
+    # __init__.py files can have unused imports
+    __init__.py:F401,F403
+    # Test files can have assertions
+    tests/*:S101
+
+# Show source code for each error
+show-source = True
+# Show statistics
+statistics = True

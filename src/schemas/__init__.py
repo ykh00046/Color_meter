@@ -12,12 +12,15 @@ from .comparison_schemas import (
     ComparisonListResponse,
     CorrelationData,
     FailureReason,
+    HotspotData,
     InkData,
     InkDetailsData,
     InkPairData,
+    PercentileMetrics,
     ProfileDetailsData,
     ScoresData,
     StructuralSimilarityData,
+    WorstCaseMetrics,
 )
 from .std_schemas import STDDetailResponse, STDListResponse, STDProfileData, STDRegisterRequest, STDRegisterResponse
 from .test_schemas import TestDetailResponse, TestListItem, TestListResponse, TestRegisterRequest, TestRegisterResponse
@@ -49,4 +52,7 @@ __all__ = [
     "CorrelationData",
     "StructuralSimilarityData",
     "ProfileDetailsData",
+    "PercentileMetrics",
+    "HotspotData",
+    "WorstCaseMetrics",
 ]

@@ -112,6 +112,41 @@ class ProfileDetailsData(BaseModel):
     message: Optional[str] = Field(None, description="Summary message")
 
 
+# P2: Worst-Case Metrics Schemas
+
+
+class PercentileMetrics(BaseModel):
+    """Percentile statistics for delta-E distribution"""
+
+    mean: float = Field(..., description="Mean delta-E", ge=0)
+    median: float = Field(..., description="Median delta-E (p50)", ge=0)
+    p95: float = Field(..., description="95th percentile delta-E", ge=0)
+    p99: float = Field(..., description="99th percentile delta-E", ge=0)
+    max: float = Field(..., description="Maximum delta-E", ge=0)
+    std: float = Field(..., description="Standard deviation", ge=0)
+
+
+class HotspotData(BaseModel):
+    """Individual hotspot (high delta-E region)"""
+
+    area: int = Field(..., description="Hotspot area in pixels", gt=0)
+    centroid: List[float] = Field(..., description="Centroid coordinates [x, y]")
+    mean_delta_e: float = Field(..., description="Mean delta-E in hotspot", ge=0)
+    max_delta_e: float = Field(..., description="Max delta-E in hotspot", ge=0)
+    zone: Optional[str] = Field(None, description="Zone containing hotspot (A, B, C)")
+    severity: str = Field(..., description="Severity level (CRITICAL/HIGH/MEDIUM)")
+
+
+class WorstCaseMetrics(BaseModel):
+    """Worst-case metrics for comparison (P2)"""
+
+    percentiles: PercentileMetrics = Field(..., description="Delta-E percentile statistics")
+    hotspots: List[HotspotData] = Field(..., description="Detected hotspots (top 5)")
+    hotspot_count: int = Field(..., description="Total number of hotspots detected", ge=0)
+    worst_zone: Optional[str] = Field(None, description="Zone with highest mean delta-E")
+    coverage_ratio: float = Field(..., description="Ratio of area with delta-E > threshold", ge=0, le=1)
+
+
 class CompareResponse(BaseModel):
     """Comparison response"""
 
@@ -167,6 +202,7 @@ class ComparisonDetailResponse(BaseModel):
     zone_details: Dict[str, Any] = Field(..., description="Zone-by-zone details")
     ink_details: Optional[InkDetailsData] = Field(None, description="Ink comparison details (M3)")
     profile_details: Optional[ProfileDetailsData] = Field(None, description="Radial profile comparison details (P1-2)")
+    worst_case_metrics: Optional[WorstCaseMetrics] = Field(None, description="Worst-case metrics (P2)")
     created_at: datetime = Field(..., description="Created timestamp")
     processing_time_ms: int = Field(..., description="Processing time (milliseconds)")
 

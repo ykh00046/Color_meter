@@ -137,6 +137,21 @@ class ComparisonService:
             else:
                 logger.warning("Radial profile not available in test or STD sample")
 
+            # 4.7. Calculate worst-case metrics (P2)
+            worst_case_metrics = None
+            if test_analysis.get("zone_results") and std_analysis.get("zone_results"):
+                logger.info("Calculating worst-case metrics (P2)")
+                worst_case_metrics = self._calculate_worst_case_metrics(
+                    test_analysis=test_analysis, std_analysis=std_analysis, zone_details=zone_details
+                )
+                if worst_case_metrics:
+                    logger.info(
+                        f"Worst-case metrics complete: p95={worst_case_metrics['percentiles']['p95']:.2f}, "
+                        f"hotspots={worst_case_metrics['hotspot_count']}"
+                    )
+            else:
+                logger.warning("Zone results not available for worst-case metrics")
+
             # 5. Calculate scores
             scores = self._calculate_scores(
                 zone_details=zone_details,
@@ -171,7 +186,7 @@ class ComparisonService:
                 ink_details=ink_details,  # M3: ink comparison details
                 profile_details=profile_details,  # P1-2: radial profile comparison details
                 alignment_details=None,  # P1: not implemented
-                worst_case_metrics=None,  # P2: not implemented
+                worst_case_metrics=worst_case_metrics,  # P2: worst-case metrics
                 created_at=datetime.utcnow(),
                 processing_time_ms=processing_time_ms,
             )
@@ -823,6 +838,114 @@ class ComparisonService:
         logger.info(
             f"Profile comparison complete: profile_score={profile_score:.1f}, "
             f"corr={corr_avg:.3f}, ssim={ssim_avg:.3f}, grad_corr={grad_corr_avg:.3f}"
+        )
+
+        return result
+
+    def _calculate_worst_case_metrics(
+        self, test_analysis: Dict[str, Any], std_analysis: Dict[str, Any], zone_details: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Calculate worst-case metrics for comparison (P2).
+
+        Args:
+            test_analysis: Test sample analysis_result
+            std_analysis: STD sample analysis_result
+            zone_details: Zone comparison details
+
+        Returns:
+            Worst-case metrics including:
+            - percentiles: Delta-E percentile statistics
+            - hotspots: Detected high delta-E regions
+            - worst_zone: Zone with highest mean delta-E
+            - coverage_ratio: Ratio of area exceeding threshold
+        """
+        import cv2
+        import numpy as np
+        from scipy import ndimage
+
+        logger.info("Calculating worst-case metrics (P2)")
+
+        # Get zone results from test sample
+        test_zones = test_analysis.get("zone_results", [])
+        if not test_zones:
+            logger.warning("No zone results available for worst-case analysis")
+            return None
+
+        # Collect all delta-E values from zones
+        all_delta_e = []
+        zone_mean_delta_e = {}
+
+        for zone in test_zones:
+            zone_name = zone.get("name", "Unknown")
+            delta_e = zone.get("delta_e")
+            if delta_e is not None:
+                all_delta_e.append(delta_e)
+                zone_mean_delta_e[zone_name] = delta_e
+
+        if not all_delta_e:
+            logger.warning("No delta-E values available")
+            return None
+
+        # 1. Calculate percentile metrics
+        all_delta_e_array = np.array(all_delta_e)
+        percentiles = {
+            "mean": float(np.mean(all_delta_e_array)),
+            "median": float(np.median(all_delta_e_array)),
+            "p95": float(np.percentile(all_delta_e_array, 95)),
+            "p99": float(np.percentile(all_delta_e_array, 99)),
+            "max": float(np.max(all_delta_e_array)),
+            "std": float(np.std(all_delta_e_array)),
+        }
+
+        # 2. Identify worst zone
+        worst_zone = max(zone_mean_delta_e, key=zone_mean_delta_e.get) if zone_mean_delta_e else None
+
+        # 3. Detect hotspots (zones with delta-E > threshold)
+        hotspot_threshold = percentiles["p95"]  # Use p95 as hotspot threshold
+        hotspots = []
+
+        for zone in test_zones:
+            zone_name = zone.get("name", "Unknown")
+            delta_e = zone.get("delta_e")
+            if delta_e is not None and delta_e > hotspot_threshold:
+                # Determine severity
+                if delta_e > percentiles["p99"]:
+                    severity = "CRITICAL"
+                elif delta_e > percentiles["p95"]:
+                    severity = "HIGH"
+                else:
+                    severity = "MEDIUM"
+
+                hotspots.append(
+                    {
+                        "area": zone.get("pixel_count", 0),
+                        "centroid": [0.0, 0.0],  # Placeholder - would need actual position
+                        "mean_delta_e": float(delta_e),
+                        "max_delta_e": float(delta_e),  # Same as mean for zone-level
+                        "zone": zone_name,
+                        "severity": severity,
+                    }
+                )
+
+        # Sort hotspots by mean_delta_e (descending) and take top 5
+        hotspots_sorted = sorted(hotspots, key=lambda x: x["mean_delta_e"], reverse=True)[:5]
+
+        # 4. Calculate coverage ratio (zones exceeding threshold / total zones)
+        zones_exceeding = sum(1 for de in all_delta_e if de > hotspot_threshold)
+        coverage_ratio = zones_exceeding / len(all_delta_e) if all_delta_e else 0.0
+
+        result = {
+            "percentiles": percentiles,
+            "hotspots": hotspots_sorted,
+            "hotspot_count": len(hotspots),
+            "worst_zone": worst_zone,
+            "coverage_ratio": float(coverage_ratio),
+        }
+
+        logger.info(
+            f"Worst-case metrics complete: p95={percentiles['p95']:.2f}, "
+            f"p99={percentiles['p99']:.2f}, hotspots={len(hotspots)}, worst_zone={worst_zone}"
         )
 
         return result

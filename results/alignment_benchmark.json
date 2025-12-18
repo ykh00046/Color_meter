@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-12-17 15:49:22",
+  "n_samples": 100,
+  "results": [
+    {
+      "algorithm": "Cross-Correlation",
+      "avg_time_ms": 0.08511999389156699,
+      "median_time_ms": 0.0807500327937305,
+      "p95_time_ms": 0.09405501768924295,
+      "p99_time_ms": 0.12448300025425958,
+      "max_time_ms": 0.3306999569758773,
+      "avg_correlation": 0.9891936155834763,
+      "avg_rmse": 1.0404879645682823,
+      "success_rate": 100.0
+    },
+    {
+      "algorithm": "Circular Shift (±50px)",
+      "avg_time_ms": 3.2468670036178082,
+      "median_time_ms": 3.12995002605021,
+      "p95_time_ms": 3.822469979058951,
+      "p99_time_ms": 4.437217015074567,
+      "max_time_ms": 4.577499930746853,
+      "avg_correlation": 0.9908606317327027,
+      "avg_rmse": 0.9628121101307692,
+      "success_rate": 100.0
+    }
+  ]
+}

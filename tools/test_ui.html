@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>UI Debug Test - Color Meter</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        .debug-section { background: #f0f0f0; padding: 1rem; margin: 1rem 0; border-radius: 4px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+<main class="container">
+    <h1>Debug Test</h1>
+
+    <h3>Test Form</h3>
+    <form id="test-form" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <input type="text" name="sku" value="SKU001">
+        <button type="submit">Test Inspect</button>
+    </form>
+
+    <h3>Results</h3>
+    <pre id="debug"></pre>
+
+    <h3>Graphs</h3>
+    <canvas id="chart1" height="200"></canvas>
+
+    <h3>Table</h3>
+    <table id="test-table">
+        <thead><tr><th>Method</th><th>Value</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</main>
+
+<script>
+// Check if Chart.js is loaded
+window.addEventListener('DOMContentLoaded', () => {
+    const debug = document.getElementById('debug');
+    if (typeof Chart === 'undefined') {
+        debug.innerHTML = '<span class="error">ERROR: Chart.js not loaded!</span>';
+    } else {
+        debug.innerHTML = '<span class="success">✓ Chart.js loaded (version: ' + Chart.version + ')</span>';
+    }
+});
+
+const debug = document.getElementById('debug');
+const ctx = document.getElementById('chart1').getContext('2d');
+const tbody = document.querySelector('#test-table tbody');
+let chart;
+
+document.getElementById('test-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+
+    try {
+        debug.innerHTML = '<div class="debug-section">Sending request to http://localhost:8001/inspect...</div>';
+        console.log('[DEBUG] Form data:', Object.fromEntries(formData));
+
+        const resp = await fetch('http://localhost:8001/inspect', {
+            method: 'POST',
+            body: formData
+        });
+
+        console.log('[DEBUG] Response status:', resp.status);
+        debug.innerHTML += `<div class="debug-section">Status: <span class="${resp.ok ? 'success' : 'error'}">${resp.status}</span></div>`;
+
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            debug.innerHTML += `<div class="debug-section error">Error: ${errorText}</div>`;
+            console.error('[ERROR]', errorText);
+            return;
+        }
+
+        const json = await resp.json();
+        console.log('[DEBUG] Received JSON:', json);
+
+        debug.innerHTML += `<div class="debug-section">Response keys: ${Object.keys(json).join(', ')}</div>`;
+        debug.innerHTML += `<div class="debug-section"><pre>${JSON.stringify(json, null, 2).substring(0, 500)}...</pre></div>`;
+
+        // Test chart
+        const analysis = json.analysis;
+        console.log('[DEBUG] Analysis:', analysis);
+
+        if (analysis && analysis.radius) {
+            console.log('[DEBUG] Creating chart with', analysis.radius.length, 'data points');
+            debug.innerHTML += `<div class="debug-section success">Found ${analysis.radius.length} data points for chart</div>`;
+
+            if (chart) {
+                console.log('[DEBUG] Destroying previous chart');
+                chart.destroy();
+            }
+
+            try {
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: analysis.radius,
+                        datasets: [{
+                            label: 'L*',
+                            data: analysis.L_raw,
+                            borderColor: '#000',
+                            tension: 0.3
+                        }]
+                    },
+                    options: {responsive: true}
+                });
+                console.log('[DEBUG] Chart created successfully');
+                debug.innerHTML += '<div class="debug-section success">✓ Chart created!</div>';
+            } catch (chartErr) {
+                console.error('[ERROR] Chart creation failed:', chartErr);
+                debug.innerHTML += `<div class="debug-section error">Chart error: ${chartErr.message}</div>`;
+            }
+        } else {
+            debug.innerHTML += '<div class="debug-section error">No analysis data or radius array</div>';
+        }
+
+        // Test table
+        if (analysis && analysis.boundary_candidates) {
+            console.log('[DEBUG] Populating table with', analysis.boundary_candidates.length, 'candidates');
+            tbody.innerHTML = '';
+            analysis.boundary_candidates.forEach(c => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${c.method}</td><td>${c.value.toFixed(2)}</td>`;
+                tbody.appendChild(tr);
+            });
+            debug.innerHTML += `<div class="debug-section success">✓ Table populated with ${analysis.boundary_candidates.length} rows</div>`;
+            console.log('[DEBUG] Table populated successfully');
+        } else {
+            debug.innerHTML += '<div class="debug-section error">No boundary candidates</div>';
+        }
+
+    } catch (err) {
+        console.error('[ERROR] Exception:', err);
+        debug.innerHTML = `<div class="debug-section error">Exception: ${err.message}<br><pre>${err.stack}</pre></div>`;
+    }
+});
+</script>
+</body>
+</html>
