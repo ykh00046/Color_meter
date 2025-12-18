@@ -24,4 +24,3 @@ def test_list_files_filters_only_files(tmp_path: Path):
     (tmp_path / "sub").mkdir()
     files = file_io.list_files(tmp_path, "*.txt")
     assert files == [tmp_path / "f1.txt"]
-

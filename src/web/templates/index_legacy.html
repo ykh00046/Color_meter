@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Meter Analysis Dashboard</title>
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="/static/css/main.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-3 py-2">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#">
+                    <i class="bi bi-bullseye"></i> Color Meter <span class="badge bg-secondary ms-2" style="font-size: 0.6em;">PRO</span>
+                </a>
+                <a href="/dashboard" class="btn btn-outline-primary btn-sm ms-3">
+                    <i class="bi bi-graph-up"></i> Go to Dashboard
+                </a>
+
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-secondary small fw-bold">JUDGMENT:</span>
+                        <span id="judgment-badge" class="badge bg-secondary fs-6">READY</span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content (Grid) -->
+        <div class="main-content container-fluid">
+            <div class="row h-100 g-3">
+
+                <!-- Left Column: Viewer (8/12) -->
+                <div class="col-lg-8 h-100">
+                    <div class="card viewer-card shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                            <h6 class="m-0 text-secondary fw-bold"><i class="bi bi-image"></i> IMAGE VIEWER</h6>
+                            <div class="btn-group btn-group-sm">
+                                <label class="btn btn-outline-primary" for="file-upload">
+                                    <i class="bi bi-upload"></i> Load Image
+                                </label>
+                                <input type="file" id="file-upload" accept="image/*" hidden>
+                            </div>
+                        </div>
+                        <div class="card-body p-0 viewer-container" id="viewer-container">
+                            <canvas id="viewer-canvas"></canvas>
+                            <div class="position-absolute top-0 end-0 p-2 opacity-75">
+                                <small class="text-muted">Scroll to Zoom • Drag to Pan</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Controls & Results (4/12) -->
+                <div class="col-lg-4 h-100 d-flex flex-column gap-3">
+
+                    <!-- Controls Panel -->
+                    <div class="card controls-card shadow-sm flex-shrink-0" style="max-height: 45%;">
+                        <div class="card-header bg-white py-2">
+                            <h6 class="m-0 text-secondary fw-bold"><i class="bi bi-sliders"></i> SETTINGS</h6>
+                        </div>
+                        <div class="card-body">
+                            <!-- Basic Config -->
+                            <div class="control-section">
+                                <div class="section-title">Analysis Configuration</div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Target SKU</label>
+                                    <select class="form-select form-select-sm" id="sku-select" data-bs-toggle="tooltip" data-bs-placement="top" title="분석에 사용할 SKU 코드를 선택합니다. 각 SKU는 고유한 색상 기준값을 가집니다.">
+                                        <!-- Populated via JS -->
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- ROI & Grid Config -->
+                            <div class="control-section">
+                                <div class="section-title">Region of Interest (Grid)</div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small">Inner Radius (norm)</label>
+                                    <span class="range-value" id="inner-val">0.20</span>
+                                    <input type="range" class="form-range" id="inner-radius" min="0" max="0.9" step="0.01" value="0.2" data-bs-toggle="tooltip" data-bs-placement="top" title="렌즈 중심부에서 분석을 시작할 정규화된 반경입니다 (0.0:중심 ~ 1.0:가장자리).">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small">Outer Radius (norm)</label>
+                                    <span class="range-value" id="outer-val">1.00</span>
+                                    <input type="range" class="form-range" id="outer-radius" min="0.1" max="1.2" step="0.01" value="1.0" data-bs-toggle="tooltip" data-bs-placement="top" title="렌즈 외곽부에서 분석을 마칠 정규화된 반경입니다 (0.0:중심 ~ 1.0:가장자리).">
+                                </div>
+
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label small">Rings</label>
+                                        <span class="range-value float-none ms-1" id="ring-val">3</span>
+                                        <input type="range" class="form-range" id="ring-count" min="1" max="6" step="1" value="3" data-bs-toggle="tooltip" data-bs-placement="top" title="Inner/Outer Radius 사이를 분할할 동심원(Ring)의 개수입니다.">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Sectors</label>
+                                        <select class="form-select form-select-sm" id="sector-count" data-bs-toggle="tooltip" data-bs-placement="top" title="렌즈를 부채꼴(Sector)로 분할할 개수입니다. 0이면 Sector 분석을 사용하지 않습니다.">
+                                            <option value="0">None</option>
+                                            <option value="12" selected>12 (30°)</option>
+                                            <option value="24">24 (15°)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="ring-mode" id="mode-uniform" value="uniform" checked data-bs-toggle="tooltip" data-bs-placement="top" title="Ring을 Inner/Outer Radius 사이에서 균등한 간격으로 분할합니다.">
+                                        <label class="form-check-label small" for="mode-uniform">Uniform</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="ring-mode" id="mode-center" value="center-focus" data-bs-toggle="tooltip" data-bs-placement="top" title="Ring을 렌즈 중심부에 더 많은 비중을 두어 분할합니다. (중앙 강조)">
+                                        <label class="form-check-label small" for="mode-center">Center Focus</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Advanced Settings -->
+                            <div class="control-section border-0">
+                                <div class="accordion" id="accordionAdvanced">
+                                    <div class="accordion-item border-0">
+                                        <h2 class="accordion-header" id="headingAdvanced">
+                                            <button class="accordion-button collapsed py-2 px-0 shadow-none bg-transparent text-secondary fw-bold small" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvanced" aria-expanded="false" aria-controls="collapseAdvanced">
+                                                <i class="bi bi-gear-fill me-2"></i> ADVANCED SETTINGS
+                                            </button>
+                                        </h2>
+                                        <div id="collapseAdvanced" class="accordion-collapse collapse" aria-labelledby="headingAdvanced" data-bs-parent="#accordionAdvanced">
+                                            <div class="accordion-body px-0 pt-2 pb-0">
+                                                <!-- Normalization Toggle -->
+                                                <div class="form-check form-switch mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="check-normalize" checked data-bs-toggle="tooltip" data-bs-placement="top" title="이미지의 위치와 크기를 표준화하여 분석 일관성을 높입니다. (권장: 항상 켜기)">
+                                                    <label class="form-check-label small" for="check-normalize">Image Normalization</label>
+                                                </div>
+
+                                                <!-- QC Only Mode -->
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="check-qc-only" data-bs-toggle="tooltip" data-bs-placement="top" title="분석을 건너뛰고 촬영 상태(초점, 위치 등)만 빠르게 점검합니다.">
+                                                    <label class="form-check-label small" for="check-qc-only">QC Check Only (Skip Analysis)</label>
+                                                </div>
+
+                                                <!-- Illumination Correction -->
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" id="check-illumination" data-bs-toggle="tooltip" data-bs-placement="top" title="불균일한 조명으로 인한 밝기 편차를 보정합니다. (주의: 과도한 보정은 색상 왜곡 가능성)">
+                                                    <label class="form-check-label small text-warning" for="check-illumination">
+                                                        <i class="bi bi-lightbulb-fill"></i> Illumination Correction
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-primary w-100 fw-bold" id="btn-analyze" data-bs-toggle="tooltip" data-bs-placement="top" title="설정된 옵션으로 렌즈 이미지를 분석합니다.">
+                                <i class="bi bi-play-fill"></i> RUN ANALYSIS
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Results Panel -->
+                    <div class="card results-card shadow-sm flex-fill" style="min-height: 0;">
+                        <div class="card-header bg-white p-0 border-bottom-0 d-flex justify-content-between align-items-center pe-2">
+                            <ul class="nav nav-tabs card-header-tabs m-0 px-2 pt-2" role="tablist">
+                                <li class="nav-item">
+                                    <button class="nav-link active py-1" data-bs-toggle="tab" data-bs-target="#tab-summary" type="button">Summary</button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#tab-graphs" type="button">Graphs</button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#tab-heatmap" type="button">Heatmap</button>
+                                </li>
+                            </ul>
+                            <!-- Export Dropdown -->
+                            <div class="dropdown pt-1">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownExport" data-bs-toggle="dropdown" aria-expanded="false" disabled title="분석 결과를 다양한 형식으로 다운로드합니다.">
+                                    <i class="bi bi-download"></i> Export
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownExport">
+                                    <li><a class="dropdown-item" href="#" id="btn-download-json" data-bs-toggle="tooltip" data-bs-placement="top" title="분석 결과의 원본 JSON 데이터를 다운로드합니다."><i class="bi bi-filetype-json me-2"></i>Result JSON</a></li>
+                                    <li><a class="dropdown-item" href="#" id="btn-download-overlay" data-bs-toggle="tooltip" data-bs-placement="top" title="분석 정보가 오버레이된 이미지를 다운로드합니다."><i class="bi bi-card-image me-2"></i>Overlay Image</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="card-body p-0 overflow-hidden d-flex flex-column">
+                            <div class="tab-content flex-fill border-0 rounded-0">
+                                <!-- Tab 1: Summary Table -->
+                                <div class="tab-pane fade show active h-100" id="tab-summary" role="tabpanel">
+                                    <div class="d-flex flex-column h-100">
+                                        <!-- Uniformity Status Card -->
+                                        <div class="card mb-2 border-0 bg-light" id="uniformity-card" style="display:none;">
+                                            <div class="card-body py-2 px-3">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="small fw-bold text-secondary">UNIFORMITY</span>
+                                                    <span id="uniformity-badge" class="badge bg-secondary">Unknown</span>
+                                                </div>
+                                                <div class="progress" style="height: 4px;">
+                                                    <div id="uniformity-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                                </div>
+                                                <div class="d-flex justify-content-between mt-1" style="font-size: 0.7em;">
+                                                    <span class="text-muted">Max ΔE: <span id="uni-max-de">-</span></span>
+                                                    <span class="text-muted">Outliers: <span id="uni-outliers">-</span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="table-responsive flex-fill">
+                                            <table class="table table-sm table-hover small mb-0">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th>Zone</th>
+                                                        <th>Lab (Meas)</th>
+                                                        <th>Thr</th>
+                                                        <th>ΔE</th>
+                                                        <th>Res</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="summary-table-body">
+                                                    <!-- Dynamic Rows -->
+                                                    <tr><td colspan="5" class="text-center text-muted py-4">Run analysis to see results</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 2: Graphs -->
+                                <div class="tab-pane fade h-100" id="tab-graphs" role="tabpanel">
+                                    <div class="d-flex flex-column h-100 gap-2">
+                                        <div class="flex-fill border rounded p-1" style="min-height: 50%;">
+                                            <canvas id="profile-chart"></canvas>
+                                        </div>
+                                        <div class="flex-fill border rounded p-1">
+                                            <canvas id="delta-e-chart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 3: Heatmap -->
+                                <div class="tab-pane fade h-100" id="tab-heatmap" role="tabpanel">
+                                    <div class="d-flex flex-column h-100">
+                                        <div class="flex-fill position-relative d-flex align-items-center justify-content-center bg-light border rounded overflow-hidden">
+                                            <canvas id="heatmap-canvas"></canvas>
+                                            <div id="heatmap-placeholder" class="position-absolute text-center text-muted">
+                                                <i class="bi bi-grid-3x3 mb-2 fs-3 d-block"></i>
+                                                Run analysis to see<br>Sector Heatmap
+                                            </div>
+                                        </div>
+                                        <!-- Legend -->
+                                        <div class="mt-2 d-flex justify-content-center gap-3 small">
+                                            <div class="d-flex align-items-center gap-1"><span class="color-box" style="background:#10b981"></span> &lt;2.0</div>
+                                            <div class="d-flex align-items-center gap-1"><span class="color-box" style="background:#f59e0b"></span> 2-4</div>
+                                            <div class="d-flex align-items-center gap-1"><span class="color-box" style="background:#ef4444"></span> &gt;4.0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+
+    <!-- App Module -->
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

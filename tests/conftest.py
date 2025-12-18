@@ -19,4 +19,3 @@ def tmp_json(tmp_path: Path):
 def sample_image():
     # 100x100 RGB 검정 바탕
     return np.zeros((100, 100, 3), dtype=np.uint8)
-

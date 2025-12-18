@@ -13,11 +13,7 @@ from typing import List
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.sku_manager import (
-    SkuConfigManager,
-    SkuAlreadyExistsError,
-    InsufficientSamplesError
-)
+from src.sku_manager import InsufficientSamplesError, SkuAlreadyExistsError, SkuConfigManager
 
 
 def find_images(pattern: str) -> List[Path]:
@@ -78,48 +74,23 @@ Examples:
     --images "data/raw_images/OK_*.jpg" \\
     --description "Updated baseline" \\
     --force
-"""
+""",
     )
 
-    parser.add_argument(
-        "--sku",
-        required=True,
-        help="SKU code (e.g., SKU002)"
-    )
-    parser.add_argument(
-        "--images",
-        nargs="+",
-        required=True,
-        help="OK sample image paths or glob patterns"
-    )
-    parser.add_argument(
-        "--description",
-        default="",
-        help="SKU description"
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=3.5,
-        help="Default ΔE threshold (default: 3.5)"
-    )
+    parser.add_argument("--sku", required=True, help="SKU code (e.g., SKU002)")
+    parser.add_argument("--images", nargs="+", required=True, help="OK sample image paths or glob patterns")
+    parser.add_argument("--description", default="", help="SKU description")
+    parser.add_argument("--threshold", type=float, default=3.5, help="Default ΔE threshold (default: 3.5)")
     parser.add_argument(
         "--method",
         choices=["mean_plus_2std", "mean_plus_3std", "fixed"],
         default="mean_plus_2std",
-        help="Threshold calculation method (default: mean_plus_2std)"
+        help="Threshold calculation method (default: mean_plus_2std)",
     )
     parser.add_argument(
-        "--db-path",
-        type=Path,
-        default=Path("config/sku_db"),
-        help="SKU database directory (default: config/sku_db)"
+        "--db-path", type=Path, default=Path("config/sku_db"), help="SKU database directory (default: config/sku_db)"
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing SKU"
-    )
+    parser.add_argument("--force", action="store_true", help="Overwrite existing SKU")
 
     args = parser.parse_args()
 
@@ -183,7 +154,7 @@ Examples:
             ok_images=all_images,
             description=args.description or f"Auto-generated {args.sku}",
             default_threshold=args.threshold,
-            threshold_method=args.method
+            threshold_method=args.method,
         )
 
         print("✓ Baseline generated successfully!")
@@ -193,15 +164,15 @@ Examples:
         print(f"Samples processed: {sku_data['metadata']['baseline_samples']}")
         print()
         print("Zones:")
-        for zone_name, zone_config in sku_data['zones'].items():
+        for zone_name, zone_config in sku_data["zones"].items():
             print(f"  Zone {zone_name}:")
             print(f"    LAB: L={zone_config['L']:.1f}, a={zone_config['a']:.1f}, b={zone_config['b']:.1f}")
             print(f"    Threshold: {zone_config['threshold']:.1f}")
 
             # Show statistics if available
             stats_key = f"zone_{zone_name}"
-            if stats_key in sku_data['metadata'].get('statistics', {}):
-                stats = sku_data['metadata']['statistics'][stats_key]
+            if stats_key in sku_data["metadata"].get("statistics", {}):
+                stats = sku_data["metadata"]["statistics"][stats_key]
                 print(f"    Std dev: L±{stats['L_std']:.2f}, a±{stats['a_std']:.2f}, b±{stats['b_std']:.2f}")
 
         print()
@@ -215,6 +186,7 @@ Examples:
     except Exception as e:
         print(f"Error: Failed to generate baseline: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

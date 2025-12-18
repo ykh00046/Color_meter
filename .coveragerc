@@ -1,0 +1,55 @@
+# Coverage configuration for pytest-cov
+
+[run]
+source = src
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+    */site-packages/*
+    */dist-packages/*
+    # Web UI (optional - uncomment to exclude from coverage)
+    # */src/web/*
+    # GUI (optional)
+    # */src/gui/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+# Exclude lines from coverage
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code
+    def __repr__
+    def __str__
+
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+
+    # Don't complain about abstract methods
+    @abstract
+    @abstractmethod
+
+    # Don't complain about protocol methods
+    @protocol
+    ...
+
+[html]
+directory = htmlcov
+title = Contact Lens Inspection System - Code Coverage Report
+
+[json]
+output = coverage.json
+pretty_print = True

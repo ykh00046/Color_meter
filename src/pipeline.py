@@ -4,23 +4,24 @@ Inspection Pipeline Module
 5개 핵심 모듈을 연결하는 엔드투엔드 검사 파이프라인.
 """
 
-import logging
-from pathlib import Path
-from typing import Dict, Any, Optional, List
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from src.core.image_loader import ImageLoader, ImageConfig
-from src.core.lens_detector import LensDetector, DetectorConfig, LensDetectionError
-from src.core.radial_profiler import RadialProfiler, ProfilerConfig
-from src.core.zone_segmenter import ZoneSegmenter, SegmenterConfig, ZoneSegmentationError
-from src.core.color_evaluator import ColorEvaluator, InspectionResult, ColorEvaluationError
+from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator, InspectionResult
+from src.core.image_loader import ImageConfig, ImageLoader
+from src.core.lens_detector import DetectorConfig, LensDetectionError, LensDetector
+from src.core.radial_profiler import ProfilerConfig, RadialProfiler
+from src.core.zone_segmenter import SegmenterConfig, ZoneSegmentationError, ZoneSegmenter
 
 logger = logging.getLogger(__name__)
 
 
 class PipelineError(Exception):
     """파이프라인 실행 중 발생하는 예외"""
+
     pass
 
 
@@ -39,7 +40,7 @@ class InspectionPipeline:
         detector_config: Optional[DetectorConfig] = None,
         profiler_config: Optional[ProfilerConfig] = None,
         segmenter_config: Optional[SegmenterConfig] = None,
-        save_intermediates: bool = False
+        save_intermediates: bool = False,
     ):
         """
         파이프라인 초기화.
@@ -58,7 +59,14 @@ class InspectionPipeline:
         # 각 모듈 초기화
         self.image_loader = ImageLoader(image_config or ImageConfig())
         self.lens_detector = LensDetector(detector_config or DetectorConfig())
-        self.radial_profiler = RadialProfiler(profiler_config or ProfilerConfig())
+
+        # profiler 설정: SKU params.optical_clear_ratio -> r_start_ratio에 반영
+        profiler_cfg = profiler_config or ProfilerConfig()
+        optical_clear = sku_config.get("params", {}).get("optical_clear_ratio")
+        if isinstance(optical_clear, (int, float)) and 0 <= optical_clear < 1:
+            profiler_cfg.r_start_ratio = float(optical_clear)
+            logger.info(f"Applying optical_clear_ratio={optical_clear:.3f} to ProfilerConfig.r_start_ratio")
+        self.radial_profiler = RadialProfiler(profiler_cfg)
         seg_cfg = segmenter_config or SegmenterConfig()
         # Note: expected_zones는 process() 메서드에서 params.expected_zones로 읽어서 segment()에 전달
         self.zone_segmenter = ZoneSegmenter(seg_cfg)
@@ -66,12 +74,7 @@ class InspectionPipeline:
 
         logger.info("InspectionPipeline initialized")
 
-    def process(
-        self,
-        image_path: str,
-        sku: str,
-        save_dir: Optional[Path] = None
-    ) -> InspectionResult:
+    def process(self, image_path: str, sku: str, save_dir: Optional[Path] = None) -> InspectionResult:
         """
         단일 이미지 처리.
 
@@ -91,6 +94,11 @@ class InspectionPipeline:
 
         logger.info(f"Processing image: {image_path}, SKU: {sku}")
 
+        # PHASE7 Priority 5: 진단 정보 수집
+        diagnostics = []
+        warnings = []
+        suggestions = []
+
         try:
             # 1. 이미지 로드 및 전처리 (retry 로직 포함)
             logger.debug("Step 1: Loading and preprocessing image")
@@ -107,17 +115,19 @@ class InspectionPipeline:
                             logger.warning(f"Image load attempt {attempt+1}/{max_retries} returned None, retrying...")
                             continue
                         else:
-                            raise ValueError(f"Image loader returned None")
+                            raise ValueError("Image loader returned None")
 
                     processed_image = self.image_loader.preprocess(image)
 
                     # Preprocess 결과도 체크
                     if processed_image is None:
                         if attempt < max_retries - 1:
-                            logger.warning(f"Image preprocess attempt {attempt+1}/{max_retries} returned None, retrying...")
+                            logger.warning(
+                                f"Image preprocess attempt {attempt+1}/{max_retries} returned None, retrying..."
+                            )
                             continue
                         else:
-                            raise ValueError(f"Image preprocess returned None")
+                            raise ValueError("Image preprocess returned None")
 
                     break
 
@@ -146,8 +156,10 @@ class InspectionPipeline:
             lens_detection = self.lens_detector.detect(processed_image)
 
             if lens_detection is None:
-                import cv2
                 img_h, img_w = processed_image.shape[:2]
+                diagnostics.append("✗ Lens detection failed")
+                suggestions.append("→ Check if image contains a clear circular lens")
+                suggestions.append("→ Try adjusting detector parameters (min_radius, max_radius)")
                 raise PipelineError(
                     f"Lens detection failed\n"
                     f"  File: {image_path}\n"
@@ -156,38 +168,94 @@ class InspectionPipeline:
                     f"Try adjusting detector parameters (min_radius, max_radius) in config."
                 )
 
+            # 렌즈 검출 성공
+            diagnostics.append(
+                f"✓ Lens detected: center=({lens_detection.center_x:.1f}, {lens_detection.center_y:.1f}), "
+                f"radius={lens_detection.radius:.1f}, confidence={lens_detection.confidence:.2f}"
+            )
+
             if lens_detection.confidence < 0.5:
                 logger.warning(f"Low lens detection confidence: {lens_detection.confidence:.2f}")
+                warnings.append(f"⚠ Low lens detection confidence: {lens_detection.confidence:.2f}")
+                suggestions.append("→ Verify image quality or adjust detector parameters")
 
             # 3. 극좌표 변환 및 프로파일 추출
             logger.debug("Step 3: Extracting radial profile")
-            radial_profile = self.radial_profiler.extract_profile(
-                processed_image,
-                lens_detection
-            )
+            radial_profile = self.radial_profiler.extract_profile(processed_image, lens_detection)
 
-            # 4. Zone 분할
+            # 4. Zone 분할 (AI 피드백 반영: Ring과 동일한 좌표계 사용)
             logger.debug("Step 4: Segmenting zones")
-            
+
             # SKU 설정에서 기대 Zone 개수 힌트 추출
-            expected_zones = self.sku_config.get('params', {}).get('expected_zones')
+            expected_zones = self.sku_config.get("params", {}).get("expected_zones")
             if expected_zones:
                 logger.debug(f"Using expected_zones hint: {expected_zones}")
-            
-            zones = self.zone_segmenter.segment(radial_profile, expected_zones=expected_zones)
+
+            # 인쇄 영역 범위 추정 (SKU config 기반)
+            optical_clear_ratio = self.sku_config.get("params", {}).get("optical_clear_ratio", 0.15)
+            r_inner = max(0.0, optical_clear_ratio)  # 투명부 끝 = 인쇄 시작
+            r_outer = 0.95  # 인쇄 영역 끝 (렌즈 외곽 약간 제외)
+
+            # AI 피드백 반영: 반경 기준 명확히 출력
+            logger.info(
+                f"[ZONE COORD] Zone segmentation using PRINT AREA basis:\n"
+                f"  - r_inner={r_inner:.3f} (print start, from optical_clear_ratio={optical_clear_ratio:.3f})\n"
+                f"  - r_outer={r_outer:.3f} (print end)\n"
+                f"  - lens_radius={lens_detection.radius:.1f}px\n"
+                f"  - Normalization: r_norm = (r - {r_inner:.3f}) / ({r_outer:.3f} - {r_inner:.3f})"
+            )
+
+            zones = self.zone_segmenter.segment(
+                radial_profile, expected_zones=expected_zones, r_inner=r_inner, r_outer=r_outer
+            )
+
+            # 진단 정보: Zone 분할 성공
+            diagnostics.append(f"✓ Segmented into {len(zones)} zones: {[z.name for z in zones]}")
+
+            # 경고: expected_zones와 불일치
+            if expected_zones and len(zones) != expected_zones:
+                warnings.append(f"⚠ Expected {expected_zones} zones but got {len(zones)}")
+                suggestions.append("→ Adjust min_gradient or min_delta_e parameters")
+                suggestions.append(f"→ Or update expected_zones to {len(zones)} if this is correct")
+
+            # AI 피드백 반영: Zone별 실제 픽셀 반경 범위 출력
+            logger.info(f"[ZONE RESULT] Created {len(zones)} zones:")
+            for z in zones:
+                r_start_px = z.r_start * lens_detection.radius
+                r_end_px = z.r_end * lens_detection.radius
+
+                # AI 검증 요청: Zone이 Ring과 어느 정도 겹치는지 확인
+                ring_overlap = ""
+                if z.r_start >= 0.67:
+                    ring_overlap = "mainly Ring 2 (outer print)"
+                elif z.r_start >= 0.33:
+                    ring_overlap = "mainly Ring 1 (middle print)"
+                else:
+                    ring_overlap = "mainly Ring 0 (inner clear)"
+
+                logger.info(
+                    f"  Zone {z.name}: "
+                    f"r_norm=[{z.r_end:.3f}, {z.r_start:.3f}), "
+                    f"r_pixel=[{r_end_px:.1f}px, {r_start_px:.1f}px), "
+                    f"pixels={z.pixel_count}, "
+                    f"Lab=({z.mean_L:.1f}, {z.mean_a:.1f}, {z.mean_b:.1f}), "
+                    f"{ring_overlap}"
+                )
 
             # 5. 색상 평가 및 판정
             logger.debug("Step 5: Evaluating color quality")
-            inspection_result = self.color_evaluator.evaluate(
-                zones,
-                sku,
-                self.sku_config
-            )
+            inspection_result = self.color_evaluator.evaluate(zones, sku, self.sku_config)
 
             # 시각화를 위한 데이터 추가
             inspection_result.lens_detection = lens_detection
             inspection_result.zones = zones
             inspection_result.image = image  # 원본 이미지 (전처리 전)
+            inspection_result.radial_profile = radial_profile
+
+            # PHASE7 Priority 5: 진단 정보, 경고, 제안 추가
+            inspection_result.diagnostics = diagnostics if diagnostics else None
+            inspection_result.warnings = warnings if warnings else None
+            inspection_result.suggestions = suggestions if suggestions else None
 
             # 처리 시간 계산
             processing_time = (datetime.now() - start_time).total_seconds() * 1000  # ms
@@ -195,7 +263,8 @@ class InspectionPipeline:
             logger.info(
                 f"Processing complete: {inspection_result.judgment}, "
                 f"ΔE={inspection_result.overall_delta_e:.2f}, "
-                f"time={processing_time:.1f}ms"
+                f"time={processing_time:.1f}ms, "
+                f"diagnostics={len(diagnostics)}, warnings={len(warnings)}, suggestions={len(suggestions)}"
             )
 
             # 중간 결과 저장 (옵션)
@@ -204,13 +273,13 @@ class InspectionPipeline:
                     save_dir,
                     image_path.stem,
                     {
-                        'processed_image': processed_image,
-                        'lens_detection': lens_detection,
-                        'radial_profile': radial_profile,
-                        'zones': zones,
-                        'inspection_result': inspection_result,
-                        'processing_time_ms': processing_time
-                    }
+                        "processed_image": processed_image,
+                        "lens_detection": lens_detection,
+                        "radial_profile": radial_profile,
+                        "zones": zones,
+                        "inspection_result": inspection_result,
+                        "processing_time_ms": processing_time,
+                    },
                 )
 
             return inspection_result
@@ -230,15 +299,25 @@ class InspectionPipeline:
             if expected_zones is None:
                 logger.info("Attempting recovery with default 3-zone segmentation")
                 try:
-                    zones = self.zone_segmenter.segment(radial_profile, expected_zones=3)
+                    # Recovery에도 r_inner, r_outer 적용
+                    optical_clear_ratio = self.sku_config.get("params", {}).get("optical_clear_ratio", 0.15)
+                    r_inner = max(0.0, optical_clear_ratio)
+                    r_outer = 0.95
+                    zones = self.zone_segmenter.segment(
+                        radial_profile, expected_zones=3, r_inner=r_inner, r_outer=r_outer
+                    )
                     logger.info(f"Recovery successful: segmented into {len(zones)} zones")
                     # 처리 계속 진행
                     inspection_result = self.color_evaluator.evaluate(zones, sku, self.sku_config)
                     inspection_result.lens_detection = lens_detection
                     inspection_result.zones = zones
                     inspection_result.image = image
+                    inspection_result.radial_profile = radial_profile
                     processing_time = (datetime.now() - start_time).total_seconds() * 1000
-                    logger.info(f"Processing complete (with recovery): {inspection_result.judgment}, time={processing_time:.1f}ms")
+                    logger.info(
+                        f"Processing complete (with recovery): {inspection_result.judgment}, "
+                        f"time={processing_time:.1f}ms"
+                    )
                     return inspection_result
                 except Exception as recovery_error:
                     logger.error(f"Recovery failed: {recovery_error}")
@@ -276,7 +355,7 @@ class InspectionPipeline:
         output_csv: Optional[Path] = None,
         continue_on_error: bool = True,
         parallel: bool = False,
-        max_workers: int = 4
+        max_workers: int = 4,
     ) -> List[InspectionResult]:
         """
         배치 처리 (옵션으로 병렬 처리 지원).
@@ -299,15 +378,12 @@ class InspectionPipeline:
 
         if parallel and len(image_paths) > 1:
             # Parallel processing using ThreadPoolExecutor
-            from concurrent.futures import ThreadPoolExecutor, as_completed
             import gc
+            from concurrent.futures import ThreadPoolExecutor, as_completed
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks
-                future_to_path = {
-                    executor.submit(self.process, path, sku): path
-                    for path in image_paths
-                }
+                future_to_path = {executor.submit(self.process, path, sku): path for path in image_paths}
 
                 # Collect results as they complete
                 for i, future in enumerate(as_completed(future_to_path)):
@@ -345,9 +421,12 @@ class InspectionPipeline:
                     if not continue_on_error:
                         raise
 
-        logger.info(
-            f"Batch processing complete: {len(results)} succeeded, {len(errors)} failed"
-        )
+        logger.info(f"Batch processing complete: {len(results)} succeeded, {len(errors)} failed")
+
+        if errors:
+            logger.error(f"Failed images ({len(errors)}):")
+            for path, err in errors:
+                logger.error(f"  - {path}: {err}")
 
         # CSV 저장 (옵션)
         if output_csv and results:
@@ -355,12 +434,7 @@ class InspectionPipeline:
 
         return results
 
-    def _save_intermediates(
-        self,
-        save_dir: Path,
-        image_name: str,
-        intermediates: Dict[str, Any]
-    ):
+    def _save_intermediates(self, save_dir: Path, image_name: str, intermediates: Dict[str, Any]):
         """
         중간 결과 저장.
 
@@ -370,64 +444,55 @@ class InspectionPipeline:
             intermediates: 중간 결과 딕셔너리
         """
         import cv2
-        import numpy as np
 
         output_dir = Path(save_dir) / image_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # 처리된 이미지 저장
-        if 'processed_image' in intermediates:
-            cv2.imwrite(
-                str(output_dir / '02_preprocessed.jpg'),
-                intermediates['processed_image']
-            )
+        if "processed_image" in intermediates:
+            cv2.imwrite(str(output_dir / "02_preprocessed.jpg"), intermediates["processed_image"])
 
         # 렌즈 검출 결과 저장
-        if 'lens_detection' in intermediates and 'processed_image' in intermediates:
-            img_with_circle = intermediates['processed_image'].copy()
-            detection = intermediates['lens_detection']
+        if "lens_detection" in intermediates and "processed_image" in intermediates:
+            img_with_circle = intermediates["processed_image"].copy()
+            detection = intermediates["lens_detection"]
             cv2.circle(
                 img_with_circle,
                 (int(detection.center_x), int(detection.center_y)),
                 int(detection.radius),
                 (0, 255, 0),
-                2
+                2,
             )
-            cv2.circle(
-                img_with_circle,
-                (int(detection.center_x), int(detection.center_y)),
-                3,
-                (0, 0, 255),
-                -1
-            )
-            cv2.imwrite(
-                str(output_dir / '03_lens_detection.jpg'),
-                img_with_circle
-            )
+            cv2.circle(img_with_circle, (int(detection.center_x), int(detection.center_y)), 3, (0, 0, 255), -1)
+            cv2.imwrite(str(output_dir / "03_lens_detection.jpg"), img_with_circle)
 
         # 메타데이터 저장
         metadata = {
-            'lens_detection': {
-                'center_x': float(intermediates['lens_detection'].center_x),
-                'center_y': float(intermediates['lens_detection'].center_y),
-                'radius': float(intermediates['lens_detection'].radius),
-                'confidence': float(intermediates['lens_detection'].confidence),
-                'method': intermediates['lens_detection'].method
-            } if 'lens_detection' in intermediates else None,
-            'zones': [
+            "lens_detection": (
                 {
-                    'name': z.name,
-                    'r_start': float(z.r_start),
-                    'r_end': float(z.r_end),
-                    'mean_lab': [float(z.mean_L), float(z.mean_a), float(z.mean_b)],
-                    'zone_type': z.zone_type
+                    "center_x": float(intermediates["lens_detection"].center_x),
+                    "center_y": float(intermediates["lens_detection"].center_y),
+                    "radius": float(intermediates["lens_detection"].radius),
+                    "confidence": float(intermediates["lens_detection"].confidence),
+                    "method": intermediates["lens_detection"].method,
                 }
-                for z in intermediates.get('zones', [])
+                if "lens_detection" in intermediates
+                else None
+            ),
+            "zones": [
+                {
+                    "name": z.name,
+                    "r_start": float(z.r_start),
+                    "r_end": float(z.r_end),
+                    "mean_lab": [float(z.mean_L), float(z.mean_a), float(z.mean_b)],
+                    "zone_type": z.zone_type,
+                }
+                for z in intermediates.get("zones", [])
             ],
-            'processing_time_ms': intermediates.get('processing_time_ms')
+            "processing_time_ms": intermediates.get("processing_time_ms"),
         }
 
-        with open(output_dir / 'metadata.json', 'w') as f:
+        with open(output_dir / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
         logger.debug(f"Intermediates saved to {output_dir}")
@@ -444,28 +509,23 @@ class InspectionPipeline:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
             # 헤더
-            writer.writerow([
-                'sku',
-                'timestamp',
-                'judgment',
-                'overall_delta_e',
-                'confidence',
-                'ng_reasons'
-            ])
+            writer.writerow(["sku", "timestamp", "judgment", "overall_delta_e", "confidence", "ng_reasons"])
 
             # 데이터
             for result in results:
-                writer.writerow([
-                    result.sku,
-                    result.timestamp.isoformat(),
-                    result.judgment,
-                    f"{result.overall_delta_e:.2f}",
-                    f"{result.confidence:.2f}",
-                    '; '.join(result.ng_reasons) if result.ng_reasons else ''
-                ])
+                writer.writerow(
+                    [
+                        result.sku,
+                        result.timestamp.isoformat(),
+                        result.judgment,
+                        f"{result.overall_delta_e:.2f}",
+                        f"{result.confidence:.2f}",
+                        "; ".join(result.ng_reasons) if result.ng_reasons else "",
+                    ]
+                )
 
         logger.info(f"Results saved to {output_path}")

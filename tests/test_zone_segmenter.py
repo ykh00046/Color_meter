@@ -2,11 +2,11 @@
 Unit tests for ZoneSegmenter (adaptive + expected_zones fallback).
 """
 
-import pytest
 import numpy as np
+import pytest
 
-from src.core.zone_segmenter import ZoneSegmenter, SegmenterConfig, Zone
 from src.core.radial_profiler import RadialProfile
+from src.core.zone_segmenter import SegmenterConfig, Zone, ZoneSegmenter
 
 
 def make_profile(a_values):

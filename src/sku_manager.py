@@ -5,41 +5,46 @@ Manages SKU configurations including CRUD operations and automatic baseline gene
 """
 
 import re
-import json
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 
+from src.core.image_loader import ImageConfig, ImageLoader
+from src.core.lens_detector import DetectorConfig, LensDetector
+from src.core.radial_profiler import ProfilerConfig, RadialProfiler
+from src.core.zone_segmenter import SegmenterConfig, ZoneSegmenter
 from src.utils.file_io import read_json, write_json
-from src.core.image_loader import ImageLoader, ImageConfig
-from src.core.lens_detector import LensDetector, DetectorConfig
-from src.core.radial_profiler import RadialProfiler, ProfilerConfig
-from src.core.zone_segmenter import ZoneSegmenter, SegmenterConfig
 
 
 class SkuManagerError(Exception):
     """Base exception for SKU manager errors"""
+
     pass
 
 
 class SkuNotFoundError(SkuManagerError):
     """SKU not found in database"""
+
     pass
 
 
 class SkuAlreadyExistsError(SkuManagerError):
     """SKU already exists"""
+
     pass
 
 
 class InvalidSkuDataError(SkuManagerError):
     """Invalid SKU data or schema validation failed"""
+
     pass
 
 
 class InsufficientSamplesError(SkuManagerError):
     """Insufficient samples for baseline generation"""
+
     pass
 
 
@@ -67,7 +72,7 @@ class SkuConfigManager:
         description: str,
         default_threshold: float = 3.5,
         zones: Optional[Dict[str, Dict[str, float]]] = None,
-        author: str = "user"
+        author: str = "user",
     ) -> Dict[str, Any]:
         """
         Create new SKU configuration
@@ -88,8 +93,10 @@ class SkuConfigManager:
             InvalidSkuDataError: If SKU code is invalid
         """
         # Validate SKU code format
-        if not re.match(r'^SKU[0-9]+$', sku_code):
-            raise InvalidSkuDataError(f"Invalid SKU code format: {sku_code}. Must be SKU[0-9]+")
+        if not re.match(r"^SKU[A-Z0-9_]+$", sku_code):
+            raise InvalidSkuDataError(
+                f"Invalid SKU code format: {sku_code}. Must start with 'SKU' and contain A-Z/0-9/_"
+            )
 
         # Check if already exists
         sku_path = self._get_sku_path(sku_code)
@@ -108,8 +115,8 @@ class SkuConfigManager:
                 "last_updated": now,
                 "baseline_samples": 0,
                 "calibration_method": "manual",
-                "author": author
-            }
+                "author": author,
+            },
         }
 
         # Validate and save
@@ -137,11 +144,7 @@ class SkuConfigManager:
 
         return self._load_sku(sku_code)
 
-    def update_sku(
-        self,
-        sku_code: str,
-        updates: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def update_sku(self, sku_code: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         Update SKU configuration
 
@@ -219,7 +222,7 @@ class SkuConfigManager:
                     "description": sku_data.get("description", ""),
                     "zones_count": len(sku_data.get("zones", {})),
                     "created_at": sku_data.get("metadata", {}).get("created_at", ""),
-                    "baseline_samples": sku_data.get("metadata", {}).get("baseline_samples", 0)
+                    "baseline_samples": sku_data.get("metadata", {}).get("baseline_samples", 0),
                 }
                 skus.append(summary)
             except Exception:
@@ -238,7 +241,7 @@ class SkuConfigManager:
         image_config: Optional[ImageConfig] = None,
         detector_config: Optional[DetectorConfig] = None,
         profiler_config: Optional[ProfilerConfig] = None,
-        segmenter_config: Optional[SegmenterConfig] = None
+        segmenter_config: Optional[SegmenterConfig] = None,
     ) -> Dict[str, Any]:
         """
         Generate baseline from OK sample images
@@ -266,9 +269,7 @@ class SkuConfigManager:
         """
         # Validate sample count
         if len(ok_images) < 3:
-            raise InsufficientSamplesError(
-                f"Minimum 3 samples required, got {len(ok_images)}"
-            )
+            raise InsufficientSamplesError(f"Minimum 3 samples required, got {len(ok_images)}")
 
         # Initialize pipeline components
         image_loader = ImageLoader(image_config or ImageConfig())
@@ -279,6 +280,7 @@ class SkuConfigManager:
         # Process each image and collect zone data
         zone_data: Dict[str, List[Tuple[float, float, float]]] = {}
         successful_samples = 0
+        expected_zone_names = None  # Enforce consistent zone structure
 
         for i, image_path in enumerate(ok_images):
             try:
@@ -288,6 +290,20 @@ class SkuConfigManager:
                 detection = lens_detector.detect(processed)
                 profile = radial_profiler.extract_profile(processed, detection)
                 zones = zone_segmenter.segment(profile)
+
+                # Validate zone consistency (critical for accurate baseline)
+                current_zone_names = set(zone.name for zone in zones)
+                if expected_zone_names is None:
+                    # First successful sample defines expected structure
+                    expected_zone_names = current_zone_names
+                    print(f"Baseline zone structure: {sorted(expected_zone_names)}")
+                elif current_zone_names != expected_zone_names:
+                    # Zone structure mismatch - skip this sample
+                    print(f"Warning: Zone structure mismatch in {image_path}")
+                    print(f"  Expected: {sorted(expected_zone_names)}")
+                    print(f"  Got: {sorted(current_zone_names)}")
+                    print("  Skipping sample to ensure baseline consistency")
+                    continue
 
                 # Collect zone LAB values
                 for zone in zones:
@@ -341,14 +357,14 @@ class SkuConfigManager:
                 "a": round(mean_a, 1),
                 "b": round(mean_b, 1),
                 "threshold": round(threshold, 1),
-                "description": f"Zone {zone_name} (auto-generated)"
+                "description": f"Zone {zone_name} (auto-generated)",
             }
 
             statistics[f"zone_{zone_name}"] = {
                 "L_std": round(std_L, 2),
                 "a_std": round(std_a, 2),
                 "b_std": round(std_b, 2),
-                "samples": len(lab_values)
+                "samples": len(lab_values),
             }
 
         # Create SKU data
@@ -366,8 +382,8 @@ class SkuConfigManager:
                 "threshold_method": threshold_method,
                 "author": "system",
                 "statistics": statistics,
-                "notes": f"Generated from {successful_samples} OK samples"
-            }
+                "notes": f"Generated from {successful_samples} OK samples",
+            },
         }
 
         # Validate and save
@@ -396,7 +412,7 @@ class SkuConfigManager:
                 raise InvalidSkuDataError(f"Missing required field: {field}")
 
         # Validate SKU code format
-        if not re.match(r'^SKU[0-9]+$', sku_data["sku_code"]):
+        if not re.match(r"^SKU[A-Z0-9_]+$", sku_data["sku_code"]):
             raise InvalidSkuDataError(f"Invalid SKU code: {sku_data['sku_code']}")
 
         # Validate zones
@@ -405,7 +421,7 @@ class SkuConfigManager:
 
         for zone_name, zone_config in sku_data["zones"].items():
             # Check zone name format (single uppercase letter)
-            if not re.match(r'^[A-Z]$', zone_name):
+            if not re.match(r"^[A-Z]$", zone_name):
                 raise InvalidSkuDataError(f"Invalid zone name: {zone_name}. Must be A-Z")
 
             # Check required zone fields
@@ -431,9 +447,7 @@ class SkuConfigManager:
                 raise InvalidSkuDataError(f"Missing metadata field: {field}")
 
         if sku_data["metadata"]["calibration_method"] not in ["manual", "auto_generated"]:
-            raise InvalidSkuDataError(
-                f"Invalid calibration_method: {sku_data['metadata']['calibration_method']}"
-            )
+            raise InvalidSkuDataError(f"Invalid calibration_method: {sku_data['metadata']['calibration_method']}")
 
         return True
 
@@ -478,16 +492,10 @@ class SkuConfigManager:
         Raises:
             ValueError: If SKU code is invalid or path traversal detected
         """
-        # Validate SKU code format
-        if not re.match(r'^SKU[0-9]+$', sku_code):
-            raise ValueError(f"Invalid SKU code: {sku_code}")
+        from src.utils.security import SecurityError, safe_sku_path
 
-        sku_path = self.db_path / f"{sku_code}.json"
-
-        # Prevent path traversal
+        # Use centralized security validation
         try:
-            sku_path.resolve().relative_to(self.db_path.resolve())
-        except ValueError:
-            raise ValueError(f"Invalid SKU path (path traversal detected): {sku_path}")
-
-        return sku_path
+            return safe_sku_path(sku_code, self.db_path)
+        except SecurityError as e:
+            raise ValueError(str(e))

@@ -17,7 +17,7 @@ def test_resize_keep_aspect(sample_image):
     resized = image_utils.resize_keep_aspect(big, max_width=300, max_height=300)
     # Width should be scaled to 300, height scaled proportionally to 120
     assert resized.shape[1] == 300  # width
-    assert resized.shape[0] < 300   # height (should be 120)
+    assert resized.shape[0] < 300  # height (should be 120)
 
 
 def test_draw_circle(sample_image):
@@ -33,4 +33,3 @@ def test_validate_raises_on_wrong_type():
         pass
     else:
         raise AssertionError("ImageValidationError expected")
-

@@ -6,6 +6,97 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Major] - 2025-12-17 - STD-Based QC System: Technical Enhancements & Database Models
+
+### Added
+- **Technical Enhancement Specification** (`docs/planning/TECHNICAL_ENHANCEMENTS_ADVANCED.md`):
+  - 7 advanced technical enhancements for STD-based QC system (15,000+ words)
+  - STD Statistical Model (multiple samples → mean ± σ)
+  - Elastic Alignment (anchor zone + DTW)
+  - Worst-Case Color Metrics (percentile ΔE, hotspot detection)
+  - Ink-Aware Comparison (dual scoring: zone + ink)
+  - Explainability Layer (Top 3 failure reasons)
+  - Performance & Stability (caching, fail-safe)
+  - Phenomenological Classification (defect taxonomy)
+
+- **Algorithm Benchmark Script** (`tools/benchmark_alignment.py`):
+  - Performance comparison: Cross-Correlation vs Circular Shift vs DTW
+  - 100 synthetic profiles, 500 points each
+  - Results: Cross-Correlation 0.09ms avg (12,000x faster than 1s target)
+  - Auto-generated charts and JSON reports
+
+- **Database Models** (`src/models/`):
+  - SQLAlchemy ORM models for STD-based QC system
+  - 7 tables: std_models, std_samples, std_statistics, test_samples, comparison_results, users, audit_logs
+  - Full RBAC support (Admin, Engineer, Inspector, Viewer)
+  - Comprehensive audit logging for compliance
+  - JSON minimized, searchable fields separated
+  - 15+ indexes for query performance
+
+- **Database Configuration** (`src/models/database.py`):
+  - Shared SQLAlchemy Base
+  - Session management (get_session, get_db)
+  - init_database(), create_tables(), drop_tables()
+
+- **Database Validation** (`tools/test_db_models.py`):
+  - 12 test cases validating all models
+  - Relationship testing (cascade, lazy loading)
+  - Query testing (filters, joins)
+  - to_dict() serialization testing
+
+### Changed
+- **Web Dashboard** (`src/web/templates/index.html`):
+  - Swapped Zone-Based and Image-Based sections
+  - Zone-Based now prominent (top, green border, "권장" badge)
+  - Image-Based collapsed below (click to expand)
+
+- **Documentation Index** (`docs/INDEX.md`):
+  - Added TECHNICAL_ENHANCEMENTS_ADVANCED.md to Key Planning Documents
+  - Updated with high-priority star icon (⭐)
+
+- **Requirements** (`requirements.txt`):
+  - Added dtaidistance>=2.3.0 as optional dependency (for DTW benchmarking)
+
+### Performance
+- ✅ Cross-Correlation: 0.09 ms avg, 0.12 ms p99, 98.9% correlation
+- ✅ Circular Shift: 3.25 ms avg, 4.44 ms p99, 99.1% correlation
+- ✅ Both algorithms far exceed targets (avg < 1s, p99 < 3s)
+
+### Documentation
+- Created `docs/planning/TECHNICAL_ENHANCEMENTS_ADVANCED.md` (15,000 words)
+- Created `docs/daily_reports/2025-12-17_COMPLETION_REPORT.md` (comprehensive summary)
+- Updated `docs/INDEX.md` with new planning document
+- Benchmark results: `results/alignment_benchmark.json`, `results/alignment_benchmark.png`
+
+### Technical Debt
+- TODO: Install Alembic for database migrations
+- TODO: Implement STD statistical model aggregation service
+- TODO: Create batch STD upload API
+- TODO: Implement elastic alignment algorithm
+
+---
+
+## [Patch] - 2025-12-12 - UI Overhaul & Web Integration
+
+### Added
+- New Web UI dashboard based on Bootstrap 5.3 for a professional analysis experience.
+- Interactive Image Viewer with Panzoom for zoom/pan functionality.
+- Real-time Grid Overlay (Rings, Sectors) updated by UI sliders.
+- Dynamic Result Display with Summary Table and Chart.js integration (Radial Profile, Delta E).
+- Modular JavaScript for UI components (viewer.js, controls.js, charts.js, main.js).
+- Dedicated CSS for modern styling (main.css).
+- Analysis Service Layer (`src/services/analysis_service.py`) for centralized profile analysis.
+
+### Fixed
+- `/inspect` API response updated to include `zone_results` for UI rendering.
+- `charts.js` data mapping corrected to match `ProfileAnalysisResult` structure.
+
+### Changed
+- `src/web/app.py` refactored to use `AnalysisService`.
+- `docs/guides/WEB_UI_GUIDE.md` completely rewritten to reflect the new UI.
+
+---
+
 ## [Patch] - 2025-12-11 - 시스템 개선 및 품질 향상
 
 ### Fixed

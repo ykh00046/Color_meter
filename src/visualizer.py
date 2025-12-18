@@ -7,13 +7,13 @@ delta-E heatmap, comparison charts, and batch processing dashboard.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Union, Optional, Any
-import numpy as np
+from typing import Any, List, Optional, Tuple, Union
+
 import cv2
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.backends.backend_agg import FigureCanvasAgg
+import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 
 @dataclass
@@ -53,6 +53,7 @@ class VisualizerConfig:
 
 class VisualizationError(Exception):
     """Base exception for visualization errors"""
+
     pass
 
 
@@ -79,7 +80,7 @@ class InspectionVisualizer:
         lens_detection: Any,  # LensDetection
         zones: List[Any],  # List[Zone]
         inspection_result: Any,  # InspectionResult
-        show_result: bool = True
+        show_result: bool = True,
     ) -> np.ndarray:
         """
         Visualize zone overlay on image
@@ -105,20 +106,13 @@ class InspectionVisualizer:
                 int(lens_detection.radius),
                 (128, 128, 128),  # Gray
                 1,
-                cv2.LINE_AA
+                cv2.LINE_AA,
             )
 
         # Draw center mark
         if self.config.show_center_mark:
             center = (int(lens_detection.center_x), int(lens_detection.center_y))
-            cv2.drawMarker(
-                overlay,
-                center,
-                (0, 0, 255),  # Red
-                cv2.MARKER_CROSS,
-                10,
-                2
-            )
+            cv2.drawMarker(overlay, center, (0, 0, 255), cv2.MARKER_CROSS, 10, 2)  # Red
 
         # Draw zones
         for zone, zone_result in zip(zones, inspection_result.zone_results):
@@ -130,13 +124,7 @@ class InspectionVisualizer:
 
             # Draw zone label
             if self.config.show_zone_labels:
-                self._draw_zone_label(
-                    overlay,
-                    lens_detection,
-                    zone,
-                    zone_result,
-                    color
-                )
+                self._draw_zone_label(overlay, lens_detection, zone, zone_result, color)
 
         # Draw overall judgment
         if show_result:
@@ -145,12 +133,7 @@ class InspectionVisualizer:
         return overlay
 
     def _draw_zone_boundary(
-        self,
-        image: np.ndarray,
-        lens_detection: Any,
-        zone: Any,
-        color: Tuple[int, int, int],
-        thickness: int
+        self, image: np.ndarray, lens_detection: Any, zone: Any, color: Tuple[int, int, int], thickness: int
     ):
         """Draw zone boundary on image"""
         center_x = int(lens_detection.center_x)
@@ -167,12 +150,7 @@ class InspectionVisualizer:
         cv2.circle(image, (center_x, center_y), r_outer, color, thickness, cv2.LINE_AA)
 
     def _draw_zone_label(
-        self,
-        image: np.ndarray,
-        lens_detection: Any,
-        zone: Any,
-        zone_result: Any,
-        color: Tuple[int, int, int]
+        self, image: np.ndarray, lens_detection: Any, zone: Any, zone_result: Any, color: Tuple[int, int, int]
     ):
         """Draw zone label on image"""
         center_x = int(lens_detection.center_x)
@@ -191,20 +169,13 @@ class InspectionVisualizer:
         # Text size
         font = cv2.FONT_HERSHEY_SIMPLEX
         (text_w, text_h), baseline = cv2.getTextSize(
-            label_text,
-            font,
-            self.config.zone_label_font_scale,
-            self.config.zone_label_thickness
+            label_text, font, self.config.zone_label_font_scale, self.config.zone_label_thickness
         )
 
         # Draw background rectangle
         bg_color = (255, 255, 255) if zone_result.is_ok else (200, 200, 255)
         cv2.rectangle(
-            image,
-            (label_x - 5, label_y - text_h - 5),
-            (label_x + text_w + 5, label_y + baseline + 5),
-            bg_color,
-            -1
+            image, (label_x - 5, label_y - text_h - 5), (label_x + text_w + 5, label_y + baseline + 5), bg_color, -1
         )
 
         # Draw text
@@ -217,7 +188,7 @@ class InspectionVisualizer:
             self.config.zone_label_font_scale,
             text_color,
             self.config.zone_label_thickness,
-            cv2.LINE_AA
+            cv2.LINE_AA,
         )
 
     def _draw_judgment_banner(self, image: np.ndarray, inspection_result: Any):
@@ -237,31 +208,14 @@ class InspectionVisualizer:
 
         # Background
         bg_color = (0, 200, 0) if judgment == "OK" else (0, 0, 200)  # Green or Red
-        cv2.rectangle(
-            image,
-            (10, 10),
-            (30 + text_w, 30 + text_h),
-            bg_color,
-            -1
-        )
+        cv2.rectangle(image, (10, 10), (30 + text_w, 30 + text_h), bg_color, -1)
 
         # Text
         cv2.putText(
-            image,
-            banner_text,
-            (20, 20 + text_h),
-            font,
-            font_scale,
-            (255, 255, 255),  # White
-            thickness,
-            cv2.LINE_AA
+            image, banner_text, (20, 20 + text_h), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA  # White
         )
 
-    def visualize_comparison(
-        self,
-        zones: List[Any],
-        inspection_result: Any
-    ) -> plt.Figure:
+    def visualize_comparison(self, zones: List[Any], inspection_result: Any) -> plt.Figure:
         """
         Visualize comparison chart (measured vs target LAB, delta-E vs threshold)
 
@@ -272,11 +226,7 @@ class InspectionVisualizer:
         Returns:
             matplotlib Figure
         """
-        fig, axes = plt.subplots(
-            1, 2,
-            figsize=self.config.comparison_figure_size,
-            dpi=self.config.comparison_dpi
-        )
+        fig, axes = plt.subplots(1, 2, figsize=self.config.comparison_figure_size, dpi=self.config.comparison_dpi)
 
         # Extract data
         zone_names = [zr.zone_name for zr in inspection_result.zone_results]
@@ -294,60 +244,50 @@ class InspectionVisualizer:
         x = np.arange(len(zone_names))
         width = 0.15
 
-        ax.bar(x - width*2, measured_L, width, label='Measured L*', color='steelblue', alpha=0.8)
-        ax.bar(x - width, target_L, width, label='Target L*', color='lightblue', alpha=0.6)
-        ax.bar(x, measured_a, width, label='Measured a*', color='indianred', alpha=0.8)
-        ax.bar(x + width, target_a, width, label='Target a*', color='lightcoral', alpha=0.6)
-        ax.bar(x + width*2, measured_b, width, label='Measured b*', color='gold', alpha=0.8)
-        ax.bar(x + width*3, target_b, width, label='Target b*', color='khaki', alpha=0.6)
+        ax.bar(x - width * 2, measured_L, width, label="Measured L*", color="steelblue", alpha=0.8)
+        ax.bar(x - width, target_L, width, label="Target L*", color="lightblue", alpha=0.6)
+        ax.bar(x, measured_a, width, label="Measured a*", color="indianred", alpha=0.8)
+        ax.bar(x + width, target_a, width, label="Target a*", color="lightcoral", alpha=0.6)
+        ax.bar(x + width * 2, measured_b, width, label="Measured b*", color="gold", alpha=0.8)
+        ax.bar(x + width * 3, target_b, width, label="Target b*", color="khaki", alpha=0.6)
 
-        ax.set_xlabel('Zone')
-        ax.set_ylabel('LAB Value')
-        ax.set_title('Measured vs Target LAB Values')
+        ax.set_xlabel("Zone")
+        ax.set_ylabel("LAB Value")
+        ax.set_title("Measured vs Target LAB Values")
         ax.set_xticks(x)
         ax.set_xticklabels(zone_names)
-        ax.legend(loc='upper right', fontsize=8)
-        ax.grid(True, axis='y', alpha=0.3)
+        ax.legend(loc="upper right", fontsize=8)
+        ax.grid(True, axis="y", alpha=0.3)
 
         # Plot 2: Delta-E vs Threshold
         ax = axes[1]
-        ax.plot(zone_names, delta_es, 'o-', label='Measured ΔE', color='steelblue', linewidth=2, markersize=8)
-        ax.plot(zone_names, thresholds, '--', label='Threshold', color='red', linewidth=2)
+        ax.plot(zone_names, delta_es, "o-", label="Measured ΔE", color="steelblue", linewidth=2, markersize=8)
+        ax.plot(zone_names, thresholds, "--", label="Threshold", color="red", linewidth=2)
 
         # Fill pass/fail zones
         if self.config.show_pass_fail_zones:
-            ax.fill_between(
-                range(len(zone_names)),
-                0,
-                thresholds,
-                alpha=0.2,
-                color='green',
-                label='Pass Zone'
-            )
+            ax.fill_between(range(len(zone_names)), 0, thresholds, alpha=0.2, color="green", label="Pass Zone")
             ax.fill_between(
                 range(len(zone_names)),
                 thresholds,
                 [max(delta_es) * 1.2] * len(zone_names),
                 alpha=0.2,
-                color='red',
-                label='Fail Zone'
+                color="red",
+                label="Fail Zone",
             )
 
-        ax.set_xlabel('Zone')
-        ax.set_ylabel('ΔE')
-        ax.set_title('ΔE vs Threshold')
+        ax.set_xlabel("Zone")
+        ax.set_ylabel("ΔE")
+        ax.set_title("ΔE vs Threshold")
         ax.set_xticks(range(len(zone_names)))
         ax.set_xticklabels(zone_names)
-        ax.legend(loc='upper left')
+        ax.legend(loc="upper left")
         ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
         return fig
 
-    def visualize_dashboard(
-        self,
-        results: List[Any]  # List[InspectionResult]
-    ) -> plt.Figure:
+    def visualize_dashboard(self, results: List[Any]) -> plt.Figure:  # List[InspectionResult]
         """
         Visualize batch processing dashboard
 
@@ -357,11 +297,7 @@ class InspectionVisualizer:
         Returns:
             matplotlib Figure
         """
-        fig, axes = plt.subplots(
-            2, 2,
-            figsize=self.config.dashboard_figure_size,
-            dpi=self.config.dashboard_dpi
-        )
+        fig, axes = plt.subplots(2, 2, figsize=self.config.dashboard_figure_size, dpi=self.config.dashboard_dpi)
 
         # Extract data
         judgments = [r.judgment for r in results]
@@ -371,23 +307,17 @@ class InspectionVisualizer:
         # Plot 1: Judgment distribution (pie chart)
         ax = axes[0, 0]
         judgment_counts = pd.Series(judgments).value_counts()
-        colors = ['green' if j == 'OK' else 'red' for j in judgment_counts.index]
-        ax.pie(
-            judgment_counts.values,
-            labels=judgment_counts.index,
-            autopct='%1.1f%%',
-            colors=colors,
-            startangle=90
-        )
-        ax.set_title(f'Judgment Distribution\n(Total: {len(results)})')
+        colors = ["green" if j == "OK" else "red" for j in judgment_counts.index]
+        ax.pie(judgment_counts.values, labels=judgment_counts.index, autopct="%1.1f%%", colors=colors, startangle=90)
+        ax.set_title(f"Judgment Distribution\n(Total: {len(results)})")
 
         # Plot 2: Delta-E distribution by SKU (box plot)
         ax = axes[0, 1]
-        df = pd.DataFrame({'SKU': skus, 'ΔE': delta_es})
-        df.boxplot(column='ΔE', by='SKU', ax=ax)
-        ax.set_title('ΔE Distribution by SKU')
-        ax.set_xlabel('SKU')
-        ax.set_ylabel('ΔE')
+        df = pd.DataFrame({"SKU": skus, "ΔE": delta_es})
+        df.boxplot(column="ΔE", by="SKU", ax=ax)
+        ax.set_title("ΔE Distribution by SKU")
+        ax.set_xlabel("SKU")
+        ax.set_ylabel("ΔE")
         plt.sca(ax)
         plt.xticks(rotation=45)
 
@@ -397,47 +327,40 @@ class InspectionVisualizer:
         for result in results:
             for zr in result.zone_results:
                 if not zr.is_ok:
-                    zone_ng_data.append({'SKU': result.sku, 'Zone': zr.zone_name})
+                    zone_ng_data.append({"SKU": result.sku, "Zone": zr.zone_name})
 
         if zone_ng_data:
             df_ng = pd.DataFrame(zone_ng_data)
-            ng_freq = df_ng.groupby(['SKU', 'Zone']).size().unstack(fill_value=0)
-            im = ax.imshow(ng_freq.values, cmap='Reds', aspect='auto')
+            ng_freq = df_ng.groupby(["SKU", "Zone"]).size().unstack(fill_value=0)
+            im = ax.imshow(ng_freq.values, cmap="Reds", aspect="auto")
             ax.set_xticks(range(len(ng_freq.columns)))
             ax.set_xticklabels(ng_freq.columns)
             ax.set_yticks(range(len(ng_freq.index)))
             ax.set_yticklabels(ng_freq.index)
-            ax.set_title('Zone NG Frequency')
-            ax.set_xlabel('Zone')
-            ax.set_ylabel('SKU')
+            ax.set_title("Zone NG Frequency")
+            ax.set_xlabel("Zone")
+            ax.set_ylabel("SKU")
             plt.colorbar(im, ax=ax)
         else:
-            ax.text(0.5, 0.5, 'No NG zones', ha='center', va='center', transform=ax.transAxes)
-            ax.set_title('Zone NG Frequency')
+            ax.text(0.5, 0.5, "No NG zones", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title("Zone NG Frequency")
 
         # Plot 4: Processing summary (bar chart)
         ax = axes[1, 1]
-        summary_data = df.groupby('SKU').agg({
-            'ΔE': ['mean', 'min', 'max', 'std']
-        }).round(2)
-        summary_data.columns = ['Mean ΔE', 'Min ΔE', 'Max ΔE', 'Std ΔE']
-        summary_data['Mean ΔE'].plot(kind='bar', ax=ax, color='steelblue')
-        ax.set_title('Average ΔE by SKU')
-        ax.set_xlabel('SKU')
-        ax.set_ylabel('Mean ΔE')
-        ax.grid(True, axis='y', alpha=0.3)
+        summary_data = df.groupby("SKU").agg({"ΔE": ["mean", "min", "max", "std"]}).round(2)
+        summary_data.columns = ["Mean ΔE", "Min ΔE", "Max ΔE", "Std ΔE"]
+        summary_data["Mean ΔE"].plot(kind="bar", ax=ax, color="steelblue")
+        ax.set_title("Average ΔE by SKU")
+        ax.set_xlabel("SKU")
+        ax.set_ylabel("Mean ΔE")
+        ax.grid(True, axis="y", alpha=0.3)
         plt.sca(ax)
         plt.xticks(rotation=45)
 
         plt.tight_layout()
         return fig
 
-    def save_visualization(
-        self,
-        image: Union[np.ndarray, plt.Figure],
-        output_path: Path,
-        format: Optional[str] = None
-    ):
+    def save_visualization(self, image: Union[np.ndarray, plt.Figure], output_path: Path, format: Optional[str] = None):
         """
         Save visualization to file
 
@@ -455,16 +378,18 @@ class InspectionVisualizer:
 
         if isinstance(image, np.ndarray):
             # Save OpenCV image
-            if format.lower() == 'png':
-                cv2.imwrite(str(output_path), image, [cv2.IMWRITE_PNG_COMPRESSION, 9 - self.config.output_quality // 10])
-            elif format.lower() in ['jpg', 'jpeg']:
+            if format.lower() == "png":
+                cv2.imwrite(
+                    str(output_path), image, [cv2.IMWRITE_PNG_COMPRESSION, 9 - self.config.output_quality // 10]
+                )
+            elif format.lower() in ["jpg", "jpeg"]:
                 cv2.imwrite(str(output_path), image, [cv2.IMWRITE_JPEG_QUALITY, self.config.output_quality])
             else:
                 cv2.imwrite(str(output_path), image)
 
         elif isinstance(image, plt.Figure):
             # Save matplotlib figure
-            image.savefig(output_path, format=format, dpi=self.config.comparison_dpi, bbox_inches='tight')
+            image.savefig(output_path, format=format, dpi=self.config.comparison_dpi, bbox_inches="tight")
             plt.close(image)
 
         else:

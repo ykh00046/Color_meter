@@ -4,9 +4,10 @@ Performance Regression Tests
 성능 저하를 방지하기 위한 회귀 테스트.
 """
 
-import pytest
 import time
 from pathlib import Path
+
+import pytest
 
 from src.pipeline import InspectionPipeline
 from src.utils.file_io import read_json
@@ -15,7 +16,7 @@ from src.utils.file_io import read_json
 @pytest.fixture
 def test_image():
     """Test image path"""
-    img_path = Path('data/raw_images/VIS_OK_001.jpg')
+    img_path = Path("data/raw_images/VIS_OK_001.jpg")
     if not img_path.exists():
         pytest.skip(f"Test image not found: {img_path}")
     return str(img_path)
@@ -24,7 +25,7 @@ def test_image():
 @pytest.fixture
 def sku_config():
     """VIS_TEST SKU config"""
-    return read_json(Path('config/sku_db/VIS_TEST.json'))
+    return read_json(Path("config/sku_db/VIS_TEST.json"))
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ def pipeline(sku_config):
 def test_single_image_performance(pipeline, test_image):
     """단일 이미지 처리가 200ms 이내에 완료되어야 함 (회귀 방지)"""
     start = time.perf_counter()
-    result = pipeline.process(test_image, 'VIS_TEST')
+    result = pipeline.process(test_image, "VIS_TEST")
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert result is not None
@@ -45,19 +46,19 @@ def test_single_image_performance(pipeline, test_image):
 
 def test_batch_processing_linear_scaling(pipeline):
     """배치 처리가 선형 시간 복잡도를 유지해야 함"""
-    vis_images = list(Path('data/raw_images').glob('VIS_*.jpg'))
+    vis_images = list(Path("data/raw_images").glob("VIS_*.jpg"))
 
     if len(vis_images) < 3:
         pytest.skip("Not enough VIS_*.jpg images for batch test")
 
     # Test with 1 image
     start = time.perf_counter()
-    results_1 = pipeline.process_batch([str(vis_images[0])], 'VIS_TEST')
+    results_1 = pipeline.process_batch([str(vis_images[0])], "VIS_TEST")
     time_1 = time.perf_counter() - start
 
     # Test with 3 images
     start = time.perf_counter()
-    results_3 = pipeline.process_batch([str(img) for img in vis_images[:3]], 'VIS_TEST')
+    results_3 = pipeline.process_batch([str(img) for img in vis_images[:3]], "VIS_TEST")
     time_3 = time.perf_counter() - start
 
     assert len(results_1) == 1
@@ -70,9 +71,9 @@ def test_batch_processing_linear_scaling(pipeline):
 
 def test_radial_profiling_performance(pipeline, test_image, sku_config):
     """Radial profiling 단계가 전체 시간의 95% 미만이어야 함"""
-    from src.core.image_loader import ImageLoader, ImageConfig
-    from src.core.lens_detector import LensDetector, DetectorConfig
-    from src.core.radial_profiler import RadialProfiler, ProfilerConfig
+    from src.core.image_loader import ImageConfig, ImageLoader
+    from src.core.lens_detector import DetectorConfig, LensDetector
+    from src.core.radial_profiler import ProfilerConfig, RadialProfiler
 
     loader = ImageLoader(ImageConfig())
     detector = LensDetector(DetectorConfig())
@@ -80,7 +81,7 @@ def test_radial_profiling_performance(pipeline, test_image, sku_config):
 
     # Total pipeline time
     start = time.perf_counter()
-    result = pipeline.process(test_image, 'VIS_TEST')
+    result = pipeline.process(test_image, "VIS_TEST")
     total_time = time.perf_counter() - start
 
     # Radial profiling time
@@ -94,16 +95,16 @@ def test_radial_profiling_performance(pipeline, test_image, sku_config):
 
     profiling_ratio = profiling_time / total_time
 
-    assert profiling_ratio < 0.95, \
-        f"Radial profiling takes {profiling_ratio*100:.1f}% of total time (should be <95%)"
+    assert profiling_ratio < 0.95, f"Radial profiling takes {profiling_ratio*100:.1f}% of total time (should be <95%)"
 
 
 def test_memory_efficiency(pipeline):
     """메모리 사용량이 배치 크기에 무관하게 일정 수준을 유지해야 함"""
-    import psutil
     import gc
 
-    vis_images = list(Path('data/raw_images').glob('VIS_*.jpg'))
+    import psutil
+
+    vis_images = list(Path("data/raw_images").glob("VIS_*.jpg"))
 
     if len(vis_images) < 6:
         pytest.skip("Not enough VIS_*.jpg images")
@@ -113,14 +114,14 @@ def test_memory_efficiency(pipeline):
     # Batch of 3
     gc.collect()
     mem_before_3 = process.memory_info().rss / 1024 / 1024
-    results_3 = pipeline.process_batch([str(img) for img in vis_images[:3]], 'VIS_TEST')
+    results_3 = pipeline.process_batch([str(img) for img in vis_images[:3]], "VIS_TEST")
     mem_after_3 = process.memory_info().rss / 1024 / 1024
     mem_increase_3 = mem_after_3 - mem_before_3
 
     # Batch of 6
     gc.collect()
     mem_before_6 = process.memory_info().rss / 1024 / 1024
-    results_6 = pipeline.process_batch([str(img) for img in vis_images[:6]], 'VIS_TEST')
+    results_6 = pipeline.process_batch([str(img) for img in vis_images[:6]], "VIS_TEST")
     mem_after_6 = process.memory_info().rss / 1024 / 1024
     mem_increase_6 = mem_after_6 - mem_before_6
 
@@ -129,26 +130,27 @@ def test_memory_efficiency(pipeline):
 
     # Memory increase should not double when batch size doubles
     # (Allow 2.5x increase max)
-    assert mem_increase_6 < mem_increase_3 * 2.5, \
-        f"Memory increased {mem_increase_6:.1f}MB for 6 images vs {mem_increase_3:.1f}MB for 3 images"
+    assert (
+        mem_increase_6 < mem_increase_3 * 2.5
+    ), f"Memory increased {mem_increase_6:.1f}MB for 6 images vs {mem_increase_3:.1f}MB for 3 images"
 
 
 @pytest.mark.skip(reason="Parallel processing has overhead for small batches")
 def test_parallel_batch_processing(pipeline):
     """병렬 배치 처리 기능 테스트 (large batches only)"""
-    vis_images = [str(img) for img in list(Path('data/raw_images').glob('VIS_*.jpg'))[:6]]
+    vis_images = [str(img) for img in list(Path("data/raw_images").glob("VIS_*.jpg"))[:6]]
 
     if len(vis_images) < 6:
         pytest.skip("Not enough test images")
 
     # Sequential
     start = time.perf_counter()
-    results_seq = pipeline.process_batch(vis_images, 'VIS_TEST', parallel=False)
+    results_seq = pipeline.process_batch(vis_images, "VIS_TEST", parallel=False)
     time_seq = time.perf_counter() - start
 
     # Parallel
     start = time.perf_counter()
-    results_par = pipeline.process_batch(vis_images, 'VIS_TEST', parallel=True, max_workers=4)
+    results_par = pipeline.process_batch(vis_images, "VIS_TEST", parallel=True, max_workers=4)
     time_par = time.perf_counter() - start
 
     assert len(results_seq) == len(results_par) == 6

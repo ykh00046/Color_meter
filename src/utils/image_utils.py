@@ -65,4 +65,3 @@ def draw_circle(
     out = image.copy()
     cv2.circle(out, center, int(radius), color, thickness=thickness)
     return out
-

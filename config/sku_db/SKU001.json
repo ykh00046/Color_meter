@@ -1,18 +1,33 @@
 {
   "sku_code": "SKU001",
-  "description": "3-zone colored contact lens (dummy test data)",
-  "default_threshold": 3.5,
+  "description": "3-zone colored contact lens (brown printing)",
+  "default_threshold": 8.0,
   "zones": {
     "A": {
-      "L": 72.2,
-      "a": 137.3,
-      "b": 122.8,
-      "threshold": 4.0,
-      "description": "Main zone (measured from OK samples)"
+      "L": 45.0,
+      "a": 8.0,
+      "b": 28.0,
+      "threshold": 8.0,
+      "description": "Outer zone (darkest brown) - Standard Lab scale"
+    },
+    "B": {
+      "L": 68.0,
+      "a": 5.0,
+      "b": 22.0,
+      "threshold": 8.0,
+      "description": "Middle zone (medium brown) - Standard Lab scale"
+    },
+    "C": {
+      "L": 95.0,
+      "a": 0.5,
+      "b": 2.0,
+      "threshold": 10.0,
+      "description": "Inner zone (near transparent) - Standard Lab scale"
     }
   },
   "params": {
-    "expected_zones": 1
+    "expected_zones": 3,
+    "optical_clear_ratio": 0.15
   },
   "metadata": {
     "created_at": "2025-12-11",

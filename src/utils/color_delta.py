@@ -11,8 +11,9 @@ References:
   Color Research & Application, 30(1), 21-30.
 """
 
+from typing import Tuple, Union
+
 import numpy as np
-from typing import Union, Tuple
 
 
 def delta_e_cie2000(
@@ -20,7 +21,7 @@ def delta_e_cie2000(
     lab2: Union[Tuple[float, float, float], np.ndarray],
     kL: float = 1.0,
     kC: float = 1.0,
-    kH: float = 1.0
+    kH: float = 1.0,
 ) -> float:
     """
     CIEDE2000 색차(ΔE) 계산.
@@ -114,36 +115,37 @@ def delta_e_cie2000(
             H_bar_prime = (sum_h - 360) / 2.0
 
     # 9. Calculate T
-    T = (1.0
-         - 0.17 * np.cos(np.radians(H_bar_prime - 30))
-         + 0.24 * np.cos(np.radians(2 * H_bar_prime))
-         + 0.32 * np.cos(np.radians(3 * H_bar_prime + 6))
-         - 0.20 * np.cos(np.radians(4 * H_bar_prime - 63)))
+    T = (
+        1.0
+        - 0.17 * np.cos(np.radians(H_bar_prime - 30))
+        + 0.24 * np.cos(np.radians(2 * H_bar_prime))
+        + 0.32 * np.cos(np.radians(3 * H_bar_prime + 6))
+        - 0.20 * np.cos(np.radians(4 * H_bar_prime - 63))
+    )
 
     # 10. Calculate SL, SC, SH
-    SL = 1 + ((0.015 * (L_bar_prime - 50)**2) / np.sqrt(20 + (L_bar_prime - 50)**2))
+    SL = 1 + ((0.015 * (L_bar_prime - 50) ** 2) / np.sqrt(20 + (L_bar_prime - 50) ** 2))
     SC = 1 + 0.045 * C_bar_prime
     SH = 1 + 0.015 * C_bar_prime * T
 
     # 11. Calculate RT (rotation term)
-    delta_theta = 30 * np.exp(-((H_bar_prime - 275) / 25)**2)
+    delta_theta = 30 * np.exp(-(((H_bar_prime - 275) / 25) ** 2))
     RC = 2 * np.sqrt(C_bar_prime**7 / (C_bar_prime**7 + 25**7))
     RT = -np.sin(np.radians(2 * delta_theta)) * RC
 
     # 12. Calculate ΔE2000
     delta_E = np.sqrt(
-        (delta_L_prime / (kL * SL))**2 +
-        (delta_C_prime / (kC * SC))**2 +
-        (delta_H_prime / (kH * SH))**2 +
-        RT * (delta_C_prime / (kC * SC)) * (delta_H_prime / (kH * SH))
+        (delta_L_prime / (kL * SL)) ** 2
+        + (delta_C_prime / (kC * SC)) ** 2
+        + (delta_H_prime / (kH * SH)) ** 2
+        + RT * (delta_C_prime / (kC * SC)) * (delta_H_prime / (kH * SH))
     )
 
     return float(delta_E)
 
 
 def delta_e_cie1976(
-    lab1: Union[Tuple[float, float, float], np.ndarray],
-    lab2: Union[Tuple[float, float, float], np.ndarray]
+    lab1: Union[Tuple[float, float, float], np.ndarray], lab2: Union[Tuple[float, float, float], np.ndarray]
 ) -> float:
     """
     CIEDE1976 색차(ΔE*ab) 계산.
@@ -172,7 +174,7 @@ def delta_e_cie1976(
     else:
         L2, a2, b2 = lab2[0], lab2[1], lab2[2]
 
-    delta_E = np.sqrt((L2 - L1)**2 + (a2 - a1)**2 + (b2 - b1)**2)
+    delta_E = np.sqrt((L2 - L1) ** 2 + (a2 - a1) ** 2 + (b2 - b1) ** 2)
 
     return float(delta_E)
 
@@ -184,7 +186,7 @@ def delta_e_cie1994(
     kC: float = 1.0,
     kH: float = 1.0,
     K1: float = 0.045,
-    K2: float = 0.015
+    K2: float = 0.015,
 ) -> float:
     """
     CIEDE1994 색차(ΔE*94) 계산.
@@ -238,11 +240,7 @@ def delta_e_cie1994(
     SH = 1.0 + K2 * C1
 
     # Calculate ΔE*94
-    delta_E = np.sqrt(
-        (delta_L / (kL * SL))**2 +
-        (delta_C / (kC * SC))**2 +
-        (delta_H / (kH * SH))**2
-    )
+    delta_E = np.sqrt((delta_L / (kL * SL)) ** 2 + (delta_C / (kC * SC)) ** 2 + (delta_H / (kH * SH)) ** 2)
 
     return float(delta_E)
 
@@ -268,7 +266,7 @@ if __name__ == "__main__":
     print(f"ΔE2000: {de2000:.4f}")
     print(f"ΔE1976: {de1976:.4f}")
     print(f"ΔE1994: {de1994:.4f}")
-    print(f"\nExpected ΔE2000: ~2.04 (from reference)")
+    print("\nExpected ΔE2000: ~2.04 (from reference)")
 
     # Test with identical colors
     print("\n--- Test with identical colors ---")

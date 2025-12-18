@@ -1,231 +1,179 @@
-# 🗂️ 콘택트렌즈 색상 검사 시스템 - 개발 문서 인덱스
+# 📖 Documentation Index (Color Meter Project)
 
-> **프로젝트 코드명**: ColorMeter
-> **최종 업데이트**: 2025-12-10
-> **문서 버전**: v1.0
+프로젝트 관련 모든 문서들의 색인입니다. 각 문서의 목적과 주요 내용을 함께 정리하여, 필요한 정보를 빠르게 찾아볼 수 있습니다.
 
 ---
 
-## 📚 문서 체계 안내
+## 🎯 시스템 구분
 
-이 프로젝트는 **역할별 최적화된 문서 구조**를 사용합니다.
-처음 보시는 분은 아래 **"역할별 읽기 가이드"**를 먼저 확인하세요.
+이 프로젝트는 두 개의 독립적인 시스템으로 구성됩니다:
 
----
+### 🔵 **Inspection System** (단일 분석 시스템)
+- **목적**: 개별 렌즈의 절대적 품질 검사
+- **기준**: SKU 설정 파일 (고정된 임계값)
+- **상태**: ✅ 운영 중
+- **문서 위치**: `1_inspection/`, `design/inspection/`, `guides/inspection/`
 
-## 👥 역할별 읽기 가이드
-
-### 👔 경영진 / 프로젝트 관리자 (PM)
-
-**추천 순서:**
-1. 📄 [total.md](../total.md) - **프로젝트 전체 개요** (필수, 30분)
-   - 시스템 목적 및 기대 효과
-   - 6단계 개발 로드맵 (0-6단계)
-   - 리스크 관리 및 대응 방안
-   - PoC 계획
-
-2. 📄 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) - **현재 진행 상황** (선택, 10분)
-   - 현재 스프린트 상태
-   - 주간 목표 및 마일스톤
-
-**필요시 참고:**
-- 예산 및 리소스 계획 → [total.md § 2, 5장](../total.md)
-- 품질 검증 지표 → [total.md § 6장](../total.md)
+### 🟢 **Comparison System** (STD 비교 시스템) ⭐ **신규**
+- **목적**: STD 샘플 대비 상대적 품질 비교
+- **기준**: STD 프로파일 (동적 기준)
+- **상태**: 🚧 개발 중 (MVP Week 1-6)
+- **문서 위치**: `2_comparison/`, `design/comparison/`, `guides/comparison/`
 
 ---
 
-### 👨‍💻 개발자 - 신규 입사 / 온보딩
+## 🟢 Comparison System (STD 기반 비교 시스템) - 신규 개발
 
-**Day 1 - 프로젝트 이해 (2시간):**
-1. 📄 [total.md § 1-2](../total.md) - 프로젝트 개요 및 시스템 구성 (30분)
-2. 📄 [DETAILED_IMPLEMENTATION_PLAN.md § 1-3](./DETAILED_IMPLEMENTATION_PLAN.md) - 기술 스택 및 아키텍처 (1시간)
-3. 📄 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) - 개발 환경 세팅 (30분)
+### 📌 실행 계획 (Execution Plan)
+**Week 1-6 MVP 개발 중 - 여기부터 읽으세요!**
 
-**Day 2 - 코드 시작:**
-- 환경 세팅: [DEVELOPMENT_GUIDE.md § 환경 구축](./DEVELOPMENT_GUIDE.md)
-- 담당 모듈 파악: [DEVELOPMENT_GUIDE.md § 모듈별 담당](./DEVELOPMENT_GUIDE.md)
-- API 참고: [DETAILED_IMPLEMENTATION_PLAN.md § 3](./DETAILED_IMPLEMENTATION_PLAN.md)
+#### 필수 문서 (읽는 순서대로)
+1. **[ROADMAP_REVIEW_AND_ARCHITECTURE.md](planning/2_comparison/ROADMAP_REVIEW_AND_ARCHITECTURE.md)** – 🎯 **MVP 로드맵 및 아키텍처 (최우선 읽기):** Week 6 MVP 달성을 위한 현실적 실행 계획. Quick Summary, 3단계 로드맵 (M0-M2 → P1 → P2), 단일 분석 vs 비교 시스템 아키텍처 분리.
 
----
+2. **[WEEK1_M0_READINESS_CHECKLIST.md](planning/2_comparison/WEEK1_M0_READINESS_CHECKLIST.md)** – ✅ **Week 1 준비 완료 체크리스트 (95% 완료):** DB 스키마, ORM 모델, Pydantic 스키마 완료. Alembic 마이그레이션 및 판정 기준 워크샵 실행 대기 중.
 
-### 👨‍💻 개발자 - 실무 (매일 사용)
+3. **[JUDGMENT_CRITERIA_WORKSHOP.md](planning/2_comparison/JUDGMENT_CRITERIA_WORKSHOP.md)** – ⭐ **판정 기준 협의 워크샵 (Week 1 Day 2 필수):** 상관계수, ΔE 임계값, 경계 허용 오차 등 판정 기준 합의를 위한 워크샵 템플릿 (2-3시간).
 
-**아침 루틴:**
-1. 📄 [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)
-   - ✅ 오늘 할 일 확인
-   - 🐛 현재 블로커 이슈 확인
-   - 📋 모듈별 상태 확인
+#### 참고 문서 (Reference Documents)
+- **[STD_BASED_QC_SYSTEM_PLAN.md](planning/2_comparison/STD_BASED_QC_SYSTEM_PLAN.md)** – 🔴 **장기 비전 문서:** 표준 이미지(STD) 기반 양산 비교 검사 시스템 전체 비전. 구조/색상 유사도 분석, 조치 권장, 합격/불합격 자동 판정 (10주 계획).
 
-**코딩 중:**
-- **모듈 설계 참고**: [DETAILED_IMPLEMENTATION_PLAN.md § 3.2](./DETAILED_IMPLEMENTATION_PLAN.md)
-- **코드 예시**: [DETAILED_IMPLEMENTATION_PLAN.md § 3.2.x](./DETAILED_IMPLEMENTATION_PLAN.md)
-- **기술 스택**: [total.md § 4](../total.md)
+- **[TECHNICAL_ENHANCEMENTS_ADVANCED.md](planning/2_comparison/TECHNICAL_ENHANCEMENTS_ADVANCED.md)** – ⭐ **P1-P2 구현 가이드 (고급 기술):** STD 시스템 고도화를 위한 7대 핵심 기술. STD 통계 모델, Elastic Alignment, Worst-Case 지표, Ink-Aware 비교, Explainability Layer, 안정성 설계, 현상학적 분류.
 
-**코드 리뷰 / PR:**
-- 컨벤션: [DEVELOPMENT_GUIDE.md § 개발 컨벤션](./DEVELOPMENT_GUIDE.md)
-- 테스트: [total.md § 6](../total.md)
+- **[REVIEW_FEEDBACK_AND_IMPROVEMENTS.md](planning/2_comparison/REVIEW_FEEDBACK_AND_IMPROVEMENTS.md)** – ✅ **검토 의견 및 개선 계획:** 전문가 검토 결과 및 반영 사항. 알고리즘 최적화, DB 개선, 운영 요구사항, 리스크 완화 방안.
 
----
+#### 내부 문서 (Internal)
+- **[STRUCTURE_REORGANIZATION_PROPOSAL.md](planning/2_comparison/STRUCTURE_REORGANIZATION_PROPOSAL.md)** – 📁 **문서 구조 재구성 제안서:** 단일 분석 vs 비교 시스템 문서 분리 방안 (본 재구성의 기반 문서).
 
-### 🧪 QA / 품질 관리
+- **[ROADMAP_COMPARISON_REVIEW.md](planning/2_comparison/ROADMAP_COMPARISON_REVIEW.md)** – 📊 **로드맵 비교 분석:** 사용자 제안 로드맵과 기존 계획 비교 분석 (95% 일치 확인).
 
-**테스트 계획:**
-1. 📄 [total.md § 6장](../total.md) - 품질 검증 지표 및 테스트 계획
-   - 단위/통합/성능 테스트
-   - 정확도 평가 방법
-   - PoC 검증 절차
+- **[AI_REVIEW_CONTEXT_BUNDLE.md](planning/2_comparison/AI_REVIEW_CONTEXT_BUNDLE.md)** – 📦 **AI 검토용 컨텍스트 번들:** STD QC 시스템 계획 검토를 위한 통합 문서 (현재 시스템, 목표, 기술 스택, 검토 체크리스트).
 
-**테스트 시나리오:**
-- 성능 목표: 처리 시간 ≤200ms, 검출률 ≥95%
-- 정확도 평가: [total.md § 6 - 정확도 평가](../total.md)
+### Design (설계 문서) - 향후 추가 예정
+현재 비어 있음. Week 2-6 개발 과정에서 추가될 예정:
+- STD 비교 알고리즘 설계
+- 판정 로직 설계
+- API 설계 등
+
+### Guides (사용 가이드) - Week 6+ 추가 예정
+현재 비어 있음. MVP 완료 후 작성 예정:
+- STD 등록 가이드
+- 비교 검사 실행 가이드
+- 비교 리포트 해석 가이드
 
 ---
 
-### 🔬 연구 개발 (R&D)
+## 🔵 Inspection System (단일 분석 시스템) - 운영 중
 
-**고급 기술 검토:**
-1. 📄 [total.md § 6단계](../total.md) - PatchCore, PaDiM 등 ML 기법
-2. 📄 [references/콘택트렌즈 색상 검사 시스템 개선 제안서.pdf](./references/) - 경쟁 기술 비교
+### Planning (계획 및 개선)
+#### 핵심 개선 계획 (Active)
+- **[PHASE7_CORE_IMPROVEMENTS.md](planning/1_inspection/PHASE7_CORE_IMPROVEMENTS.md)** – **핵심 품질 개선 계획:** 백엔드 알고리즘(조명 보정, 배경 마스킹 등)의 신뢰성 향상을 위한 기술 과제 (10개 우선순위).
 
----
+- **[OPERATIONAL_UX_IMPROVEMENTS.md](planning/1_inspection/OPERATIONAL_UX_IMPROVEMENTS.md)** – ✅ **운영 UX 개선 (구현 완료):** RETAKE 상태, Diff Summary, OK 컨텍스트 등 현장 운영성 향상 기능.
 
-## 🔍 주제별 빠른 찾기
+- **[ANALYSIS_UI_DEVELOPMENT_PLAN.md](planning/1_inspection/ANALYSIS_UI_DEVELOPMENT_PLAN.md)** – **분석 중심 UI 개발 계획:** "분석 우선(Analysis-First)" 원칙에 따른 UI/UX 및 알고리즘 검증 도구 개발 로드맵.
 
-### 알고리즘 / 기술
+- **[PHASE4_UI_OVERHAUL_PLAN.md](planning/1_inspection/PHASE4_UI_OVERHAUL_PLAN.md)** – **차세대 UI/UX 계획:** Grid Layout, 인터랙티브 뷰어 등 UI 고도화 마일스톤.
 
-| 찾는 내용 | 문서 | 섹션 |
-|----------|------|------|
-| **극좌표 변환 (warpPolar)** | [total.md](../total.md) | § 2. 시스템 구성 - 색상 프로파일 추출 |
-| **ΔE 계산 (CIEDE2000)** | [total.md](../total.md), [DETAILED](./DETAILED_IMPLEMENTATION_PLAN.md) | § 2, § 3.2.5 |
-| **렌즈 검출 알고리즘** | [total.md](../total.md), [DETAILED](./DETAILED_IMPLEMENTATION_PLAN.md) | § 2, § 3.2.2 |
-| **Zone 분할 로직** | [total.md](../total.md), [DETAILED](./DETAILED_IMPLEMENTATION_PLAN.md) | § 2, § 3.2.4 |
-| **SKU 관리 시스템** | [total.md](../total.md), [DETAILED](./DETAILED_IMPLEMENTATION_PLAN.md) | § 2, § 3.2.8 |
+#### 완료된 개선 작업 (Completed)
+- **[PHASE7_COMPLETION_REPORT.md](planning/1_inspection/PHASE7_COMPLETION_REPORT.md)** – Phase 7 전체 완료 보고서
+- **[PHASE7_PRIORITY0_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY0_COMPLETE.md)** – 최우선 작업 완료
+- **[PHASE7_PRIORITY3-4_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY3-4_COMPLETE.md)** – 중간 우선순위 완료
+- **[PHASE7_PRIORITY5-6_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY5-6_COMPLETE.md)** – 추가 개선 완료
+- **[PHASE7_PRIORITY8_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY8_COMPLETE.md)** – 테스트 개선 완료
+- **[PHASE7_PRIORITY9_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY9_COMPLETE.md)** – 추가 테스트 완료
+- **[PHASE7_PRIORITY10_COMPLETE.md](planning/1_inspection/PHASE7_PRIORITY10_COMPLETE.md)** – 최종 완료
+- **[PHASE7_MEDIUM_PRIORITY_COMPLETE.md](planning/1_inspection/PHASE7_MEDIUM_PRIORITY_COMPLETE.md)** – 중간 우선순위 전체 완료
+- **[QUICK_WINS_COMPLETE.md](planning/1_inspection/QUICK_WINS_COMPLETE.md)** – 빠른 개선 사항 완료
+- **[REFACTORING_COMPLETION_REPORT.md](planning/1_inspection/REFACTORING_COMPLETION_REPORT.md)** – 리팩토링 완료
+- **[DOCUMENTATION_UPDATE_COMPLETION.md](planning/1_inspection/DOCUMENTATION_UPDATE_COMPLETION.md)** – 문서 업데이트 완료
+- **[CODE_QUALITY_REPORT.md](planning/1_inspection/CODE_QUALITY_REPORT.md)** – 코드 품질 개선 보고서
 
-### 모듈별 상세 설계
+#### 특정 기능 개선
+- **[INK_ANALYSIS_ENHANCEMENT_PLAN.md](planning/1_inspection/INK_ANALYSIS_ENHANCEMENT_PLAN.md)** – 잉크 분석 기능 개선 계획
+- **[ANALYSIS_IMPROVEMENTS.md](planning/1_inspection/ANALYSIS_IMPROVEMENTS.md)** – 분석 알고리즘 개선
 
-| 모듈 | 상세 문서 |
-|------|----------|
-| ImageLoader | [DETAILED § 3.2.1](./DETAILED_IMPLEMENTATION_PLAN.md#321-imageloader-영상-로더) |
-| LensDetector | [DETAILED § 3.2.2](./DETAILED_IMPLEMENTATION_PLAN.md#322-lensdetector-렌즈-검출) |
-| RadialProfiler | [DETAILED § 3.2.3](./DETAILED_IMPLEMENTATION_PLAN.md#323-radialprofiler-r-프로파일-추출) |
-| ZoneSegmenter | [DETAILED § 3.2.4](./DETAILED_IMPLEMENTATION_PLAN.md#324-zonesegmenter-zone-분할) |
-| ColorEvaluator | [DETAILED § 3.2.5](./DETAILED_IMPLEMENTATION_PLAN.md#325-colorevaluator-색상-평가-및-판정) |
-| Visualizer | [DETAILED § 3.2.6](./DETAILED_IMPLEMENTATION_PLAN.md#326-visualizer-시각화) |
-| Logger | [DETAILED § 3.2.7](./DETAILED_IMPLEMENTATION_PLAN.md#327-logger-데이터-저장-및-로깅) |
-| SkuConfigManager | [DETAILED § 3.2.8](./DETAILED_IMPLEMENTATION_PLAN.md#328-skuconfigmanager-sku-설정-관리) |
+#### 리팩토링 및 옵션 구현
+- **[OPTION2_REFACTORING_COMPLETE.md](planning/1_inspection/OPTION2_REFACTORING_COMPLETE.md)** – 옵션 2 리팩토링 완료
+- **[OPTION3_PHASE7_PROGRESS.md](planning/1_inspection/OPTION3_PHASE7_PROGRESS.md)** – 옵션 3 진행 상황
 
-### 개발 일정 / 프로세스
+#### 테스트 완료 보고서
+- **[TEST_INK_ESTIMATOR_COMPLETION.md](planning/1_inspection/TEST_INK_ESTIMATOR_COMPLETION.md)** – 잉크 추정기 테스트 완료
+- **[TEST_ZONE_ANALYZER_2D_COMPLETION.md](planning/1_inspection/TEST_ZONE_ANALYZER_2D_COMPLETION.md)** – 2D Zone 분석기 테스트 완료
 
-| 내용 | 문서 |
-|------|------|
-| **전체 로드맵 (0-6단계)** | [total.md § 5](../total.md) |
-| **주차별 상세 계획** | [DETAILED § 4](./DETAILED_IMPLEMENTATION_PLAN.md) |
-| **현재 스프린트** | [DEVELOPMENT_GUIDE](./DEVELOPMENT_GUIDE.md) |
-| **리스크 관리** | [total.md § 7](../total.md) |
-| **PoC 계획** | [total.md § 5단계](../total.md) |
+### Design (설계 및 기술 명세)
+- **[PIPELINE_DESIGN.md](design/inspection/PIPELINE_DESIGN.md)** – **검사 파이프라인 설계:** `InspectionPipeline` 모듈의 엔드투엔드 처리 흐름 설계 상세.
+- **[SKU_MANAGEMENT_DESIGN.md](design/inspection/SKU_MANAGEMENT_DESIGN.md)** – **SKU 관리 모듈 설계:** SKU 설정 JSON 스키마, CRUD, 베이스라인 자동 생성 설계.
+- **[VISUALIZER_DESIGN.md](design/inspection/VISUALIZER_DESIGN.md)** – **검사 결과 시각화 모듈 설계:** Overlay, Heatmap 등 시각화 기능 설계.
+- **[COLOR_EXTRACTION_DUAL_SYSTEM.md](design/inspection/COLOR_EXTRACTION_DUAL_SYSTEM.md)** – **색상 추출 이중 시스템 설계:** Zone-Based(구역 기반)와 Image-Based(GMM 비지도 학습) 두 가지 잉크 검출 방법의 알고리즘, 차이점, 통합 방식 상세 설명.
+- **[COLOR_EXTRACTION_COMPARISON.md](design/inspection/COLOR_EXTRACTION_COMPARISON.md)** – **색상 추출 품질 비교:** Zone-Based가 Image-Based보다 색상을 더 정확하게 추출하는 이유 (3단계 필터링, 공간적 정밀성, 노이즈 제거) 및 실험적 증거.
+- **[PERFORMANCE_ANALYSIS.md](design/inspection/PERFORMANCE_ANALYSIS.md)** – **성능 분석 보고서:** 파이프라인 프로파일링 결과 및 최적화 제안.
 
-### 품질 / 테스트
-
-| 내용 | 문서 |
-|------|------|
-| **성능 목표** | [total.md § 6](../total.md) |
-| **테스트 전략** | [total.md § 6](../total.md) |
-| **정확도 평가** | [total.md § 6 - 정확도 평가](../total.md) |
-
----
-
-## 📁 문서 구조 전체 맵
-
-```
-C:\X\Color_meter\
-├── 📄 README.md                          # 프로젝트 소개 (GitHub 메인)
-├── 📄 total.md                           # ⭐ 프로젝트 통합 계획서
-│
-├── 📁 docs/                              # 📚 모든 문서 모음
-│   ├── 📄 INDEX.md                       # ⭐ 이 파일 (내비게이션)
-│   ├── 📄 DEVELOPMENT_GUIDE.md           # ⭐ 실무 개발 가이드 (Living Doc)
-│   ├── 📄 DETAILED_IMPLEMENTATION_PLAN.md # 기술 상세 설계 (2,500줄)
-│   │
-│   ├── 📁 references/                    # 참고 자료
-│   │   ├── 콘택트렌즈_색상_검사_시스템_개발_플랜_제안서.md
-│   │   └── 콘택트렌즈 색상 검사 시스템 개선 제안서.pdf
-│   │
-│   └── 📁 archive/                       # 과거 버전 아카이브
-│       └── (이전 버전 문서들)
-│
-├── 📁 src/                               # 소스 코드
-├── 📁 config/                            # 설정 파일
-├── 📁 data/                              # 데이터
-└── 📁 tests/                             # 테스트
-```
+### Guides (사용/운영 가이드)
+- **[USER_GUIDE.md](guides/inspection/USER_GUIDE.md)** – **시스템 사용자 가이드:** CLI 및 웹 UI를 통해 콘택트렌즈 검사 시스템을 사용하는 방법을 단계별로 안내합니다.
+- **[WEB_UI_GUIDE.md](guides/inspection/WEB_UI_GUIDE.md)** – **경량 Web UI 사용 가이드:** FastAPI 기반의 간이 웹 인터페이스 실행 방법과 주요 기능을 설명합니다.
+- **[DEPLOYMENT_GUIDE.md](guides/inspection/DEPLOYMENT_GUIDE.md)** – **배포 및 환경 구성 가이드:** Docker를 이용한 컨테이너 빌드/실행 방법, 볼륨 구성, 환경 변수 설정 등을 다룹니다.
+- **[API_REFERENCE.md](guides/inspection/API_REFERENCE.md)** – **API 레퍼런스:** Web API 엔드포인트 상세 설명.
+- **[INK_ESTIMATOR_GUIDE.md](guides/inspection/INK_ESTIMATOR_GUIDE.md)** – **잉크 추정기 가이드:** GMM 기반 잉크 색상 추정 모듈 사용법.
+- **[image_normalization.md](guides/inspection/image_normalization.md)** – **이미지 정규화 가이드:** 조명 보정 및 이미지 전처리 설명.
 
 ---
 
-## 📌 현재 작업 중 (Quick Access)
+## 📚 공통 문서
 
-### 🚀 현재 단계: **1단계 - 알고리즘 프로토타입** (Week 1)
+### Planning (프로젝트 전체 관리)
+- **[ACTIVE_PLANS.md](planning/ACTIVE_PLANS.md)** – **(SSOT) 프로젝트 계획 현황판:** 현재 유효한 계획과 레거시를 구분하고, 문서 간 우선순위를 정의하는 기준점입니다.
 
-**이번 주 목표**: 개발 환경 구축 + ImageLoader 구현
+### Development (개발 환경 및 프로세스)
+- **[DEVELOPMENT_GUIDE.md](development/DEVELOPMENT_GUIDE.md)** – **개발 실무 가이드 (Living Doc):** 개발 환경 세팅, 코드 컨벤션, Git 브랜치 전략, 디렉토리 구조 등을 다루는 실시간 업데이트 문서입니다.
+- **CHANGELOG.md** – **변경 이력:** 프로젝트의 버전 별 주요 변경 사항 기록.
 
-**바로 가기:**
-- 📋 [오늘 할 일](./DEVELOPMENT_GUIDE.md#오늘-해야-할-일)
-- 🐛 [현재 이슈](./DEVELOPMENT_GUIDE.md#현재-이슈--블로커)
-- 👥 [담당자 현황](./DEVELOPMENT_GUIDE.md#모듈별-담당자-및-상태)
+### Technical Guides (기술 가이드)
+- **[AI_TELEMETRY_GUIDE.md](AI_TELEMETRY_GUIDE.md)** – **AI 텔레메트리 가이드:** AI 기반 코드 분석 및 성능 모니터링 시스템 사용법.
+- **[ZONE_RING_ANALYSIS.md](ZONE_RING_ANALYSIS.md)** – **Zone/Ring 분석 가이드:** 렌즈의 구역별 분석 방법론.
+- **[LAB_SCALE_FIX.md](LAB_SCALE_FIX.md)** – **LAB 색공간 스케일 수정:** LAB 색공간 처리 관련 버그 수정 및 표준화.
+- **[SECURITY_FIXES.md](SECURITY_FIXES.md)** – **보안 수정 사항:** 보안 관련 버그 수정 및 개선 내역.
+- **[TEST_COVERAGE_REPORT.md](TEST_COVERAGE_REPORT.md)** – **테스트 커버리지 보고서:** 현재 테스트 커버리지 현황 및 개선 계획.
 
-**참고 문서:**
-- 환경 세팅: [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)
-- ImageLoader 설계: [DETAILED § 3.2.1](./DETAILED_IMPLEMENTATION_PLAN.md#321-imageloader-영상-로더)
-- 1단계 상세 계획: [total.md § 5 - 1단계](../total.md)
+### Special Topics
+- **[INK_MASK_INTEGRATION_PLAN.md](INK_MASK_INTEGRATION_PLAN.md)** – **잉크 마스크 통합 계획:** 잉크 영역 검출 알고리즘 통합 방안.
+- **[TEST_2D_ZONE_ANALYSIS.md](TEST_2D_ZONE_ANALYSIS.md)** – **2D Zone 분석 테스트:** 2D 구역 분석 알고리즘 테스트 결과.
 
----
-
-## 🔄 문서 업데이트 규칙
-
-### 언제 어떤 문서를 수정하는가?
-
-| 변경 사항 | 수정할 문서 | 담당자 | 프로세스 |
-|----------|------------|--------|----------|
-| **전략/일정 변경** | [total.md](../total.md) | PM | PR 필요 |
-| **기술 설계 변경** | [DETAILED](./DETAILED_IMPLEMENTATION_PLAN.md) | Tech Lead | PR 필요 |
-| **일일 작업 상태** | [DEVELOPMENT_GUIDE](./DEVELOPMENT_GUIDE.md) | 각 개발자 | 직접 수정 OK |
-| **회의 결정사항** | [DEVELOPMENT_GUIDE](./DEVELOPMENT_GUIDE.md) | PM | 회의 후 즉시 |
-| **버그/이슈** | GitHub Issues | 발견자 | Issue 등록 |
-| **코드 변경** | 코드 주석 + PR | 개발자 | PR + 코드 리뷰 |
-
-### 주의사항
-- ⚠️ **total.md, DETAILED.md**는 안정적인 문서 → 함부로 수정 금지, PR 필수
-- ✅ **DEVELOPMENT_GUIDE.md**는 살아있는 문서 → 매일 업데이트 OK
-- 📝 문서 수정 시 **"최종 업데이트"** 날짜 갱신 필수
+### Project Management
+- **[IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md)** – **프로젝트 전반 개선 계획**
+- **[PROJECT_COMPREHENSIVE_REVIEW.md](PROJECT_COMPREHENSIVE_REVIEW.md)** – **프로젝트 종합 검토**
 
 ---
 
-## 📞 문의 / 지원
+## 📂 Archives (참고용 기록)
 
-### 문서 관련 질문
-- 📧 문서 구조: Tech Lead
-- 📧 내용 오류 제보: GitHub Issues에 등록
-
-### 기술 질문
-- 💬 알고리즘 질문: [DEVELOPMENT_GUIDE § Who to Ask](./DEVELOPMENT_GUIDE.md)
-- 💬 환경 세팅: [DEVELOPMENT_GUIDE](./DEVELOPMENT_GUIDE.md)
+과거 일일 보고서 및 레거시 문서는 다음 위치에 보관됩니다:
+- **planning/archive/** - 과거 계획 문서
+- **daily_reports/archive/** - 일일 작업 보고서
 
 ---
 
-## 🎯 처음 이 문서를 보는 분께
+## 🧭 빠른 시작 가이드
 
-**30초 안내:**
+### 🟢 비교 시스템 개발에 참여하는 경우 (신규 개발자)
+1. **[ROADMAP_REVIEW_AND_ARCHITECTURE.md](planning/2_comparison/ROADMAP_REVIEW_AND_ARCHITECTURE.md)** 읽기 (Quick Summary 섹션부터)
+2. **[WEEK1_M0_READINESS_CHECKLIST.md](planning/2_comparison/WEEK1_M0_READINESS_CHECKLIST.md)** 현재 진행 상황 확인
+3. **[STD_BASED_QC_SYSTEM_PLAN.md](planning/2_comparison/STD_BASED_QC_SYSTEM_PLAN.md)** 장기 비전 이해
 
-1. **당신의 역할**을 위 "[역할별 읽기 가이드](#-역할별-읽기-가이드)"에서 찾으세요
-2. 추천된 **문서 순서대로** 읽으세요
-3. 궁금한 내용은 "[주제별 빠른 찾기](#-주제별-빠른-찾기)"에서 검색하세요
+### 🔵 기존 시스템 유지보수/개선하는 경우
+1. **[USER_GUIDE.md](guides/inspection/USER_GUIDE.md)** 시스템 사용법 학습
+2. **[PIPELINE_DESIGN.md](design/inspection/PIPELINE_DESIGN.md)** 파이프라인 구조 이해
+3. **[PHASE7_CORE_IMPROVEMENTS.md](planning/1_inspection/PHASE7_CORE_IMPROVEMENTS.md)** 현재 개선 계획 확인
 
-**1분 안내 (개발자):**
-1. [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) 열기
-2. "환경 구축" 섹션 따라하기
-3. "오늘 할 일" 확인하고 시작!
+### 📚 문서 작성자
+1. **[ACTIVE_PLANS.md](planning/ACTIVE_PLANS.md)** 문서 우선순위 및 SSOT 확인
+2. 새 문서는 적절한 시스템 폴더에 배치:
+   - 비교 시스템 → `planning/2_comparison/`, `design/comparison/`
+   - 단일 분석 → `planning/1_inspection/`, `design/inspection/`
+   - 공통 사항 → 루트 폴더
 
 ---
 
-**Happy Coding! 🚀**
-
-*이 문서가 도움이 되었다면, 신규 팀원에게도 공유해주세요!*
+**➡ 참고:**
+- 문서 내용은 지속적으로 업데이트되며, **굵은 텍스트**나 *강조*로 표시된 부분은 중요 포인트입니다.
+- 최신 정보 확인을 위해 각 문서의 업데이트 날짜를 참고하세요.
+- 🟢 **비교 시스템**과 🔵 **단일 분석 시스템**은 독립적이지만, 핵심 알고리즘(`InspectionPipeline`)을 공유합니다.
