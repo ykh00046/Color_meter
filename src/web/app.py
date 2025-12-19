@@ -53,11 +53,12 @@ async def startup_event():
 
 
 # Include API routers
-from src.web.routers import comparison, std, test
+from src.web.routers import comparison, sku, std, test
 
 app.include_router(std.router)
 app.include_router(test.router)
 app.include_router(comparison.router)
+app.include_router(sku.router)
 
 
 def load_sku_config(sku: str, config_dir: Path = Path("config/sku_db")) -> dict:

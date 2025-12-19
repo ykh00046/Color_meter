@@ -231,6 +231,24 @@ class SkuConfigManager:
 
         return skus
 
+    def list_skus(self) -> List[str]:
+        """
+        List all SKU codes
+
+        Returns:
+            List of SKU codes (e.g., ["SKU001", "SKU002", "SKU003"])
+        """
+        sku_codes = []
+        for sku_path in sorted(self.db_path.glob("SKU*.json")):
+            try:
+                sku_data = read_json(sku_path)
+                sku_codes.append(sku_data["sku_code"])
+            except Exception:
+                # Skip invalid files
+                continue
+
+        return sku_codes
+
     def generate_baseline(
         self,
         sku_code: str,
