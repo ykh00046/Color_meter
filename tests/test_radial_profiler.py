@@ -224,3 +224,52 @@ def test_smooth_profile_short_moving_average_profile(perfect_circle_image, lens_
     assert np.all(profile_smoothed.L == profile.L)
     assert np.all(profile_smoothed.a == profile.a)
     assert np.all(profile_smoothed.b == profile.b)
+
+
+def test_sample_percentile_applied(monkeypatch):
+    theta_samples = 4
+    r_samples = 3
+    fake_lab = np.zeros((theta_samples, r_samples, 3), dtype=np.float32)
+    fake_lab[:, :, 0] = np.array(
+        [
+            [0, 10, 0],
+            [0, 10, 100],
+            [0, 10, 100],
+            [100, 10, 100],
+        ],
+        dtype=np.float32,
+    )
+
+    def fake_warp_polar(*_args, **_kwargs):
+        return np.zeros((theta_samples, r_samples, 3), dtype=np.uint8)
+
+    def fake_cvt_color(_image, _code):
+        return fake_lab
+
+    def fake_opencv_lab_to_standard(L, a, b):
+        return L, a, b
+
+    monkeypatch.setattr(cv2, "warpPolar", fake_warp_polar)
+    monkeypatch.setattr(cv2, "cvtColor", fake_cvt_color)
+    monkeypatch.setattr("src.utils.color_space.opencv_lab_to_standard", fake_opencv_lab_to_standard)
+
+    lens = LensDetection(center_x=0, center_y=0, radius=r_samples)
+    dummy_image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    percentile_config = ProfilerConfig(
+        r_step_pixels=1,
+        theta_samples=theta_samples,
+        smoothing_enabled=False,
+        sample_percentile=50,
+    )
+    percentile_profile = RadialProfiler(percentile_config).extract_profile(dummy_image, lens)
+    assert np.allclose(percentile_profile.L, np.array([0.0, 10.0, 100.0]))
+
+    mean_config = ProfilerConfig(
+        r_step_pixels=1,
+        theta_samples=theta_samples,
+        smoothing_enabled=False,
+        sample_percentile=None,
+    )
+    mean_profile = RadialProfiler(mean_config).extract_profile(dummy_image, lens)
+    assert np.allclose(mean_profile.L, np.array([25.0, 10.0, 75.0]))

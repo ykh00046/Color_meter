@@ -79,6 +79,19 @@ class InspectionPipeline:
             )
         self.radial_profiler = RadialProfiler(profiler_cfg)
         seg_cfg = segmenter_config or SegmenterConfig()
+        # Apply override params (used by recompute)
+        if isinstance(params.get("detection_method"), str):
+            seg_cfg.detection_method = params["detection_method"]
+        if isinstance(params.get("smoothing_window"), (int, float)):
+            seg_cfg.smoothing_window = int(params["smoothing_window"])
+        if isinstance(params.get("min_gradient"), (int, float)):
+            seg_cfg.min_gradient = float(params["min_gradient"])
+        if isinstance(params.get("min_delta_e"), (int, float)):
+            seg_cfg.min_delta_e = float(params["min_delta_e"])
+        if isinstance(params.get("uniform_split_priority"), bool):
+            seg_cfg.uniform_split_priority = params["uniform_split_priority"]
+        if isinstance(params.get("expected_zones"), (int, float)):
+            seg_cfg.expected_zones = int(params["expected_zones"])
         # Note: expected_zones는 process() 메서드에서 params.expected_zones로 읽어서 segment()에 전달
         self.zone_segmenter = ZoneSegmenter(seg_cfg)
         self.color_evaluator = ColorEvaluator(sku_config)
@@ -191,6 +204,18 @@ class InspectionPipeline:
                 suggestions.append("→ Verify image quality or adjust detector parameters")
 
             # 3. 극좌표 변환 및 프로파일 추출
+            params = self.sku_config.get("params", {})
+            num_samples = params.get("num_samples")
+            if isinstance(num_samples, (int, float)) and num_samples > 0:
+                self.radial_profiler.config.theta_samples = int(num_samples)
+            num_points = params.get("num_points")
+            if isinstance(num_points, (int, float)) and num_points > 0 and lens_detection.radius > 0:
+                r_step = max(1, int(lens_detection.radius / float(num_points)))
+                self.radial_profiler.config.r_step_pixels = r_step
+            sample_percentile = params.get("sample_percentile")
+            if isinstance(sample_percentile, (int, float)) and 0 <= sample_percentile <= 100:
+                self.radial_profiler.config.sample_percentile = float(sample_percentile)
+
             quality_metrics = compute_quality_metrics(processed_image, lens_detection)
             logger.debug("Step 3: Extracting radial profile")
             radial_profile = self.radial_profiler.extract_profile(processed_image, lens_detection)

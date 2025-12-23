@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -33,6 +34,7 @@ class ProfilerConfig:
     savgol_window_length: int = 11
     savgol_polyorder: int = 3
     moving_average_window: int = 5
+    sample_percentile: Optional[float] = None
 
 
 class RadialProfiler:
@@ -89,23 +91,34 @@ class RadialProfiler:
         else:
             radial_axis = 1
             logger.warning(
-                "Unexpected polar shape %s for r_samples=%s; defaulting to axis=0 mean.",
+                "Unexpected polar shape %s for r_samples=%s; defaulting to axis=1 mean.",
                 L_std_arr.shape,
                 r_samples,
             )
 
+        percentile = self.config.sample_percentile
         if radial_axis == 1:
-            L_profile = L_std_arr.mean(axis=0)
-            a_profile = a_std_arr.mean(axis=0)
-            b_profile = b_std_arr.mean(axis=0)
+            if percentile is not None:
+                L_profile = np.percentile(L_std_arr, percentile, axis=0)
+                a_profile = np.percentile(a_std_arr, percentile, axis=0)
+                b_profile = np.percentile(b_std_arr, percentile, axis=0)
+            else:
+                L_profile = L_std_arr.mean(axis=0)
+                a_profile = a_std_arr.mean(axis=0)
+                b_profile = b_std_arr.mean(axis=0)
             std_L = L_std_arr.std(axis=0)
             std_a = a_std_arr.std(axis=0)
             std_b = b_std_arr.std(axis=0)
             theta_len = L_std_arr.shape[0]
         else:
-            L_profile = L_std_arr.mean(axis=1)
-            a_profile = a_std_arr.mean(axis=1)
-            b_profile = b_std_arr.mean(axis=1)
+            if percentile is not None:
+                L_profile = np.percentile(L_std_arr, percentile, axis=1)
+                a_profile = np.percentile(a_std_arr, percentile, axis=1)
+                b_profile = np.percentile(b_std_arr, percentile, axis=1)
+            else:
+                L_profile = L_std_arr.mean(axis=1)
+                a_profile = a_std_arr.mean(axis=1)
+                b_profile = b_std_arr.mean(axis=1)
             std_L = L_std_arr.std(axis=1)
             std_a = a_std_arr.std(axis=1)
             std_b = b_std_arr.std(axis=1)

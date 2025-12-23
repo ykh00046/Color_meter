@@ -67,6 +67,7 @@ scripts/run_web_ui.bat
 다양한 분석 파라미터를 조정하는 영역입니다.
 *   **Analysis Configuration:**
     *   **Target SKU:** 드롭다운에서 분석에 사용할 SKU 코드를 선택합니다. (예: `SKU001`, `SKU_EXAMPLE`)
+    *   **Advanced (API) 파라미터:** `/recompute` 요청 시 `sample_percentile`(0~100)을 지정하면 프로파일 평균 대신 분위수 집계가 적용됩니다.
 *   **Region of Interest (Grid):** 렌즈 내 분석할 영역(ROI) 및 Grid 분할 방식을 설정합니다.
     *   **Inner Radius / Outer Radius:** 렌즈의 중심부와 외곽부를 제외하거나 포함할 정규화된 반지름(0.0~1.0)을 슬라이더로 조절합니다. 뷰어에 실시간으로 반영됩니다.
     *   **Rings:** 렌즈를 몇 개의 동심원 영역(Ring)으로 나눌지 설정합니다. 슬라이더 조작 시 뷰어에 반영됩니다.

@@ -532,6 +532,7 @@ def build_inspection_response(
     result,
     run_judgment: bool,
     image_id: Optional[str] = None,
+    applied_params: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Build final inspection API response."""
     response = {
@@ -547,6 +548,8 @@ def build_inspection_response(
         "uniformity": uniformity_data,
         "result_path": str(output),
     }
+    if applied_params:
+        response["applied_params"] = applied_params
 
     # Add judgment results if requested
     if run_judgment:
@@ -694,7 +697,7 @@ def validate_recompute_params(params: Dict[str, Any]) -> Dict[str, Any]:
     Allowed parameter groups:
     - segmenter_config: detection_method, smoothing_window, min_gradient, min_delta_e,
                        expected_zones, uniform_split_priority
-    - profiler_config: sample_method, num_samples, num_points
+    - profiler_config: num_samples, num_points, sample_percentile
     - corrector_config: method (gray_world, white_patch, auto, polynomial, gaussian)
     - sector_config: sector_count, ring_boundaries
 
@@ -713,9 +716,9 @@ def validate_recompute_params(params: Dict[str, Any]) -> Dict[str, Any]:
         "expected_zones": (1, 20),
         "uniform_split_priority": [True, False],
         # Radial profiling
-        "sample_method": ["mean", "median", "percentile"],
         "num_samples": (100, 10000),
         "num_points": (50, 1000),
+        "sample_percentile": (0, 100),
         # Illumination correction
         "correction_method": ["gray_world", "white_patch", "auto", "polynomial", "gaussian", "none"],
         # Ring × Sector
@@ -790,9 +793,9 @@ def apply_params_to_config(sku_config: dict, params: Dict[str, Any]) -> dict:
         "expected_zones": ("params", "expected_zones"),
         "uniform_split_priority": ("params", "uniform_split_priority"),
         # Radial profiling
-        "sample_method": ("params", "sample_method"),
         "num_samples": ("params", "num_samples"),
         "num_points": ("params", "num_points"),
+        "sample_percentile": ("params", "sample_percentile"),
         # Illumination correction
         "correction_method": ("corrector", "method"),
         # Ring × Sector
@@ -931,10 +934,8 @@ async def recompute_analysis(
         result=result,
         run_judgment=run_judgment,
         image_id=image_id,  # Return original image_id for further recomputation
+        applied_params=param_overrides if param_overrides else None,
     )
-
-    # Add parameter info to response
-    response["applied_params"] = param_overrides
 
     return response
 
@@ -2175,6 +2176,24 @@ async def compare_lots(
 
         test_zones = test_result.zones
         test_profile = getattr(test_result, "radial_profile", None)
+        ref_profile = getattr(ref_result, "radial_profile", None)
+
+        # 4.6. Compare radial profiles (P1-2)
+        profile_details = None
+        if test_profile and ref_profile:
+            from src.core.profile_comparison import compare_radial_profiles
+
+            # Convert Profile objects to dict if they aren't already
+            def _to_dict(p):
+                if hasattr(p, "L"):
+                    return {"L": p.L.tolist(), "a": p.a.tolist(), "b": p.b.tolist()}
+                return p
+
+            profile_details = compare_radial_profiles(
+                test_profile=_to_dict(test_profile),
+                std_profile=_to_dict(ref_profile),
+            )
+            logger.info(f"[COMPARE] Profile similarity: {profile_details.get('profile_score', 0.0):.1f}")
 
         if not (alignment_status == "stop" and require_ok):
             # Match zones by name
@@ -2314,6 +2333,9 @@ async def compare_lots(
                 "comparison": quality_deltas,
                 "overall_shift": overall_shift,
                 "max_delta_e": round(float(max_de), 2),
+                "profile_score": profile_details.get("profile_score", 0.0) if profile_details else 0.0,
+                "profile_details": profile_details,
+                "radial_profile": _to_dict(test_profile) if test_profile else None,
                 "overlay": overlay_url,
                 "lens_info": _lens_info_from_detection(getattr(test_result, "lens_detection", None)),
                 "center_offset": center_offset,
@@ -2346,6 +2368,9 @@ async def compare_lots(
             ),
             "zone_diagnostics": _compute_zone_diagnostics(
                 getattr(ref_result, "radial_profile", None), sku_config, expected_zones
+            ),
+            "radial_profile": (
+                _to_dict(ref_result.radial_profile) if getattr(ref_result, "radial_profile", None) else None
             ),
             "zone_ink_ratios": ref_ink_ratios,
             "cluster_results": ref_clusters,

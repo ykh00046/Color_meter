@@ -604,35 +604,20 @@ image_id=abc123def456&sku=SKU001&params={"smoothing_window":15,"min_gradient":3.
 **지원 파라미터** (12개):
 
 ```json
-
 {
-
-  "detection_method": "gradient",        // gradient, delta_e, hybrid, variable_width
-
-  "smoothing_window": 15,                // 1-100
-
-  "min_gradient": 3.0,                   // 0.0-10.0
-
-  "min_delta_e": 3.0,                    // 0.0-10.0
-
-  "correction_method": "polynomial",     // none, polynomial, retinex, clahe, auto
-
-  "correction_degree": 2,                // 1-4
-
-  "zone_method": "auto",                 // auto, uniform
-
-  "expected_zones": 1,                   // 1-10
-
-  "uniformity_threshold_L": 10.0,        // 0.0-50.0
-
-  "uniformity_threshold_a": 15.0,        // 0.0-50.0
-
-  "uniformity_threshold_b": 15.0,        // 0.0-50.0
-
-  "subpixel_refinement": true            // true/false
-
+  "detection_method": "gradient",      // gradient, delta_e, hybrid, variable_width
+  "smoothing_window": 15,              // 1-100
+  "min_gradient": 3.0,                 // 0.0-10.0
+  "min_delta_e": 3.0,                  // 0.0-20.0
+  "expected_zones": 3,                 // 1-20
+  "uniform_split_priority": false,     // true/false
+  "num_samples": 360,                  // 100-10000 (theta samples)
+  "num_points": 300,                   // 50-1000 (radial points)
+  "sample_percentile": 50,             // 0-100 (when set, use percentile instead of mean)
+  "correction_method": "auto",         // gray_world, white_patch, auto, polynomial, gaussian, none
+  "sector_count": 8,                   // 4-36
+  "ring_count": 3                      // 1-10
 }
-
 ```
 
 
@@ -642,6 +627,8 @@ image_id=abc123def456&sku=SKU001&params={"smoothing_window":15,"min_gradient":3.
 - `/inspect`와 동일한 응답 형식
 
 - 새로운 파라미터로 재계산된 결과
+
+- `applied_params`: 실제 적용된 파라미터 (요청에서 전달된 값만 포함)
 
 
 
@@ -673,7 +660,7 @@ resp2 = requests.post("/recompute", data={
 
     "sku": "SKU001",
 
-    "params": json.dumps({"smoothing_window": 20, "min_gradient": 2.5})
+    "params": json.dumps({"smoothing_window": 20, "min_gradient": 2.5, "sample_percentile": 50})
 
 })
 

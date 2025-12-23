@@ -68,7 +68,7 @@ Comprehensive validation for all tunable parameters:
 | `min_delta_e` | float | 0.0-20.0 | ΔE peak threshold |
 | `expected_zones` | int | 1-20 | Expected number of zones |
 | `uniform_split_priority` | bool | true/false | Uniform split priority |
-| `sample_method` | enum | mean, median, percentile | Radial profiling method |
+| `sample_percentile` | number | 0-100 | Radial profiling percentile (when set) |
 | `num_samples` | int | 100-10000 | Number of samples |
 | `num_points` | int | 50-1000 | Number of profile points |
 | `correction_method` | enum | gray_world, white_patch, auto, polynomial, gaussian, none | Illumination correction |

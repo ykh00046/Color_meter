@@ -104,25 +104,43 @@ class ZoneSegmenter:
         # 1) 프로파일 평활화
         smooth_profile = self._smooth_profile(profile)
 
-        # 2) 변곡점 검출 (그래디언트 + ΔE)
+        # 2) Boundary detection
         grad_pts = self._detect_by_gradient(smooth_profile)
         de_pts = self._detect_by_delta_e(smooth_profile)
+        method = self.config.detection_method
+        if method == "gradient":
+            candidates = grad_pts
+        elif method == "delta_e":
+            candidates = de_pts
+        elif method in ("hybrid", "variable_width"):
+            candidates = grad_pts + de_pts
+        else:
+            logger.warning("Unknown detection_method=%s; falling back to hybrid.", method)
+            candidates = grad_pts + de_pts
 
-        boundaries = sorted(list(set(grad_pts + de_pts)), reverse=True)
+        boundaries = sorted(list(set(candidates)), reverse=True)
         boundaries = self._merge_close_boundaries(boundaries, self.config.min_zone_width)
 
-        # 3) ?? ?? ?? ?? ?? fallback (PHASE7 Priority 7: variable_width ??)
+        # 3) Boundary count adjustment / fallback
         if self.config.uniform_split_priority:
-            # ?? ?? ?? (Priority 11)
             boundaries = self._uniform_boundaries(hint_zones or 3)
             logger.info(f"Using uniform split (priority enabled): {len(boundaries) + 1} zones")
         else:
-            # Variable width ??: ??? ???? hint?? ??
-            if hint_zones and hint_zones > 0:
+            if method == "variable_width":
+                if hint_zones and hint_zones > 0:
+                    desired = hint_zones - 1
+                    if len(boundaries) != desired:
+                        logger.info(f"Adjusting boundaries: found {len(boundaries)}, expected {desired}")
+                        boundaries = self._adjust_to_hint(boundaries, hint_zones, smooth_profile)
+            elif hint_zones and hint_zones > 0:
                 desired = hint_zones - 1
                 if len(boundaries) != desired:
-                    logger.info(f"Adjusting boundaries: found {len(boundaries)}, expected {desired}")
-                    boundaries = self._adjust_to_hint(boundaries, hint_zones, smooth_profile)
+                    logger.info(
+                        "Boundary count mismatch (found %s, expected %s); using uniform split.",
+                        len(boundaries),
+                        desired,
+                    )
+                    boundaries = self._uniform_boundaries(hint_zones)
 
             if not boundaries:
                 logger.warning("No boundaries detected, using uniform split fallback.")
@@ -217,17 +235,32 @@ class ZoneSegmenter:
         smooth_profile = self._smooth_profile(profile)
         grad_pts = self._detect_by_gradient(smooth_profile)
         de_pts = self._detect_by_delta_e(smooth_profile)
+        method = self.config.detection_method
+        if method == "gradient":
+            candidates = grad_pts
+        elif method == "delta_e":
+            candidates = de_pts
+        elif method in ("hybrid", "variable_width"):
+            candidates = grad_pts + de_pts
+        else:
+            candidates = grad_pts + de_pts
 
-        boundaries = sorted(list(set(grad_pts + de_pts)), reverse=True)
+        boundaries = sorted(list(set(candidates)), reverse=True)
         boundaries = self._merge_close_boundaries(boundaries, self.config.min_zone_width)
 
         if self.config.uniform_split_priority:
             boundaries = self._uniform_boundaries(hint_zones or 3)
         else:
-            if hint_zones and hint_zones > 0:
+            if method == "variable_width":
+                if hint_zones and hint_zones > 0:
+                    desired = hint_zones - 1
+                    if len(boundaries) != desired:
+                        boundaries = self._adjust_to_hint(boundaries, hint_zones, smooth_profile)
+            elif hint_zones and hint_zones > 0:
                 desired = hint_zones - 1
                 if len(boundaries) != desired:
-                    boundaries = self._adjust_to_hint(boundaries, hint_zones, smooth_profile)
+                    boundaries = self._uniform_boundaries(hint_zones)
+
             if not boundaries:
                 boundaries = self._uniform_boundaries(hint_zones or 3)
 
