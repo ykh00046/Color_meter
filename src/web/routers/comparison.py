@@ -45,6 +45,7 @@ def compare(
             total=comparison_result.total_score,
             zone=comparison_result.zone_score,
             ink=comparison_result.ink_score,
+            profile=comparison_result.profile_score,
             confidence=comparison_result.confidence_score,
         )
         failure_reasons = None
@@ -63,7 +64,7 @@ def compare(
             processing_time_ms=comparison_result.processing_time_ms,
             message=(
                 f"Comparison completed: {comparison_result.judgment.value} "
-                f"(score={comparison_result.total_score:.1f})"
+                f"(score={comparison_result.total_score:.1f}, profile={comparison_result.profile_score:.1f})"
             ),
         )
         return response
@@ -118,6 +119,7 @@ def get_comparison_detail(
             total=comparison.total_score,
             zone=comparison.zone_score,
             ink=comparison.ink_score,
+            profile=comparison.profile_score,
             confidence=comparison.confidence_score,
         )
         response = ComparisonDetailResponse(
@@ -132,6 +134,7 @@ def get_comparison_detail(
             defect_classifications=comparison.defect_classifications,
             zone_details=comparison.zone_details,
             ink_details=comparison.ink_details,
+            profile_details=comparison.profile_details,
             alignment_details=comparison.alignment_details,
             worst_case_metrics=comparison.worst_case_metrics,
             created_at=comparison.created_at,

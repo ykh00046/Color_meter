@@ -320,22 +320,46 @@ def find_transition_ranges(
     """
     Gradient 기반 전이 구간 자동 탐지
 
-    Args:
-        img_bgr: 이미지
-        cx, cy: 렌즈 중심
-        print_inner, print_outer: 인쇄 영역 경계
-        lens_mask: 렌즈 마스크
-        target_labs: Zone별 target Lab (gradient 계산에 사용)
-        bins: 반경 bin 수 (400 권장)
-        sigma_bins: 스무딩 강도 (3 권장)
-        k_mad: MAD 기준 이상치 검출 계수 (4.0 권장)
-        max_exclude_frac: 최대 제외 비율 (0.30 = 30%)
-
     Returns:
         List[TransitionRange]: 전이 구간 리스트
     """
     print(f"[TRANSITION] Finding transition ranges (bins={bins}, sigma={sigma_bins}, k_mad={k_mad})...")
 
+    # 1. Calculate radial Lab profiles
+    radial_lab, radial_count, bin_centers, bin_width = _calculate_radial_lab_profiles(
+        img_bgr, cx, cy, print_inner, print_outer, lens_mask, bins, sigma_bins
+    )
+
+    # 2. Calculate gradients and threshold
+    gradients, valid_bins = _calculate_gradients(radial_lab, radial_count)
+
+    median_grad = float(np.median(gradients[gradients > 0])) if np.any(gradients > 0) else 0.0
+    mad = float(np.median(np.abs(gradients - median_grad))) if np.any(gradients > 0) else 0.0
+    threshold = median_grad + k_mad * mad
+
+    print(f"[TRANSITION] Gradient stats: median={median_grad:.2f}, MAD={mad:.2f}, threshold={threshold:.2f}")
+
+    # 3. Extract, merge and filter ranges
+    merged = _extract_and_merge_ranges(gradients, threshold, bin_centers, bin_width, bins, max_exclude_frac)
+
+    print(f"[TRANSITION] Found {len(merged)} transition ranges:")
+    for tr in merged:
+        print(f"  - r=[{tr.r_start:.3f}, {tr.r_end:.3f}], max_grad={tr.max_gradient:.2f}")
+
+    return merged
+
+
+def _calculate_radial_lab_profiles(
+    img_bgr: np.ndarray,
+    cx: float,
+    cy: float,
+    print_inner: float,
+    print_outer: float,
+    lens_mask: np.ndarray,
+    bins: int,
+    sigma_bins: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Calculate average Lab values per radius bin."""
     h, w = img_bgr.shape[:2]
     yy, xx = np.indices((h, w))
     rr = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
@@ -350,30 +374,36 @@ def find_transition_ranges(
     # 반경별 평균 Lab 계산
     bin_edges = np.linspace(0.0, 1.0, bins + 1)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    bin_width = 1.0 / bins
+
     radial_lab = np.zeros((bins, 3), np.float32)
     radial_count = np.zeros(bins, np.int32)
 
     rflat = r_norm[band].ravel()
     labflat = lab[band].reshape(-1, 3)
 
-    inds = np.clip(np.digitize(rflat, bin_edges) - 1, 0, bins - 1)
-    for i in range(bins):
-        m = inds == i
-        cnt = int(m.sum())
-        radial_count[i] = cnt
-        if cnt > 0:
-            radial_lab[i] = labflat[m].mean(axis=0)
-
-    # 노이즈 bin 필터링 (유효 픽셀 수가 적은 bin 제거)
-    valid_bins = radial_count > max(radial_count.max() * 0.01, 10)
+    if rflat.size > 0:
+        inds = np.clip(np.digitize(rflat, bin_edges) - 1, 0, bins - 1)
+        for i in range(bins):
+            m = inds == i
+            cnt = int(m.sum())
+            radial_count[i] = cnt
+            if cnt > 0:
+                radial_lab[i] = labflat[m].mean(axis=0)
 
     # Smoothing (Gaussian)
     if sigma_bins > 0:
         for ch in range(3):
             radial_lab[:, ch] = cv2.GaussianBlur(radial_lab[:, ch].reshape(-1, 1), (1, 2 * sigma_bins + 1), 0).ravel()
 
-    # ΔE 기반 gradient 계산 (이웃 bin 간 ΔE 차이)
-    # 더 안정적: |dL| + |da| + |db| 대신 ΔE 사용
+    return radial_lab, radial_count, bin_centers, bin_width
+
+
+def _calculate_gradients(radial_lab: np.ndarray, radial_count: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Calculate CIEDE76 gradients between adjacent bins."""
+    bins = len(radial_lab)
+    valid_bins = radial_count > max(radial_count.max() * 0.01, 10)
+
     gradients = np.zeros(bins - 1, np.float32)
     for i in range(bins - 1):
         if valid_bins[i] and valid_bins[i + 1]:
@@ -381,14 +411,18 @@ def find_transition_ranges(
             lab2 = radial_lab[i + 1]
             gradients[i] = delta_e_cie76(lab1, lab2)
 
-    # MAD (Median Absolute Deviation) 기반 이상치 검출
-    median_grad = float(np.median(gradients[gradients > 0]))
-    mad = float(np.median(np.abs(gradients - median_grad)))
-    threshold = median_grad + k_mad * mad
+    return gradients, valid_bins
 
-    print(f"[TRANSITION] Gradient stats: median={median_grad:.2f}, MAD={mad:.2f}, threshold={threshold:.2f}")
 
-    # 전이 구간 검출 (threshold 초과)
+def _extract_and_merge_ranges(
+    gradients: np.ndarray,
+    threshold: float,
+    bin_centers: np.ndarray,
+    bin_width: float,
+    bins: int,
+    max_exclude_frac: float,
+) -> List[TransitionRange]:
+    """Extract continuous transition ranges and merge overlapping ones."""
     is_transition = gradients > threshold
 
     # 연속 구간 추출
@@ -403,28 +437,26 @@ def find_transition_ranges(
             max_grad = float(gradients[start : i + 1].max())
             ranges.append(TransitionRange(r_start, r_end, max_grad))
             start = None
+
     if start is not None:
         r_start = float(bin_centers[start])
         r_end = 1.0
         max_grad = float(gradients[start:].max())
         ranges.append(TransitionRange(r_start, r_end, max_grad))
 
-    # 전이 구간 확장 (dilation, ±1 bin)
+    # 전이 구간 확장 (dilation, ±1 bin) 및 병합
     dilated_ranges = []
-    bin_width = 1.0 / bins
     for tr in ranges:
-        r_start_dilated = max(0.0, tr.r_start - bin_width)
-        r_end_dilated = min(1.0, tr.r_end + bin_width)
-        dilated_ranges.append(TransitionRange(r_start_dilated, r_end_dilated, tr.max_gradient))
+        dilated_ranges.append(
+            TransitionRange(max(0.0, tr.r_start - bin_width), min(1.0, tr.r_end + bin_width), tr.max_gradient)
+        )
 
-    # 전이 구간 병합 (겹치는 구간 합치기)
     merged = []
     if dilated_ranges:
         dilated_ranges.sort(key=lambda x: x.r_start)
         current = dilated_ranges[0]
         for tr in dilated_ranges[1:]:
             if tr.r_start <= current.r_end:
-                # 병합
                 current = TransitionRange(
                     current.r_start, max(current.r_end, tr.r_end), max(current.max_gradient, tr.max_gradient)
                 )
@@ -436,10 +468,7 @@ def find_transition_ranges(
     # 최대 제외 비율 체크
     total_excluded = sum(tr.r_end - tr.r_start for tr in merged)
     if total_excluded > max_exclude_frac:
-        print(
-            f"[TRANSITION] WARNING: Excluded fraction {total_excluded:.2%} > {max_exclude_frac:.0%}, keeping top ranges"
-        )
-        # 상위 gradient 구간만 유지
+        print(f"[TRANSITION] WARNING: Excluded fraction {total_excluded:.2%} > {max_exclude_frac:.0%}")
         merged.sort(key=lambda x: x.max_gradient, reverse=True)
         cumulative = 0.0
         filtered = []
@@ -451,10 +480,6 @@ def find_transition_ranges(
                 break
         filtered.sort(key=lambda x: x.r_start)
         merged = filtered
-
-    print(f"[TRANSITION] Found {len(merged)} transition ranges:")
-    for tr in merged:
-        print(f"  - r=[{tr.r_start:.3f}, {tr.r_end:.3f}], max_grad={tr.max_gradient:.2f}")
 
     return merged
 
@@ -471,139 +496,87 @@ def auto_define_zone_B(
     """
     Zone B 경계 자동 정의 (전이 구간 제거 + 최적 구간 선택)
 
-    Args:
-        transition_ranges: 전이 구간 리스트
-        min_width: 최소 폭 (0.15 = 15%)
-        max_width: 최대 폭 (0.25 = 25%, 가드레일)
-        min_pixels: 최소 픽셀 수
-        max_pixels: 최대 픽셀 수
-        expected_pixel_ratio: 예상 픽셀 비율 (print band 대비)
-        print_band_area: print band 총 픽셀 수 (근사값)
-
     Returns:
         ZoneSpec or None (조건 미충족 시 None)
     """
     print(f"[AUTO ZONE B] Defining Zone B (min_width={min_width}, max_width={max_width}, min_pixels={min_pixels})...")
 
     # B 후보 영역: 전체 범위에서 C(0~0.33), A(0.66~1.0) 제외
-    # B 후보: 0.33 ~ 0.66
     B_candidate_start = 0.33
     B_candidate_end = 0.66
     B_candidate_width = B_candidate_end - B_candidate_start
 
     print(
-        f"[AUTO ZONE B] B_candidate_range: "
-        f"[{B_candidate_start:.3f}, {B_candidate_end:.3f}], "
+        f"[AUTO ZONE B] B_candidate_range: [{B_candidate_start:.3f}, {B_candidate_end:.3f}], "
         f"width={B_candidate_width:.3f}"
     )
 
-    # 전이 구간 제거
-    excluded_ranges = [(tr.r_start, tr.r_end) for tr in transition_ranges]
-
-    if transition_ranges:
-        print(
-            f"[AUTO ZONE B] transition_ranges: {[(tr.r_start, tr.r_end, tr.max_gradient) for tr in transition_ranges]}"
-        )
-    else:
-        print("[AUTO ZONE B] transition_ranges: [] (no transitions detected)")
-
     # 가용 구간 계산 (전이 구간 제외)
-    available_segments = [(B_candidate_start, B_candidate_end)]
-    for ex_start, ex_end in excluded_ranges:
-        new_segments = []
-        for seg_start, seg_end in available_segments:
-            # 전이 구간과 겹치는지 확인
-            if ex_end <= seg_start or ex_start >= seg_end:
-                # 겹치지 않음
-                new_segments.append((seg_start, seg_end))
-            else:
-                # 겹침 - 분할
-                if seg_start < ex_start:
-                    new_segments.append((seg_start, ex_start))
-                if ex_end < seg_end:
-                    new_segments.append((ex_end, seg_end))
-        available_segments = new_segments
+    available_segments = _split_segment_by_exclusion(B_candidate_start, B_candidate_end, transition_ranges)
 
     print(f"[AUTO ZONE B] Available segments after transition removal: {available_segments}")
 
-    # excluded_ratio 계산
-    total_excluded = sum(
-        ex_end - ex_start
-        for ex_start, ex_end in excluded_ranges
-        if ex_start >= B_candidate_start and ex_end <= B_candidate_end
-    )
-    excluded_ratio = total_excluded / B_candidate_width if B_candidate_width > 0 else 0.0
-    print(f"[AUTO ZONE B] excluded_ratio: {excluded_ratio:.2%} ({total_excluded:.3f} / {B_candidate_width:.3f})")
-
     if not available_segments:
         print("[AUTO ZONE B] No available segments after transition removal, using SAFE FALLBACK")
-        print("[AUTO ZONE B] B_selected_range: [0.380, 0.610] (safe buffer fallback)")
         return ZoneSpec("B", 0.38, 0.61)
-
-    # 가장 긴 연속 구간 선택
-    available_segments.sort(key=lambda x: (x[1] - x[0]), reverse=True)
 
     # 다중 후보 검증
     candidates = []
     for seg_start, seg_end in available_segments:
         width = seg_end - seg_start
 
-        # 🚨 가드레일 1: min_width 체크
+        # 가드레일 체크
         if width < min_width:
-            print(
-                f"[AUTO ZONE B] Segment [{seg_start:.3f}, {seg_end:.3f}] rejected: "
-                f"width={width:.3f} < min_width={min_width}"
-            )
             continue
-
-        # 🚨 가드레일 2: max_width 체크 (NEW!)
         if width > max_width:
-            print(
-                f"[AUTO ZONE B] Segment [{seg_start:.3f}, {seg_end:.3f}] rejected: "
-                f"width={width:.3f} > max_width={max_width}"
-            )
             continue
 
-        # 픽셀 수 추정 (근사)
-        # print_band_area를 기준으로 비율 계산
-        # Zone B는 annulus 형태이므로 면적 = π * ((r_outer)^2 - (r_inner)^2)
-        # 간단히 비율로 추정
         estimated_pixels = int(print_band_area * width)
-
         if estimated_pixels < min_pixels or estimated_pixels > max_pixels:
-            print(
-                f"[AUTO ZONE B] Segment [{seg_start:.3f}, {seg_end:.3f}] rejected: "
-                f"estimated_pixels={estimated_pixels} (min={min_pixels}, max={max_pixels})"
-            )
             continue
 
         candidates.append((seg_start, seg_end, width, estimated_pixels))
 
     if not candidates:
-        print("[AUTO ZONE B] No candidates met constraints (min/max width, pixels), using SAFE FALLBACK")
-        print("[AUTO ZONE B] B_selected_range: [0.380, 0.610] (safe buffer fallback)")
+        print("[AUTO ZONE B] No candidates met constraints, using SAFE FALLBACK")
         return ZoneSpec("B", 0.38, 0.61)
 
-    # 최적 후보 선택: 예상 비율에 가장 가까운 것
-    # 또는 폭이 가장 넓은 것 (더 많은 데이터)
-    # 여기서는 폭 우선
+    # 최적 후보 선택 (폭 우선)
     best = max(candidates, key=lambda x: x[2])
-    seg_start, seg_end, width, estimated_pixels = best
+    seg_start, seg_end, width, _ = best
 
-    # 🚨 추가 안전 가드: 성공했던 0.23 기준 (검증된 값)
+    # 추가 안전 가드
     SAFE_MAX_WIDTH = 0.23
     if width > SAFE_MAX_WIDTH:
-        print(f"[AUTO ZONE B] Selected segment width={width:.3f} > SAFE_MAX_WIDTH={SAFE_MAX_WIDTH}")
-        print("[AUTO ZONE B] Forcing SAFE FALLBACK to avoid transition inclusion")
-        print("[AUTO ZONE B] B_selected_range: [0.380, 0.610] (safe buffer fallback)")
+        print(f"[AUTO ZONE B] width={width:.3f} > {SAFE_MAX_WIDTH}, using SAFE FALLBACK")
         return ZoneSpec("B", 0.38, 0.61)
 
-    print(
-        f"[AUTO ZONE B] B_selected_range: [{seg_start:.3f}, {seg_end:.3f}], "
-        f"width={width:.3f}, estimated_pixels={estimated_pixels}"
-    )
-
+    print(f"[AUTO ZONE B] B_selected_range: [{seg_start:.3f}, {seg_end:.3f}]")
     return ZoneSpec("B", seg_start, seg_end)
+
+
+def _split_segment_by_exclusion(
+    start: float, end: float, exclusions: List[TransitionRange]
+) -> List[Tuple[float, float]]:
+    """Split a range [start, end] by excluding specific segments."""
+    segments = [(start, end)]
+
+    for tr in exclusions:
+        ex_start, ex_end = tr.r_start, tr.r_end
+        new_segments = []
+        for seg_start, seg_end in segments:
+            # No overlap
+            if ex_end <= seg_start or ex_start >= seg_end:
+                new_segments.append((seg_start, seg_end))
+            else:
+                # Overlap - split
+                if seg_start < ex_start:
+                    new_segments.append((seg_start, ex_start))
+                if ex_end < seg_end:
+                    new_segments.append((ex_end, seg_end))
+        segments = new_segments
+
+    return segments
 
 
 def robust_mean_lab(
@@ -958,110 +931,20 @@ def compute_zone_results_2d(
     delta_e_list = []
 
     for zn, zmask in zone_masks.items():
-        z = (zmask > 0) & (lens_mask > 0)
-        z_ink = z & (ink_mask > 0)
+        # Calculate result for a single zone
+        res = _calculate_single_zone_result(zn, zmask, lab, target_labs[zn], thresholds[zn], lens_mask, ink_mask)
 
-        # mean_all (전체)
-        mean_all, n_all = safe_mean_lab(lab, z)
+        results.append(res)
 
-        # mean_ink (잉크만)
-        mean_ink, n_ink = safe_mean_lab(lab, z_ink)
+        # Collect ΔE and NG reasons
+        if res["delta_e"] is not None:
+            delta_e_list.append(res["delta_e"])
 
-        ink_ratio = (n_ink / n_all) if n_all > 0 else 0.0
-
-        # 상세 통계 (AI 진단용)
-        std_all = None
-        percentiles_all = None
-        if n_all > 0:
-            pixels_all = lab[z]
-            std_all = [float(np.std(pixels_all[:, i])) for i in range(3)]
-            percentiles_all = {
-                "L": {f"p{p}": float(np.percentile(pixels_all[:, 0], p)) for p in [5, 25, 50, 75, 95]},
-                "a": {f"p{p}": float(np.percentile(pixels_all[:, 1], p)) for p in [5, 25, 50, 75, 95]},
-                "b": {f"p{p}": float(np.percentile(pixels_all[:, 2], p)) for p in [5, 25, 50, 75, 95]},
-            }
-
-        # Target Lab
-        tgt = np.array(target_labs[zn], np.float32)
-        thr = float(thresholds[zn])
-
-        # ΔE 계산: ink_ratio에 따라 선택
-        # ink_ratio < 5%: 잉크가 거의 없음 (투명/백색 영역) → mean_all 사용
-        # ink_ratio >= 5%: 잉크 충분 → mean_ink 사용
-        MIN_INK_RATIO = 0.05
-        if mean_ink is not None and n_ink > 0 and ink_ratio >= MIN_INK_RATIO:
-            used = np.array(mean_ink, np.float32)
-            de = delta_e_cie76(used, tgt)
-            used_basis = "mean_ink"
-            measured_lab = mean_ink
-        elif mean_all is not None:
-            used = np.array(mean_all, np.float32)
-            de = delta_e_cie76(used, tgt)
-            used_basis = "mean_all"
-            measured_lab = mean_all
-        else:
-            de = None
-            used_basis = "none"
-            measured_lab = None
-
-        is_ok = (de is not None) and (de <= thr)
-
-        if de is not None:
-            delta_e_list.append(de)
-
-        # NG 이유 수집
-        if measured_lab is None:
-            ng_reasons.append(f"Zone {zn}: no pixels")
-        elif de is not None and de > thr:
-            ng_reasons.append(f"Zone {zn}: ΔE={de:.2f} > {thr:.2f}")
-
-        # 디버깅 로그
-        de_str = f"{de:.2f}" if de is not None else "N/A"
-        std_str = f"std=[{std_all[0]:.1f}, {std_all[1]:.1f}, {std_all[2]:.1f}]" if std_all else "std=N/A"
-        print(
-            f"  Zone {zn}: "
-            f"pixels_all={n_all}, pixels_ink={n_ink}, ink_ratio={ink_ratio:.2%}, "
-            f"Lab_all={mean_all}, Lab_ink={mean_ink}, {std_str}, "
-            f"ΔE={de_str} (basis={used_basis})"
-        )
-
-        # Diff 계산 (측정 - 기준)
-        diff_info = None
-        if measured_lab is not None:
-            dL = measured_lab[0] - target_labs[zn][0]
-            da = measured_lab[1] - target_labs[zn][1]
-            db = measured_lab[2] - target_labs[zn][2]
-
-            from src.core.color_evaluator import describe_color_shift
-
-            diff_info = {
-                "dL": float(dL),
-                "da": float(da),
-                "db": float(db),
-                "direction": describe_color_shift(dL, da, db),
-            }
-
-        results.append(
-            {
-                "zone_name": zn,
-                "measured_lab": measured_lab,
-                "target_lab": target_labs[zn],
-                "delta_e": de,
-                "threshold": thr,
-                "is_ok": bool(is_ok),
-                "pixel_count": n_all,
-                "pixel_count_ink": n_ink,
-                "ink_pixel_ratio": float(ink_ratio),
-                "measured_lab_all": mean_all,
-                "measured_lab_ink": mean_ink,
-                "delta_e_basis": used_basis,
-                # AI 진단용 상세 통계
-                "std_lab": std_all,
-                "percentiles": percentiles_all,
-                # Diff 정보 (운영 UX)
-                "diff": diff_info,
-            }
-        )
+        if not res["is_ok"]:
+            if res["measured_lab"] is None:
+                ng_reasons.append(f"Zone {zn}: no pixels")
+            else:
+                ng_reasons.append(f"Zone {zn}: ΔE={res['delta_e']:.2f} > {res['threshold']:.2f}")
 
     # Overall ΔE
     overall_de = float(np.mean(delta_e_list)) if delta_e_list else 0.0
@@ -1070,6 +953,107 @@ def compute_zone_results_2d(
     judgment = "OK" if len(ng_reasons) == 0 else "NG"
 
     return judgment, overall_de, results, ng_reasons
+
+
+def _calculate_single_zone_result(
+    zone_name: str,
+    zone_mask: np.ndarray,
+    lab_float: np.ndarray,
+    target_lab: List[float],
+    threshold: float,
+    lens_mask: np.ndarray,
+    ink_mask: np.ndarray,
+) -> Dict[str, Any]:
+    """Calculate statistics and comparison for a single zone."""
+    z = (zone_mask > 0) & (lens_mask > 0)
+    z_ink = z & (ink_mask > 0)
+
+    # mean_all (전체)
+    mean_all, n_all = safe_mean_lab(lab_float, z)
+
+    # mean_ink (잉크만)
+    mean_ink, n_ink = safe_mean_lab(lab_float, z_ink)
+
+    ink_ratio = (n_ink / n_all) if n_all > 0 else 0.0
+
+    # 상세 통계 (AI 진단용)
+    std_all = None
+    percentiles_all = None
+    if n_all > 0:
+        pixels_all = lab_float[z]
+        std_all = [float(np.std(pixels_all[:, i])) for i in range(3)]
+        percentiles_all = {
+            "L": {f"p{p}": float(np.percentile(pixels_all[:, 0], p)) for p in [5, 25, 50, 75, 95]},
+            "a": {f"p{p}": float(np.percentile(pixels_all[:, 1], p)) for p in [5, 25, 50, 75, 95]},
+            "b": {f"p{p}": float(np.percentile(pixels_all[:, 2], p)) for p in [5, 25, 50, 75, 95]},
+        }
+
+    # Target Lab
+    tgt = np.array(target_lab, np.float32)
+    thr = float(threshold)
+
+    # ΔE 계산: ink_ratio에 따라 선택
+    MIN_INK_RATIO = 0.05
+    if mean_ink is not None and n_ink > 0 and ink_ratio >= MIN_INK_RATIO:
+        used = np.array(mean_ink, np.float32)
+        de = delta_e_cie76(used, tgt)
+        used_basis = "mean_ink"
+        measured_lab = mean_ink
+    elif mean_all is not None:
+        used = np.array(mean_all, np.float32)
+        de = delta_e_cie76(used, tgt)
+        used_basis = "mean_all"
+        measured_lab = mean_all
+    else:
+        de = None
+        used_basis = "none"
+        measured_lab = None
+
+    is_ok = (de is not None) and (de <= thr)
+
+    # 디버깅 로그
+    de_str = f"{de:.2f}" if de is not None else "N/A"
+    std_str = f"std=[{std_all[0]:.1f}, {std_all[1]:.1f}, {std_all[2]:.1f}]" if std_all else "std=N/A"
+    print(
+        f"  Zone {zone_name}: "
+        f"pixels_all={n_all}, pixels_ink={n_ink}, ink_ratio={ink_ratio:.2%}, "
+        f"Lab_all={mean_all}, Lab_ink={mean_ink}, {std_str}, "
+        f"ΔE={de_str} (basis={used_basis})"
+    )
+
+    # Diff 계산 (측정 - 기준)
+    diff_info = None
+    if measured_lab is not None:
+        dL = measured_lab[0] - target_lab[0]
+        da = measured_lab[1] - target_lab[1]
+        db = measured_lab[2] - target_lab[2]
+
+        from src.core.color_evaluator import describe_color_shift
+
+        diff_info = {
+            "dL": float(dL),
+            "da": float(da),
+            "db": float(db),
+            "direction": describe_color_shift(dL, da, db),
+        }
+
+    return {
+        "zone_name": zone_name,
+        "measured_lab": measured_lab,
+        "target_lab": target_lab,
+        "delta_e": de,
+        "threshold": thr,
+        "is_ok": bool(is_ok),
+        "pixel_count": n_all,
+        "pixel_count_ink": n_ink,
+        "ink_pixel_ratio": float(ink_ratio),
+        "measured_lab_all": mean_all,
+        "measured_lab_ink": mean_ink,
+        "delta_e_basis": used_basis,
+        "std_lab": std_all,
+        "percentiles": percentiles_all,
+        "diff": diff_info,
+    }
 
 
 # ================================

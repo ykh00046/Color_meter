@@ -196,6 +196,21 @@
                         </div>
                     </div>
 
+                    <!-- P1-2: Radial Profile Analysis Card -->
+                    <div class="card p-4">
+                        <div class="section-title flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+                                Structural Similarity
+                            </div>
+                            <div id="profile-score-badge" class="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-800 text-cyan-400 border border-cyan-500/30">-</div>
+                        </div>
+                        <div class="h-40 relative">
+                            <canvas id="profile-chart"></canvas>
+                        </div>
+                        <div id="profile-message" class="text-[10px] text-gray-500 mt-2 italic leading-tight text-center">-</div>
+                    </div>
+
                     <div class="card p-4">
                         <div class="section-title"><svg class="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Zone Deviation (Heatmap)</div>
                         <div class="relative h-48 bg-slate-900 rounded border border-gray-700 flex items-center justify-center overflow-hidden">
@@ -412,6 +427,21 @@
                 this.els.imgSample.src = URL.createObjectURL(sampleFile);
                 this.originalSampleSrc = this.els.imgSample.src; // Cache for blink
                 ChartRenderer.drawHeatmap(test.zone_deltas);
+
+                // P1-2: Radial Profile Chart
+                if (test.radial_profile && data.reference?.radial_profile) {
+                    ChartRenderer.drawProfileChart(data.reference.radial_profile, test.radial_profile);
+
+                    const pScore = test.profile_score || 0;
+                    const pDetails = test.profile_details || {};
+                    const badge = document.getElementById('profile-score-badge');
+                    badge.textContent = `Score: ${pScore.toFixed(1)}`;
+                    badge.className = `text-xs font-bold px-2 py-0.5 rounded-full border ${pScore > 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'}`;
+
+                    document.getElementById('profile-message').textContent = pDetails.message || 'Structural comparison complete';
+                } else {
+                    document.getElementById('profile-message').textContent = 'Profile data unavailable';
+                }
 
                 // 2. Judgment Banner
                 const banner = document.getElementById('judgment-banner');
@@ -787,6 +817,71 @@ const clusterMax = Logic.getClusterMaxDelta(test);
 
                     ctx.fillStyle = '#fff';
                     ctx.fillText(z.delta_e.toFixed(1), x + barW / 2, y - 5);
+                });
+            },
+
+            drawProfileChart(refProfile, testProfile) {
+                const canvas = document.getElementById('profile-chart');
+                if (!canvas) return;
+
+                // Destroy existing chart if it exists
+                if (this.profileChart) {
+                    this.profileChart.destroy();
+                }
+
+                const ctx = canvas.getContext('2d');
+
+                // Use 'a' channel for structural visualization as it's often most sensitive to color structure
+                const labels = Array.from({length: refProfile.a.length}, (_, i) => i);
+
+                this.profileChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Standard (a*)',
+                                data: refProfile.a,
+                                borderColor: 'rgba(148, 163, 184, 0.8)',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Sample (a*)',
+                                data: testProfile.a,
+                                borderColor: '#22d3ee',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 10,
+                                    font: { size: 9 },
+                                    color: '#94a3b8'
+                                }
+                            },
+                            tooltip: { enabled: true }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { font: { size: 8 }, color: '#64748b' }
+                            }
+                        }
+                    }
                 });
             }
         };
