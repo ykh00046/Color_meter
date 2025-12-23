@@ -1,4 +1,4 @@
-# 테스트 커버리지 리포트
+﻿# 테스트 커버리지 리포트
 
 **생성일**: 2025-12-15
 **전체 커버리지**: 60%
@@ -378,10 +378,10 @@ Week 4 (Phase3): 80% ████████████████░░░�
 
 ## 🔗 관련 문서
 
-- [IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md): 전체 개선 계획
+- [IMPROVEMENT_PLAN.md](../planning/IMPROVEMENT_PLAN.md): 전체 개선 계획
 - [PHASE7_COMPLETION_REPORT.md](planning/PHASE7_COMPLETION_REPORT.md): PHASE7 완료 리포트
 - [pytest.ini](../pytest.ini): 테스트 설정
-- [htmlcov/index.html](../htmlcov/index.html): 상세 HTML 리포트
+- [htmlcov/index.html](../reports/coverage/htmlcov/index.html): 상세 HTML 리포트
 
 ---
 
@@ -389,7 +389,7 @@ Week 4 (Phase3): 80% ████████████████░░░�
 
 커버리지 개선 관련 제안이나 질문이 있다면:
 1. GitHub Issues에 등록
-2. IMPROVEMENT_PLAN.md에 코멘트 추가
+2. docs/planning/IMPROVEMENT_PLAN.md에 코멘트 추가
 3. 팀 회의에서 논의
 
 ---

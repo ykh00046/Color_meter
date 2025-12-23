@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator, InspectionResult
 from src.core.image_loader import ImageConfig, ImageLoader
 from src.core.lens_detector import DetectorConfig, LensDetectionError, LensDetector
+from src.core.quality_metrics import compute_quality_metrics
 from src.core.radial_profiler import ProfilerConfig, RadialProfiler
 from src.core.zone_segmenter import SegmenterConfig, ZoneSegmentationError, ZoneSegmenter
 
@@ -62,10 +63,20 @@ class InspectionPipeline:
 
         # profiler 설정: SKU params.optical_clear_ratio -> r_start_ratio에 반영
         profiler_cfg = profiler_config or ProfilerConfig()
-        optical_clear = sku_config.get("params", {}).get("optical_clear_ratio")
+        params = sku_config.get("params", {})
+        optical_clear = params.get("optical_clear_ratio")
+        center_exclude = params.get("center_exclude_ratio")
         if isinstance(optical_clear, (int, float)) and 0 <= optical_clear < 1:
             profiler_cfg.r_start_ratio = float(optical_clear)
-            logger.info(f"Applying optical_clear_ratio={optical_clear:.3f} to ProfilerConfig.r_start_ratio")
+        if isinstance(center_exclude, (int, float)) and 0 <= center_exclude < 1:
+            profiler_cfg.r_start_ratio = max(profiler_cfg.r_start_ratio, float(center_exclude))
+        if profiler_cfg.r_start_ratio > 0:
+            logger.info(
+                "Applying r_start_ratio=%.3f (optical_clear_ratio=%s, center_exclude_ratio=%s)",
+                profiler_cfg.r_start_ratio,
+                f"{optical_clear:.3f}" if isinstance(optical_clear, (int, float)) else "None",
+                f"{center_exclude:.3f}" if isinstance(center_exclude, (int, float)) else "None",
+            )
         self.radial_profiler = RadialProfiler(profiler_cfg)
         seg_cfg = segmenter_config or SegmenterConfig()
         # Note: expected_zones는 process() 메서드에서 params.expected_zones로 읽어서 segment()에 전달
@@ -180,6 +191,7 @@ class InspectionPipeline:
                 suggestions.append("→ Verify image quality or adjust detector parameters")
 
             # 3. 극좌표 변환 및 프로파일 추출
+            quality_metrics = compute_quality_metrics(processed_image, lens_detection)
             logger.debug("Step 3: Extracting radial profile")
             radial_profile = self.radial_profiler.extract_profile(processed_image, lens_detection)
 
@@ -192,14 +204,17 @@ class InspectionPipeline:
                 logger.debug(f"Using expected_zones hint: {expected_zones}")
 
             # 인쇄 영역 범위 추정 (SKU config 기반)
-            optical_clear_ratio = self.sku_config.get("params", {}).get("optical_clear_ratio", 0.15)
-            r_inner = max(0.0, optical_clear_ratio)  # 투명부 끝 = 인쇄 시작
+            params = self.sku_config.get("params", {})
+            optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
+            center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
+            r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)  # center exclusion takes priority
             r_outer = 0.95  # 인쇄 영역 끝 (렌즈 외곽 약간 제외)
 
             # AI 피드백 반영: 반경 기준 명확히 출력
             logger.info(
                 f"[ZONE COORD] Zone segmentation using PRINT AREA basis:\n"
-                f"  - r_inner={r_inner:.3f} (print start, from optical_clear_ratio={optical_clear_ratio:.3f})\n"
+                f"  - r_inner={r_inner:.3f} (print start, from optical_clear_ratio={optical_clear_ratio:.3f}, "
+                f"center_exclude_ratio={center_exclude_ratio:.3f})\n"
                 f"  - r_outer={r_outer:.3f} (print end)\n"
                 f"  - lens_radius={lens_detection.radius:.1f}px\n"
                 f"  - Normalization: r_norm = (r - {r_inner:.3f}) / ({r_outer:.3f} - {r_inner:.3f})"
@@ -251,6 +266,7 @@ class InspectionPipeline:
             inspection_result.zones = zones
             inspection_result.image = image  # 원본 이미지 (전처리 전)
             inspection_result.radial_profile = radial_profile
+            inspection_result.metrics = quality_metrics
 
             # PHASE7 Priority 5: 진단 정보, 경고, 제안 추가
             inspection_result.diagnostics = diagnostics if diagnostics else None
@@ -300,8 +316,10 @@ class InspectionPipeline:
                 logger.info("Attempting recovery with default 3-zone segmentation")
                 try:
                     # Recovery에도 r_inner, r_outer 적용
-                    optical_clear_ratio = self.sku_config.get("params", {}).get("optical_clear_ratio", 0.15)
-                    r_inner = max(0.0, optical_clear_ratio)
+                    params = self.sku_config.get("params", {})
+                    optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
+                    center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
+                    r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
                     r_outer = 0.95
                     zones = self.zone_segmenter.segment(
                         radial_profile, expected_zones=3, r_inner=r_inner, r_outer=r_outer
@@ -313,6 +331,7 @@ class InspectionPipeline:
                     inspection_result.zones = zones
                     inspection_result.image = image
                     inspection_result.radial_profile = radial_profile
+                    inspection_result.metrics = quality_metrics
                     processing_time = (datetime.now() - start_time).total_seconds() * 1000
                     logger.info(
                         f"Processing complete (with recovery): {inspection_result.judgment}, "

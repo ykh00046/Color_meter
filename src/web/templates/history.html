@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspection History - Color Meter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
+        :root {
+            --bg: #0b1020;
+            --card: #0f172a;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #22d3ee;
+        }
+        * { font-family: 'Manrope', sans-serif; }
+        body {
+            background: radial-gradient(circle at 15% 20%, #11182c, #0b1020 45%, #060912 100%);
+            min-height: 100vh;
+            color: var(--text);
+        }
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: var(--text);
+        }
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-ok { background: #166534; color: #dcfce7; }
+        .badge-warning { background: #92400e; color: #fef3c7; }
+        .badge-ng { background: #991b1b; color: #fee2e2; }
+        .badge-retake { background: #3730a3; color: #e0e7ff; }
+        .table-hover tbody tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2">
+                    <i class="fas fa-history mr-2"></i>
+                    Inspection History
+                </h1>
+                <p class="text-purple-100">View and analyze past inspection results</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="/" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition border border-slate-700">
+                    <i class="fas fa-home mr-2"></i>Home
+                </a>
+                <a href="/compare" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition border border-slate-700">
+                    <i class="fas fa-balance-scale mr-2"></i>Compare
+                </a>
+                <a href="/stats" class="bg-cyan-500 text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition">
+                    <i class="fas fa-chart-line mr-2"></i>Stats
+                </a>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Total Inspections</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1" id="stat-total">-</p>
+                    </div>
+                    <div class="bg-blue-100 p-3 rounded-full">
+                        <i class="fas fa-microscope text-blue-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Pass Rate</p>
+                        <p class="text-3xl font-bold text-green-600 mt-1" id="stat-pass-rate">-</p>
+                    </div>
+                    <div class="bg-green-100 p-3 rounded-full">
+                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg ΔE</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1" id="stat-avg-delta-e">-</p>
+                    </div>
+                    <div class="bg-purple-100 p-3 rounded-full">
+                        <i class="fas fa-palette text-purple-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg Confidence</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1" id="stat-avg-confidence">-</p>
+                    </div>
+                    <div class="bg-yellow-100 p-3 rounded-full">
+                        <i class="fas fa-star text-yellow-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">Filters</h2>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">SKU Code</label>
+                <input type="text" id="filter-sku" placeholder="Enter SKU"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Operator</label>
+                <input type="text" id="filter-operator" placeholder="Enter operator"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Batch</label>
+                <input type="text" id="filter-batch" placeholder="Enter batch/lot"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Judgment</label>
+                <select id="filter-judgment" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <option value="">All</option>
+                    <option value="OK">OK</option>
+                        <option value="OK_WITH_WARNING">OK with Warning</option>
+                        <option value="NG">NG</option>
+                        <option value="RETAKE">RETAKE</option>
+                    </select>
+                </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                    <input type="date" id="filter-start"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                    <input type="date" id="filter-end"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                </div>
+            </div>
+            <div class="flex items-end space-x-2">
+                <button onclick="applyFilters()" class="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
+                    <i class="fas fa-filter mr-2"></i>Apply
+                </button>
+                <button onclick="exportCsv()" class="w-full bg-white text-purple-600 px-4 py-2 rounded-lg border border-purple-200 hover:bg-purple-50 transition">
+                    <i class="fas fa-file-export mr-2"></i>Export CSV
+                </button>
+            </div>
+        </div>
+        </div>
+
+        <!-- Results Table -->
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Inspection Records</h2>
+                <div class="text-sm text-gray-500">
+                    Showing <span id="showing-count">0</span> of <span id="total-count">0</span> records
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full table-hover">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operator</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judgment</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">?E</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Results will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="mt-4 flex items-center justify-between">
+                <button id="btn-prev" onclick="previousPage()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas fa-chevron-left mr-2"></i>Previous
+                </button>
+                <div class="text-sm text-gray-500">
+                    Page <span id="current-page">1</span>
+                </div>
+                <button id="btn-next" onclick="nextPage()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    Next<i class="fas fa-chevron-right ml-2"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                <h3 class="text-xl font-semibold">Inspection Details</h3>
+                <button onclick="closeDetailModal()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="detail-content" class="p-6">
+                <!-- Detail content will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalRecords = 0;
+        const pageSize = 20;
+
+        function getDateRangeParams() {
+            const startVal = document.getElementById('filter-start').value;
+            const endVal = document.getElementById('filter-end').value;
+
+            const params = new URLSearchParams();
+            if (startVal) {
+                params.append('start_date', `${startVal}T00:00:00Z`);
+            }
+            if (endVal) {
+                params.append('end_date', `${endVal}T23:59:59Z`);
+            }
+            if (!startVal && !endVal) {
+                params.append('days', '30');
+            }
+            return params;
+        }
+
+        async function loadStats() {
+            try {
+                const sku = document.getElementById('filter-sku').value || null;
+                const params = getDateRangeParams();
+                if (sku) params.append('sku_code', sku);
+
+                const response = await fetch(`/api/inspection/history/stats/summary?${params}`);
+                const data = await response.json();
+
+                document.getElementById('stat-total').textContent = data.total_inspections.toLocaleString();
+                document.getElementById('stat-pass-rate').textContent = (data.pass_rate * 100).toFixed(1) + '%';
+                document.getElementById('stat-avg-delta-e').textContent = data.avg_delta_e.toFixed(2);
+                document.getElementById('stat-avg-confidence').textContent = (data.avg_confidence * 100).toFixed(1) + '%';
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const skip = (currentPage - 1) * pageSize;
+                const params = new URLSearchParams({
+                    skip: skip,
+                    limit: pageSize
+                });
+
+                const sku = document.getElementById('filter-sku').value;
+                const operator = document.getElementById('filter-operator').value;
+                const batch = document.getElementById('filter-batch').value;
+                const judgment = document.getElementById('filter-judgment').value;
+
+                if (sku) params.append('sku_code', sku);
+                if (operator) params.append('operator', operator);
+                if (batch) params.append('batch_number', batch);
+                if (judgment) params.append('judgment', judgment);
+
+                const dateParams = getDateRangeParams();
+                dateParams.forEach((value, key) => params.append(key, value));
+
+                const response = await fetch(`/api/inspection/history?${params}`);
+                const data = await response.json();
+
+                totalRecords = data.total;
+                renderTable(data.results);
+                updatePagination();
+
+                document.getElementById('showing-count').textContent = data.results.length;
+                document.getElementById('total-count').textContent = data.total;
+            } catch (error) {
+                console.error('Failed to load history:', error);
+                document.getElementById('history-table-body').innerHTML =
+                    '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Failed to load data</td></tr>';
+            }
+        }
+
+        function renderTable(results) {
+            const tbody = document.getElementById('history-table-body');
+
+            if (results.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No records found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = results.map(row => {
+                const date = new Date(row.created_at);
+                const dateStr = date.toLocaleDateString('ko-KR');
+                const timeStr = date.toLocaleTimeString('ko-KR');
+
+                let badgeClass = 'badge-retake';
+                if (row.judgment === 'OK') badgeClass = 'badge-ok';
+                else if (row.judgment === 'OK_WITH_WARNING') badgeClass = 'badge-warning';
+                else if (row.judgment === 'NG') badgeClass = 'badge-ng';
+
+                return `
+                    <tr>
+                        <td class="px-4 py-3 text-sm text-gray-900">#${row.id}</td>
+                        <td class="px-4 py-3 text-sm text-gray-500">
+                            <div>${dateStr}</div>
+                            <div class="text-xs text-gray-400">${timeStr}</div>
+                        </td>
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900">${row.sku_code}</td>
+                        <td class="px-4 py-3 text-sm text-gray-500 max-w-xs truncate" title="${row.image_filename}">
+                            ${row.image_filename}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-500">${row.operator || '-'}</td>
+                        <td class="px-4 py-3 text-sm text-gray-500">${row.batch_number || '-'}</td>
+                        <td class="px-4 py-3">
+                            <span class="badge ${badgeClass}">${row.judgment}</span>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-900">${row.overall_delta_e.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900">${(row.confidence * 100).toFixed(1)}%</td>
+                        <td class="px-4 py-3 text-sm">
+                            <button onclick="viewDetail('${row.session_id}')"
+                                    class="text-purple-600 hover:text-purple-800 font-medium">
+                                <i class="fas fa-eye mr-1"></i>View
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            document.getElementById('current-page').textContent = currentPage;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = currentPage >= totalPages;
+        }
+
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadHistory();
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadHistory();
+            }
+        }
+
+        function applyFilters() {
+            currentPage = 1;
+            loadStats();
+            loadHistory();
+        }
+
+        function exportCsv() {
+            const params = new URLSearchParams();
+            const sku = document.getElementById('filter-sku').value;
+            const operator = document.getElementById('filter-operator').value;
+            const batch = document.getElementById('filter-batch').value;
+            const judgment = document.getElementById('filter-judgment').value;
+
+            if (sku) params.append('sku_code', sku);
+            if (operator) params.append('operator', operator);
+            if (batch) params.append('batch_number', batch);
+            if (judgment) params.append('judgment', judgment);
+
+            const dateParams = getDateRangeParams();
+            dateParams.forEach((value, key) => params.append(key, value));
+
+            window.location.href = `/api/inspection/history/export?${params.toString()}`;
+        }
+
+        async function viewDetail(sessionId) {
+            try {
+                const response = await fetch(`/api/inspection/history/session/${sessionId}?include_full_result=true`);
+                const data = await response.json();
+
+                const modal = document.getElementById('detail-modal');
+                const content = document.getElementById('detail-content');
+
+                let ngReasonsHtml = '';
+                if (data.ng_reasons && data.ng_reasons.length > 0) {
+                    ngReasonsHtml = `
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-gray-700 mb-2">NG Reasons:</h4>
+                            <ul class="list-disc list-inside text-gray-600">
+                                ${data.ng_reasons.map(r => `<li>${r}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                let nextActionsHtml = '';
+                if (data.next_actions && data.next_actions.length > 0) {
+                    nextActionsHtml = `
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-gray-700 mb-2">Next Actions:</h4>
+                            <ul class="list-disc list-inside text-gray-600">
+                                ${data.next_actions.map(a => `<li>${a}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                content.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-sm text-gray-500">Session ID</p>
+                                <p class="font-medium">${data.session_id}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">SKU</p>
+                                <p class="font-medium">${data.sku_code}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Operator</p>
+                                <p class="font-medium">${data.operator || '-'}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Batch</p>
+                                <p class="font-medium">${data.batch_number || '-'}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Judgment</p>
+                                <p class="font-medium">${data.judgment}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">ΔE</p>
+                                <p class="font-medium">${data.overall_delta_e.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Confidence</p>
+                                <p class="font-medium">${(data.confidence * 100).toFixed(1)}%</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Zones</p>
+                                <p class="font-medium">${data.zones_count}</p>
+                            </div>
+                        </div>
+
+                        ${ngReasonsHtml}
+                        ${nextActionsHtml}
+
+                        <div>
+                            <h4 class="font-semibold text-gray-700 mb-2">Full Analysis Result:</h4>
+                            <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto">${JSON.stringify(data.analysis_result, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+
+                modal.classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to load detail:', error);
+                alert('Failed to load inspection details');
+            }
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detail-modal').classList.add('hidden');
+        }
+
+        // Load data on page load
+        window.addEventListener('load', () => {
+            loadStats();
+            loadHistory();
+        });
+    </script>
+</body>
+</html>

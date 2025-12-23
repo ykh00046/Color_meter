@@ -1,4 +1,4 @@
-# Day 6 작업 완료 보고서
+﻿# Day 6 작업 완료 보고서
 
 **작업일**: 2025-12-16
 **작업자**: Claude (AI Assistant)
@@ -161,7 +161,7 @@ addopts =
 - `pragma: no cover`, `if __name__ == .__main__.:` 제외
 
 ### 3. Coverage HTML 리포트
-- 위치: `htmlcov/index.html`
+- 위치: `reports/coverage/htmlcov/index.html`
 - 모듈별, 라인별 커버리지 시각화
 - Missing lines 강조 표시
 

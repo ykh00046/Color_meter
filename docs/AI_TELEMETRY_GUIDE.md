@@ -1,4 +1,4 @@
-# AI Telemetry & 데이터 분석 가이드
+﻿# AI Telemetry & 데이터 분석 가이드
 
 **목적**: JSON 텔레메트리를 활용한 AI 기반 품질 분석 고도화
 

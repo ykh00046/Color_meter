@@ -23,6 +23,7 @@ def uniform_cells():
     """
     균일한 색상의 셀들 (모두 비슷한 Lab 값)
     """
+    np.random.seed(0)  # deterministic noise for repeatable assertions
     cells = []
     base_L, base_a, base_b = 128.0, 128.0, 128.0
 

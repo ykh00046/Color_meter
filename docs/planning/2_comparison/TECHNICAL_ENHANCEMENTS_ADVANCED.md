@@ -1,4 +1,4 @@
-# STD-Based QC System: Advanced Technical Enhancements
+﻿# STD-Based QC System: Advanced Technical Enhancements
 
 **작성일**: 2025-12-17
 **상태**: 기술적 보완 계획 (Technical Enhancement Specification)

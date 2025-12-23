@@ -1,4 +1,4 @@
-# M2: Comparison & Judgment Implementation Plan
+﻿# M2: Comparison & Judgment Implementation Plan
 
 > **작성일**: 2025-12-18
 > **상태**: 🟡 진행 중

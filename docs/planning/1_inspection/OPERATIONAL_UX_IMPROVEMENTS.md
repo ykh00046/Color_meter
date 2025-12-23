@@ -1,4 +1,4 @@
-# 운영 UX 개선 (Operational UX Improvements)
+﻿# 운영 UX 개선 (Operational UX Improvements)
 
 **작성일:** 2025-12-13
 **상태:** ✅ 구현 완료 (Phase 1 Quick Wins)

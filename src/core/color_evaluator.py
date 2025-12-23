@@ -137,6 +137,7 @@ class InspectionResult:
     image: Optional[Any] = None  # np.ndarray
     ring_sector_cells: Optional[List[Any]] = None  # List[RingSectorCell] from angular_profiler
     uniformity_analysis: Optional[Dict[str, Any]] = None  # Uniformity analysis result
+    metrics: Optional[Dict[str, Any]] = None  # Quality metrics: blur, histogram, dot_stats
 
 
 class ColorEvaluationError(Exception):
@@ -280,15 +281,14 @@ class ColorEvaluator:
                 confidence=0.0,
             )
 
-        # expected_zones 수량 검증 (Critical Check)
+        # expected_zones 수량 검증 (Hint Only)
         expected_zones = config.get("params", {}).get("expected_zones")
         actual_count = len(zones)
 
         if expected_zones is not None:
             if actual_count != expected_zones:
-                msg = f"Zone count mismatch: expected {expected_zones}, detected {actual_count}"
+                msg = f"Zone count mismatch (hint): expected {expected_zones}, detected {actual_count}"
                 logger.warning(msg)
-                ng_reasons.append(msg)
                 # Zone 개수 불일치는 즉시 NG 사유 (우선순위 높음)
                 # 그러나 개별 Zone 평가 결과도 함께 보여주기 위해 여기서 바로 리턴하지 않음
 

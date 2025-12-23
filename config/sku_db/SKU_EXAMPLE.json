@@ -27,7 +27,145 @@
   },
   "params": {
     "expected_zones": 3,
-    "optical_clear_ratio": 0.0
+    "optical_clear_ratio": 0.0,
+    "ink_mapping": {
+      "A": "ink1",
+      "B": "ink2",
+      "C": "ink2"
+    },
+    "ink_thresholds": {
+      "default": {
+        "max_delta_e": 3.0
+      },
+      "ink1": {
+        "max_delta_e": 4.2
+      },
+      "ink2": {
+        "max_delta_e": 3.8
+      }
+    },
+    "quality_thresholds": {
+      "blur": {
+        "delta_warn": -50.0
+      },
+      "histogram": {
+        "lab_mean": 0.2,
+        "hsv_mean": 0.2
+      },
+      "dot_stats": {
+        "dot_count_delta": 50,
+        "dot_coverage_delta": 0.05
+      }
+    },
+    "version_stamp": {
+      "config_version": "v2.1",
+      "code_version": "2025-03-08",
+      "params_hash": "sha1:pending"
+    },
+    "ink_profile": {
+      "mode": "cluster",
+      "k": 3,
+      "k_policy": "fixed",
+      "std_clusters": [
+        {
+          "id": "std_c1",
+          "role": "primary",
+          "signature": {
+            "mean_ab": [
+              2.1,
+              6.3
+            ]
+          }
+        },
+        {
+          "id": "std_c2",
+          "role": "secondary",
+          "signature": {
+            "mean_ab": [
+              -1.2,
+              -3.4
+            ]
+          }
+        },
+        {
+          "id": "std_c3",
+          "role": "accent",
+          "signature": {
+            "mean_ab": [
+              0.8,
+              9.1
+            ]
+          }
+        }
+      ]
+    },
+    "mask_policy": {
+      "color_gate": "std",
+      "coverage_eval": "sample",
+      "min_ink_ratio_std": 0.08,
+      "min_ink_ratio_sample": 0.03,
+      "min_effective_pixels": 8000,
+      "sample_outside_std_ratio_warn": 0.1,
+      "sample_outside_std_ratio_fail": 0.2
+    },
+    "alignment_policy": {
+      "warn_center_offset_ratio": 0.05,
+      "stop_center_offset_ratio": 0.08,
+      "require_ok": true
+    },
+    "cluster_policy": {
+      "color_space": "ab",
+      "algorithm": "gmm",
+      "spatial_post": "merge_small_cc",
+      "min_cluster_pixels_ratio": {
+        "primary": 0.05,
+        "secondary": 0.03,
+        "accent": 0.01
+      },
+      "min_cluster_pixels": 3000,
+      "fragmentation_flag": 0.25
+    },
+    "matching_policy": {
+      "cost_weights": {
+        "delta_e": 1.0,
+        "coverage": 0.3,
+        "theta_hist": 0.2
+      },
+      "max_delta_e_for_match": 12.0,
+      "max_total_cost": 10.0
+    },
+    "decision_policy": {
+      "primary": {
+        "ok": 5,
+        "warn": 8,
+        "missing": "NG"
+      },
+      "secondary": {
+        "ok": 6,
+        "warn": 10,
+        "missing": "WARN"
+      },
+      "accent": {
+        "ok": 8,
+        "warn": 12,
+        "missing": "WARN"
+      },
+      "stop_reasons": [
+        "alignment_stop",
+        "insufficient_primary_pixels",
+        "too_many_ignored_pixels"
+      ]
+    },
+    "diagnostics_policy": {
+      "enable": true,
+      "report": [
+        "cluster_results",
+        "cluster_match",
+        "sample_outside_std_ratio",
+        "match_confidence",
+        "fragmentation"
+      ]
+    }
   },
   "metadata": {
     "created_at": "2025-12-10T10:00:00",

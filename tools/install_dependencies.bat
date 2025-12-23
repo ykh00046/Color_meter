@@ -1,4 +1,7 @@
 @echo off
+chcp 65001 >nul
+set PYTHONIOENCODING=utf-8
+
 REM ============================================
 REM Contact Lens Color Inspection System
 REM Dependency Installation Script (Windows)

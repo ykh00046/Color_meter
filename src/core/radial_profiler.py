@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 import cv2
@@ -5,6 +6,8 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 from src.core.lens_detector import LensDetection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -78,16 +81,38 @@ class RadialProfiler:
         a_std_arr = np.asarray(a_std)
         b_std_arr = np.asarray(b_std)
 
-        # axis=1 (theta 방향) 평균 - 이제 표준 Lab 스케일
-        L_profile = L_std_arr.mean(axis=1)
-        a_profile = a_std_arr.mean(axis=1)
-        b_profile = b_std_arr.mean(axis=1)
+        # Average over theta to get radial profiles.
+        if L_std_arr.shape[0] == r_samples and L_std_arr.shape[1] != r_samples:
+            radial_axis = 0
+        elif L_std_arr.shape[1] == r_samples:
+            radial_axis = 1
+        else:
+            radial_axis = 1
+            logger.warning(
+                "Unexpected polar shape %s for r_samples=%s; defaulting to axis=0 mean.",
+                L_std_arr.shape,
+                r_samples,
+            )
 
-        std_L = L_std_arr.std(axis=1)
-        std_a = a_std_arr.std(axis=1)
-        std_b = b_std_arr.std(axis=1)
+        if radial_axis == 1:
+            L_profile = L_std_arr.mean(axis=0)
+            a_profile = a_std_arr.mean(axis=0)
+            b_profile = b_std_arr.mean(axis=0)
+            std_L = L_std_arr.std(axis=0)
+            std_a = a_std_arr.std(axis=0)
+            std_b = b_std_arr.std(axis=0)
+            theta_len = L_std_arr.shape[0]
+        else:
+            L_profile = L_std_arr.mean(axis=1)
+            a_profile = a_std_arr.mean(axis=1)
+            b_profile = b_std_arr.mean(axis=1)
+            std_L = L_std_arr.std(axis=1)
+            std_a = a_std_arr.std(axis=1)
+            std_b = b_std_arr.std(axis=1)
+            theta_len = L_std_arr.shape[1]
 
-        pixel_count = np.full_like(L_profile, self.config.theta_samples)
+        r_samples = int(L_profile.shape[0])
+        pixel_count = np.full_like(L_profile, theta_len)
         r_normalized = np.linspace(0.0, 1.0, r_samples)
 
         # Crop

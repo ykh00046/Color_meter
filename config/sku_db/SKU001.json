@@ -27,7 +27,37 @@
   },
   "params": {
     "expected_zones": 3,
-    "optical_clear_ratio": 0.15
+    "optical_clear_ratio": 0.15,
+    "center_exclude_ratio": 0.2,
+    "ink_mapping": {
+      "A": "ink1",
+      "B": "ink1",
+      "C": "ink2"
+    },
+    "ink_thresholds": {
+      "default": {
+        "max_delta_e": 8.0
+      },
+      "ink1": {
+        "max_delta_e": 8.0
+      },
+      "ink2": {
+        "max_delta_e": 10.0
+      }
+    },
+    "quality_thresholds": {
+      "blur": {
+        "delta_warn": -50.0
+      },
+      "histogram": {
+        "lab_mean": 0.2,
+        "hsv_mean": 0.2
+      },
+      "dot_stats": {
+        "dot_count_delta": 50,
+        "dot_coverage_delta": 0.05
+      }
+    }
   },
   "metadata": {
     "created_at": "2025-12-11",

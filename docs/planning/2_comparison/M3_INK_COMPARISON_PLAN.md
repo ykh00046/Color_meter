@@ -1,4 +1,4 @@
-# M3: Ink Comparison Implementation Plan
+﻿# M3: Ink Comparison Implementation Plan
 
 > **작성일**: 2025-12-18
 > **목적**: P1-1 - GMM 기반 잉크 비교 기능 추가

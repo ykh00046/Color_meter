@@ -1,4 +1,4 @@
-# Phase 3 완료 보고서
+﻿# Phase 3 완료 보고서
 
 **작성일:** 2025-12-12
 **Phase:** 3 - API Endpoint 확장 및 Frontend UI 구현

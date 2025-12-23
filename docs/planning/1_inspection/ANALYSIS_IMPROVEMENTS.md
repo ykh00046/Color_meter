@@ -1,4 +1,4 @@
-# Analysis & UI Improvements
+﻿# Analysis & UI Improvements
 
 Updated: 2025-12-12
 

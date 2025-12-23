@@ -1,4 +1,4 @@
-# Contact Lens Color Inspection System - 전체 프로젝트 검토 보고서
+﻿# Contact Lens Color Inspection System - 전체 프로젝트 검토 보고서
 
 **작성일**: 2025-12-14
 **검토 범위**: 전체 시스템 (코드, 문서, 설정, 테스트)
@@ -280,7 +280,7 @@ docs/
 
 ### 5.2 테스트 커버리지
 
-**커버리지 보고서**: `htmlcov/status.json` 존재 확인됨
+**커버리지 보고서**: `reports/coverage/htmlcov/status.json` 존재 확인됨
 **상세 확인 필요**: pytest-cov로 실제 커버리지 측정 권장
 
 **주요 우려사항**:

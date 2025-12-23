@@ -1,4 +1,4 @@
-"""
+﻿"""
 Coverage Summary Generator
 
 테스트 커버리지 결과를 분석하고 요약 리포트를 생성합니다.
@@ -11,9 +11,9 @@ from typing import Dict, List, Tuple
 
 def load_coverage_data() -> Dict:
     """Load coverage.json file"""
-    coverage_file = Path("coverage.json")
+    coverage_file = Path("reports/coverage/coverage.json")
     if not coverage_file.exists():
-        raise FileNotFoundError("coverage.json not found. Run pytest with --cov first.")
+        raise FileNotFoundError("reports/coverage/coverage.json not found. Run pytest with --cov first.")
 
     with open(coverage_file) as f:
         return json.load(f)
@@ -145,7 +145,7 @@ def main():
     print(f"\nCoverage Badge (for README.md):")
     print(f"  {badge}")
 
-    print(f"\nHTML Report: file://{Path.cwd()}/htmlcov/index.html")
+    print(f"\nHTML Report: file://{Path.cwd()}/reports/coverage/htmlcov/index.html")
     print()
 
     return 0

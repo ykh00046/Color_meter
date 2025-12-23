@@ -1,4 +1,4 @@
-# 📦 SKU 관리 모듈 설계 (SkuConfigManager & Baseline Generator)
+﻿# 📦 SKU 관리 모듈 설계 (SkuConfigManager & Baseline Generator)
 
 > **작성:** 2025-12-11
 > **목적:** 다수 SKU의 기준값을 효율적으로 관리하고, 양품 이미지로부터 **자동으로 기준값을 생성하는 기능**을 설계합니다. 또한 CLI를 통한 SKU CRUD 인터페이스를 정의합니다.

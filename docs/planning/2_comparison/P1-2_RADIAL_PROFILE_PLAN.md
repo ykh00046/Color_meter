@@ -1,4 +1,4 @@
-# P1-2: Radial Profile Comparison Implementation Plan
+﻿# P1-2: Radial Profile Comparison Implementation Plan
 
 > **작성일**: 2025-12-18
 > **목적**: P1-2 - Radial Profile 비교 기능 추가

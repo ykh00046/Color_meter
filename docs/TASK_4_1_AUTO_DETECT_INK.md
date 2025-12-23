@@ -1,4 +1,4 @@
-# Task 4.1: Auto-Detect Ink Configuration
+﻿# Task 4.1: Auto-Detect Ink Configuration
 
 **Status**: ✅ Completed (2025-12-19)
 **Estimated Time**: 12 hours

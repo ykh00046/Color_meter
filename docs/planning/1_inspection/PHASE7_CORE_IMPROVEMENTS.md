@@ -1,4 +1,4 @@
-# Phase 7: Core Algorithm Improvements (Backend Focus)
+﻿# Phase 7: Core Algorithm Improvements (Backend Focus)
 
 **작성일**: 2025-12-12
 **목적**: 사용자 수동 분석 방식 및 전문가 피드백 기반 핵심 알고리즘 개선

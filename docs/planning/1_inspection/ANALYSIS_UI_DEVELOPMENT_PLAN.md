@@ -1,4 +1,4 @@
-# Analysis-Focused Web UI Development Plan
+﻿# Analysis-Focused Web UI Development Plan
 
 ## 문서 정보
 - **작성일**: 2025-12-12

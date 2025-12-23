@@ -1,4 +1,4 @@
-# 📈 성능 분석 보고서 (Performance Analysis & Optimization)
+﻿# 📈 성능 분석 보고서 (Performance Analysis & Optimization)
 
 **Date:** 2025-12-16 (Latest System - 2D Zone Analysis + InkEstimator)
 **대상 모듈:** 전체 파이프라인 (2D Zone Analysis, InkEstimator)

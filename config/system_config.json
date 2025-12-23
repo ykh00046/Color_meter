@@ -1,0 +1,137 @@
+{
+  "_comment": "System Configuration Template - Copy to system_config.json and customize",
+
+  "camera": {
+    "type": "basler",
+    "model": "acA2440-75um",
+    "resolution": {
+      "width": 2448,
+      "height": 2048
+    },
+    "exposure_time": 10000,
+    "gain": 0.0,
+    "frame_rate": 30,
+    "pixel_format": "RGB8",
+    "trigger_mode": "software",
+    "ip_address": "192.168.1.100"
+  },
+
+  "lighting": {
+    "type": "ring_led",
+    "color_temperature": 5500,
+    "brightness": 80,
+    "white_balance": {
+      "enabled": true,
+      "method": "gray_world",
+      "reference_chart": "ColorChecker"
+    }
+  },
+
+  "processing": {
+    "lens_detection": {
+      "method": "hybrid",
+      "hough_params": {
+        "dp": 1.2,
+        "min_dist": 100,
+        "param1": 50,
+        "param2": 30,
+        "min_radius": 800,
+        "max_radius": 1200
+      },
+      "contour_params": {
+        "threshold_method": "otsu",
+        "morphology_kernel": 5
+      }
+    },
+
+    "radial_profile": {
+      "r_start": 0.0,
+      "r_end": 1.0,
+      "r_step": 0.01,
+      "theta_samples": 360,
+      "smoothing": {
+        "enabled": true,
+        "method": "savgol",
+        "window_length": 11,
+        "polyorder": 3
+      }
+    },
+
+    "zone_segmentation": {
+      "min_zones": 3,
+      "max_zones": 5,
+      "inflection_detection": {
+        "prominence": 0.5,
+        "distance": 10
+      }
+    },
+
+    "color_evaluation": {
+      "delta_e_method": "CIEDE2000",
+      "default_threshold": 3.0,
+      "confidence_threshold": 0.8
+    }
+  },
+
+  "sku": {
+    "default_sku": "SKU001",
+    "auto_load": true,
+    "baseline_samples": 30,
+    "threshold_calculation": {
+      "method": "mean_plus_2sigma",
+      "min_threshold": 2.0,
+      "max_threshold": 10.0
+    }
+  },
+
+  "ui": {
+    "theme": "light",
+    "language": "ko",
+    "auto_refresh": true,
+    "refresh_interval": 100,
+    "display": {
+      "show_overlay": true,
+      "show_profile_plot": true,
+      "show_delta_e_heatmap": true
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "file_path": "logs/app_{date}.log",
+    "rotation": "daily",
+    "retention_days": 30,
+    "format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+  },
+
+  "database": {
+    "type": "sqlite",
+    "path": "data/logs/inspection.db",
+    "auto_backup": true,
+    "backup_interval_hours": 24
+  },
+
+  "mes_integration": {
+    "enabled": false,
+    "api_url": "http://mes-server.local/api",
+    "api_key": "YOUR_API_KEY_HERE",
+    "timeout": 5,
+    "retry_attempts": 3
+  },
+
+  "calibration": {
+    "auto_calibration": true,
+    "calibration_interval_hours": 168,
+    "brightness_monitoring": {
+      "enabled": true,
+      "alert_threshold": 10.0
+    }
+  },
+
+  "performance": {
+    "num_threads": 4,
+    "gpu_enabled": false,
+    "target_processing_time_ms": 150,
+    "max_processing_time_ms": 200
+  }
+}

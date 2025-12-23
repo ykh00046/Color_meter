@@ -1,4 +1,4 @@
-# Lab Color Space Scale Fix
+﻿# Lab Color Space Scale Fix
 
 **Issue Date**: 2025-12-12
 **Severity**: CRITICAL

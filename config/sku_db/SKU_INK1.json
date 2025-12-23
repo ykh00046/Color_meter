@@ -1,0 +1,154 @@
+{
+  "sku_code": "SKU_INK1",
+  "description": "Single ink sample set",
+  "default_threshold": 3.0,
+  "zones": {
+    "A": {
+      "L": 45.2,
+      "a": 15.8,
+      "b": -42.3,
+      "threshold": 4.2,
+      "description": "Edge Zone (A)"
+    },
+    "B": {
+      "L": 78.3,
+      "a": -5.6,
+      "b": 65.2,
+      "threshold": 3.8,
+      "description": "Middle Zone (B)"
+    },
+    "C": {
+      "L": 42.7,
+      "a": 28.3,
+      "b": 18.5,
+      "threshold": 3.5,
+      "description": "Center Zone (C)"
+    }
+  },
+  "params": {
+    "expected_zones": 3,
+    "optical_clear_ratio": 0.0,
+    "ink_mapping": {
+      "A": "ink1",
+      "B": "ink1",
+      "C": "ink1"
+    },
+    "ink_thresholds": {
+      "default": {
+        "max_delta_e": 3.0
+      },
+      "ink1": {
+        "max_delta_e": 4.2
+      }
+    },
+    "quality_thresholds": {
+      "blur": {
+        "delta_warn": -50.0
+      },
+      "histogram": {
+        "lab_mean": 0.2,
+        "hsv_mean": 0.2
+      },
+      "dot_stats": {
+        "dot_count_delta": 50,
+        "dot_coverage_delta": 0.05
+      }
+    },
+    "version_stamp": {
+      "config_version": "v2.1",
+      "code_version": "2025-03-08",
+      "params_hash": "sha1:pending"
+    },
+    "ink_profile": {
+      "mode": "cluster",
+      "k": 1,
+      "k_policy": "fixed",
+      "std_clusters": [
+        {
+          "id": "std_c1",
+          "role": "primary",
+          "signature": {
+            "mean_ab": [
+              5.617324352264404,
+              17.8734130859375
+            ]
+          }
+        }
+      ]
+    },
+    "mask_policy": {
+      "color_gate": "std",
+      "coverage_eval": "sample",
+      "min_ink_ratio_std": 0.08,
+      "min_ink_ratio_sample": 0.03,
+      "min_effective_pixels": 8000,
+      "sample_outside_std_ratio_warn": 0.2,
+      "sample_outside_std_ratio_fail": 0.35,
+      "std_mask_buffer_iter": 1
+    },
+    "alignment_policy": {
+      "warn_center_offset_ratio": 0.07,
+      "stop_center_offset_ratio": 0.1,
+      "require_ok": true
+    },
+    "cluster_policy": {
+      "color_space": "ab",
+      "algorithm": "gmm",
+      "spatial_post": "merge_small_cc",
+      "min_cluster_pixels_ratio": {
+        "primary": 0.05,
+        "secondary": 0.03,
+        "accent": 0.01
+      },
+      "min_cluster_pixels": 3000,
+      "fragmentation_flag": 0.25
+    },
+    "matching_policy": {
+      "cost_weights": {
+        "delta_e": 1.0,
+        "coverage": 0.3,
+        "theta_hist": 0.2
+      },
+      "max_delta_e_for_match": 12.0,
+      "max_total_cost": 10.0
+    },
+    "decision_policy": {
+      "primary": {
+        "ok": 5,
+        "warn": 8,
+        "missing": "NG"
+      },
+      "secondary": {
+        "ok": 6,
+        "warn": 10,
+        "missing": "WARN"
+      },
+      "accent": {
+        "ok": 8,
+        "warn": 12,
+        "missing": "WARN"
+      },
+      "stop_reasons": [
+        "alignment_stop",
+        "insufficient_primary_pixels",
+        "too_many_ignored_pixels"
+      ]
+    },
+    "diagnostics_policy": {
+      "enable": true,
+      "report": [
+        "cluster_results",
+        "cluster_match",
+        "sample_outside_std_ratio",
+        "match_confidence",
+        "fragmentation"
+      ]
+    }
+  },
+  "metadata": {
+    "created_at": "2025-12-10T10:00:00",
+    "baseline_samples": 30,
+    "calibration_method": "Measured from OK samples",
+    "notes": "Converted to runtime SKU schema (single-letter zones with LAB/threshold)"
+  }
+}

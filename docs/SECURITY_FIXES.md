@@ -1,4 +1,4 @@
-# Security and Quality Fixes
+﻿# Security and Quality Fixes
 
 Security improvements implemented to address critical vulnerabilities and quality issues.
 

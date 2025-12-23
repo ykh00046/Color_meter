@@ -1,4 +1,4 @@
-# 색상 추출 품질 비교: Zone-Based vs Image-Based
+﻿# 색상 추출 품질 비교: Zone-Based vs Image-Based
 
 > **작성일**: 2025-12-17
 > **목적**: Zone-based가 색상을 더 정확하게 추출하는 이유 분석

@@ -1,4 +1,4 @@
-# Color Lens Color QA System - Implementation Plan
+﻿# Color Lens Color QA System - Implementation Plan
 
 ## 0. Assumptions & Targets
 - **Scope:** Radial-profile rule-based 검사 우선, 추후 딥러닝 이상탐지(PatchCore/PaDiM) 옵션 검토.

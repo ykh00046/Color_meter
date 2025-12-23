@@ -1,4 +1,4 @@
-# Image Normalization & QC Guide
+﻿# Image Normalization & QC Guide
 
 **목적:** 분석 대상 이미지의 **기하학적 일관성(Geometry Consistency)**을 확보하여 분석 정밀도를 높이고, 색상 값(Color Integrity)은 원본 그대로 유지합니다.
 

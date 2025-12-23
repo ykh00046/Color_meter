@@ -1,4 +1,4 @@
-# 🔧 검사 파이프라인 설계 (InspectionPipeline Module)
+﻿# 🔧 검사 파이프라인 설계 (InspectionPipeline Module)
 
 > **작성:** 2025-12-11
 > **목적:** 5개의 핵심 모듈(ImageLoader, LensDetector, RadialProfiler, ZoneSegmenter, ColorEvaluator)을 **엔드투엔드**로 연결하는 검사 파이프라인의 구조와 동작을 설계합니다. 또한 CLI와 연동, 에러 처리, 확장 가능성에 대해서도 다룹니다.
