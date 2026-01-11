@@ -140,13 +140,39 @@ def run_gate(
         h, w
     ), f"Geometry radius {test_geom.r} outside valid image bounds [{h}x{w}]"
 
-    # 4. Blur (sharpness) - ROI only
+    # 4. Blur (sharpness) - Pattern/Edge ROI only
+    # Use annulus region (0.45R ~ 0.95R) and top gradient pixels to avoid flat regions
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     laplacian = cv2.Laplacian(gray, cv2.CV_64F)
 
-    # Calculate variance only within ROI
-    blur_valid = roi_pixel_count >= min_roi_pixels
-    blur = float(laplacian[roi_mask].var()) if blur_valid else None
+    # Create annulus mask (inner=0.45R, outer=0.95R) to exclude flat center
+    dist_sq = (x_grid - test_geom.cx) ** 2 + (y_grid - test_geom.cy) ** 2
+    inner_r = test_geom.r * 0.45
+    outer_r = test_geom.r * 0.95
+    annulus_mask = (dist_sq >= inner_r**2) & (dist_sq <= outer_r**2)
+
+    # Calculate gradient magnitude to find edge pixels
+    sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_mag = np.sqrt(sobel_x**2 + sobel_y**2)
+
+    # Select top 10% gradient pixels within annulus (pattern/edge regions)
+    annulus_pixels = annulus_mask.sum()
+    blur_valid = annulus_pixels >= min_roi_pixels
+
+    if blur_valid:
+        grad_in_annulus = gradient_mag[annulus_mask]
+        grad_threshold = np.percentile(grad_in_annulus, 90)  # Top 10%
+        edge_mask = annulus_mask & (gradient_mag >= grad_threshold)
+
+        # Calculate sharpness only on edge pixels (pattern regions)
+        edge_pixel_count = edge_mask.sum()
+        if edge_pixel_count >= 10:  # Min 10 pixels for variance calculation
+            blur = float(laplacian[edge_mask].var())
+        else:
+            blur = None  # Not enough edge pixels
+    else:
+        blur = None
 
     # Note: ROI_TOO_SMALL is not a hard gate failure, just partial data loss
     # We mark it but keep valid=True, let decision_builder handle the missing score
