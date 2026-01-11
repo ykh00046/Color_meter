@@ -51,9 +51,9 @@
     "r_start": 0.15,
     "r_end": 0.95,
     "angular_unif_max": 0.18,
-    "center_frac": 0.28,
+    "center_frac": 0.22,
     "center_blob_max": 1,
-    "center_blob_min_area": 25,
+    "center_blob_min_area": 80,
     "enable_heatmap": true,
     "heatmap_downsample_T": 180,
     "heatmap_downsample_R": 130
