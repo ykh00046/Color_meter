@@ -217,24 +217,6 @@ async def v7_page(request: Request):
     return templates.TemplateResponse("v7_mvp.html", {"request": request})
 
 
-@app.get("/demo_3d", response_class=HTMLResponse)
-async def demo_3d_viz(request: Request):
-    """3D Visualization Demo - Showcase Plotly.js capabilities"""
-    return templates.TemplateResponse("demo_3d_viz.html", {"request": request})
-
-
-@app.get("/demo_ui_improvements", response_class=HTMLResponse)
-async def demo_ui_improvements(request: Request):
-    """UI Improvements Demo - 8 key enhancements"""
-    return templates.TemplateResponse("demo_ui_improvements.html", {"request": request})
-
-
-@app.get("/demo_heatmap", response_class=HTMLResponse)
-async def demo_heatmap(request: Request):
-    """Interactive Heatmap Demo - Canvas-based drill-down"""
-    return templates.TemplateResponse("demo_heatmap.html", {"request": request})
-
-
 @app.get("/v7_core", response_class=HTMLResponse)
 async def v7_core_page(request: Request):
     """Core V7 UI (same as /v7)"""

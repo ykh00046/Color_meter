@@ -615,64 +615,6 @@
     };
 
     // ============================================================================
-    // 7. STANDARDIZED DATA SPARSITY WARNING
-    // ============================================================================
-
-    /**
-     * Render standardized data sparsity warning component
-     */
-    v7.uiImprovements.renderSparsityWarning = function(v3Summary) {
-        const dataSparsity = v3Summary?.data_sparsity;
-        if (!dataSparsity || dataSparsity === 'sufficient') return '';
-
-        const confidence = v3Summary?.confidence || 'low';
-        const windowEffective = v3Summary?.window_effective || 0;
-        const windowRequested = v3Summary?.window_requested || 0;
-
-        return `
-            <div class="sparsity-warning" onclick="v7.uiImprovements.showSparsityDetails('${JSON.stringify({ dataSparsity, confidence, windowEffective, windowRequested }).replace(/"/g, '&quot;')}')">
-                <span class="sparsity-icon">ⓘ</span>
-                <span class="sparsity-text">참고용 (데이터 부족)</span>
-            </div>
-        `;
-    };
-
-    v7.uiImprovements.showSparsityDetails = function(dataStr) {
-        const data = JSON.parse(dataStr.replace(/&quot;/g, '"'));
-        alert(`Data Sparsity Details:\n\nStatus: ${data.dataSparsity}\nConfidence: ${data.confidence}\nWindow: ${data.windowEffective}/${data.windowRequested}`);
-    };
-
-    // Add sparsity warning styles
-    if (!document.getElementById('sparsity-warning-styles')) {
-        const style = document.createElement('style');
-        style.id = 'sparsity-warning-styles';
-        style.textContent = `
-            .sparsity-warning {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                background: #f59e0b;
-                color: #0f172a;
-                padding: 3px 8px;
-                border-radius: 3px;
-                font-size: 11px;
-                font-weight: bold;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .sparsity-warning:hover {
-                background: #fbbf24;
-            }
-
-            .sparsity-icon {
-                font-size: 14px;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-
-    // ============================================================================
     // 8. REASON → EVIDENCE AUTO-SCROLL
     // ============================================================================
 

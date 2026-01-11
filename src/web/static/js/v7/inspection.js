@@ -39,54 +39,6 @@ v7.inspection.applyInspectionMode = (mode) => {
     }
 };
 
-v7.inspection.pickInspectionMode = (decision, v2Diag) => {
-    if (!decision) return "signature";
-    if (decision.label === "RETAKE" || decision.gate?.passed === false) return "gate";
-    if (v2Diag?.ink_match?.warning || (v2Diag?.warnings && v2Diag.warnings.length)) return "ink";
-    if (decision.signature && decision.signature.passed === false) return "signature";
-    return "signature";
-};
-
-v7.render.renderV2PaletteCards = (palette) => {
-    const wrap = v7.utils.byId("v2PaletteCards");
-    const empty = v7.utils.byId("v2PaletteEmpty");
-    if (!wrap || !empty) return;
-
-    const colors = palette?.colors || [];
-    wrap.innerHTML = "";
-
-    if (!colors.length) {
-        empty.classList.remove("hidden");
-        return;
-    }
-
-    empty.classList.add("hidden");
-    colors.forEach((c, idx) => {
-        const card = document.createElement("div");
-        card.className = "terminal-panel p-4 space-y-3";
-
-        const hex = c.mean_hex || v7.utils.labToHex(c.mean_lab) || "#334155";
-        const area = c.area_ratio != null ? `${(c.area_ratio * 100).toFixed(1)}%` : "-";
-        const lab = Array.isArray(c.mean_lab) ? c.mean_lab.map((v) => v.toFixed(1)).join(", ") : "-";
-        const rgb = Array.isArray(c.mean_rgb) ? c.mean_rgb.join(", ") : "-";
-        const title = c.role ? c.role.toUpperCase() : `INK ${idx + 1}`;
-
-        card.innerHTML = `
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-text-secondary">${title}</span>
-                <span class="text-[10px] text-text-dim font-mono">${area}</span>
-            </div>
-            <div class="h-10 rounded-lg border border-white/10" style="background:${hex}"></div>
-            <div class="grid grid-cols-2 gap-2 text-[10px] text-text-dim font-mono">
-                <div>HEX: ${hex}</div>
-                <div>RGB: ${rgb}</div>
-                <div class="col-span-2">Lab: ${lab}</div>
-            </div>
-        `;
-        wrap.appendChild(card);
-    });
-};
-
 v7.inspection.initHotspotOverlay = (worstCase, cfg) => {
     v7.state.worstCfg = cfg;
     v7.render.drawWorstCaseMini(worstCase, cfg);

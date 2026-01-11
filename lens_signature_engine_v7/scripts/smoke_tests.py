@@ -590,7 +590,7 @@ def main() -> int:
         },
         "warnings": ["INK_CLUSTER_MATCH_UNCERTAIN"],
     }
-    v3 = build_v3_summary(v2_uncertain, _fake_decision(v2_uncertain), json.loads(CFG.read_text(encoding="utf-8")))
+    v3 = build_v3_summary(v2_uncertain, _fake_decision(v2_uncertain), json.loads(CFG.read_text(encoding="utf-8")), None)
     ok_step = (
         bool(v3)
         and v3.get("key_signals", [None])[0] == "매칭 불확실: 변화 신호는 참고용입니다."
@@ -620,7 +620,7 @@ def main() -> int:
         },
         "warnings": ["INK_CLUSTER_MATCH_UNCERTAIN"],
     }
-    v3 = build_v3_summary(_fake_decision(v2_auto_k), json.loads(CFG.read_text(encoding="utf-8")), None)
+    v3 = build_v3_summary(v2_auto_k, _fake_decision(v2_auto_k), json.loads(CFG.read_text(encoding="utf-8")), None)
     auto_k_text = "auto-k 불일치: 기대 3, 제안 2 (0.78)"
     ok_step = bool(v3) and auto_k_text in (v3.get("key_signals") or []) and v3.get("meta", {}).get("severity") == "WARN"
     _print("v3 auto-k mismatch -> signal + WARN", ok_step)

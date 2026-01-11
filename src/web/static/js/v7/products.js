@@ -93,21 +93,4 @@ v7.products.loadProducts = async function loadProducts() {
     } catch (e) { console.error(e); }
 };
 
-v7.products.autoActivateStandard = async function autoActivateStandard(sku) {
-    const cand = await v7.api.apiCall(`/api/v7/candidates?sku=${sku}&ink=INK_DEFAULT`, "GET");
-    if (!cand.candidates?.LOW?.length || !cand.candidates?.MID?.length || !cand.candidates?.HIGH?.length) {
-        throw new Error("활성 후보 버전을 찾을 수 없습니다.");
-    }
-    const payload = {
-        sku: sku,
-        ink: "INK_DEFAULT",
-        low_version: cand.candidates.LOW[0],
-        mid_version: cand.candidates.MID[0],
-        high_version: cand.candidates.HIGH[0],
-        approved_by: "AUTO_SYSTEM",
-        validation_label: "STD_ACCEPTABLE"
-    };
-    await v7.api.apiCall("/api/v7/activate", "POST", payload, "approver");
-};
-
 })();

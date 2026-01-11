@@ -378,8 +378,6 @@ v7.render.buildInspCommentary = (decision, v2Diag, data) => {
     return `Final Judgment: ${label} · Analysis Complete.`;
 };
 
-v7.render.filterInspectionJson = (mode, data) => data;
-
 v7.render.renderRegFailures = (validation) => {
     const panel = v7.utils.byId("regFailurePanel");
     const list = v7.utils.byId("regFailureList");

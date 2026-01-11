@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-01-10T23:30:47.725851",
+  "updated_at": "2026-01-12T00:37:06.026551",
   "items": [
     {
       "sku": "FFF",
@@ -512,6 +512,384 @@
       ],
       "active_snapshot": "active_snapshots\\SKU_SMOKE_BASELINE_1768055427_INK1_20260110_233049.json",
       "pattern_baseline": "pattern_baselines\\SKU_SMOKE_BASELINE_1768055427\\INK1\\PB_SKU_SMOKE_BASELINE_1768055427_INK1_20260110_233049.json"
+    },
+    {
+      "sku": "SKU_TEMP_1768145175",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+        "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+        "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:26:17.886991",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:26:38.010515",
+      "activated_reason": "role-check",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:26:26.648690"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002617",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002620",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002623"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:26:29.338082"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002617",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002620",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002623"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "action": "rollback",
+          "actor": "smoke",
+          "reason": "rollback",
+          "pattern_baseline_path": "pattern_baselines\\SKU_TEMP_1768145175\\INK1\\PB_SKU_TEMP_1768145175_INK1_20260112_002630.json",
+          "approval_pack_path": "",
+          "approval_id": "",
+          "decision_status": "",
+          "ts": "2026-01-12T00:26:30.804521"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145175/INK1/LOW/v20260112_002619",
+            "MID": "SKU_TEMP_1768145175/INK1/MID/v20260112_002621",
+            "HIGH": "SKU_TEMP_1768145175/INK1/HIGH/v20260112_002624"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "role-check",
+          "ts": "2026-01-12T00:26:38.010508"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_TEMP_1768145175_INK1_20260112_002639.json",
+      "pattern_baseline": "pattern_baselines\\SKU_TEMP_1768145175\\INK1\\PB_SKU_TEMP_1768145175_INK1_20260112_002639.json"
+    },
+    {
+      "sku": "SKU_SMOKE_BASELINE_1768145175",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_SMOKE_BASELINE_1768145175/INK1/LOW/v20260112_002633",
+        "MID": "SKU_SMOKE_BASELINE_1768145175/INK1/MID/v20260112_002633",
+        "HIGH": "SKU_SMOKE_BASELINE_1768145175/INK1/HIGH/v20260112_002634"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:26:33.606053",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:26:34.347305",
+      "activated_reason": "smoke-test",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145175/INK1/LOW/v20260112_002633",
+            "MID": "SKU_SMOKE_BASELINE_1768145175/INK1/MID/v20260112_002633",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145175/INK1/HIGH/v20260112_002634"
+          },
+          "to": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145175/INK1/LOW/v20260112_002633",
+            "MID": "SKU_SMOKE_BASELINE_1768145175/INK1/MID/v20260112_002633",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145175/INK1/HIGH/v20260112_002634"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:26:34.347297"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_SMOKE_BASELINE_1768145175_INK1_20260112_002635.json",
+      "pattern_baseline": "pattern_baselines\\SKU_SMOKE_BASELINE_1768145175\\INK1\\PB_SKU_SMOKE_BASELINE_1768145175_INK1_20260112_002635.json"
+    },
+    {
+      "sku": "SKU_TEMP_1768145747",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+        "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+        "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:35:49.180977",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:36:09.108429",
+      "activated_reason": "role-check",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:35:57.836020"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003549",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003551",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003554"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:36:00.432567"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003549",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003551",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003554"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "action": "rollback",
+          "actor": "smoke",
+          "reason": "rollback",
+          "pattern_baseline_path": "pattern_baselines\\SKU_TEMP_1768145747\\INK1\\PB_SKU_TEMP_1768145747_INK1_20260112_003601.json",
+          "approval_pack_path": "",
+          "approval_id": "",
+          "decision_status": "",
+          "ts": "2026-01-12T00:36:01.904011"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145747/INK1/LOW/v20260112_003550",
+            "MID": "SKU_TEMP_1768145747/INK1/MID/v20260112_003553",
+            "HIGH": "SKU_TEMP_1768145747/INK1/HIGH/v20260112_003555"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "role-check",
+          "ts": "2026-01-12T00:36:09.108423"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_TEMP_1768145747_INK1_20260112_003610.json",
+      "pattern_baseline": "pattern_baselines\\SKU_TEMP_1768145747\\INK1\\PB_SKU_TEMP_1768145747_INK1_20260112_003610.json"
+    },
+    {
+      "sku": "SKU_SMOKE_BASELINE_1768145747",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_SMOKE_BASELINE_1768145747/INK1/LOW/v20260112_003604",
+        "MID": "SKU_SMOKE_BASELINE_1768145747/INK1/MID/v20260112_003604",
+        "HIGH": "SKU_SMOKE_BASELINE_1768145747/INK1/HIGH/v20260112_003605"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:36:04.611320",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:36:05.352550",
+      "activated_reason": "smoke-test",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145747/INK1/LOW/v20260112_003604",
+            "MID": "SKU_SMOKE_BASELINE_1768145747/INK1/MID/v20260112_003604",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145747/INK1/HIGH/v20260112_003605"
+          },
+          "to": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145747/INK1/LOW/v20260112_003604",
+            "MID": "SKU_SMOKE_BASELINE_1768145747/INK1/MID/v20260112_003604",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145747/INK1/HIGH/v20260112_003605"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:36:05.352543"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_SMOKE_BASELINE_1768145747_INK1_20260112_003606.json",
+      "pattern_baseline": "pattern_baselines\\SKU_SMOKE_BASELINE_1768145747\\INK1\\PB_SKU_SMOKE_BASELINE_1768145747_INK1_20260112_003606.json"
+    },
+    {
+      "sku": "SKU_TEMP_1768145808",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+        "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+        "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:36:49.732992",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:37:09.824166",
+      "activated_reason": "role-check",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:36:58.428986"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003649",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003652",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003655"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:37:01.020826"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003649",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003652",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003655"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "action": "rollback",
+          "actor": "smoke",
+          "reason": "rollback",
+          "pattern_baseline_path": "pattern_baselines\\SKU_TEMP_1768145808\\INK1\\PB_SKU_TEMP_1768145808_INK1_20260112_003702.json",
+          "approval_pack_path": "",
+          "approval_id": "",
+          "decision_status": "",
+          "ts": "2026-01-12T00:37:02.485882"
+        },
+        {
+          "from": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "to": {
+            "LOW": "SKU_TEMP_1768145808/INK1/LOW/v20260112_003650",
+            "MID": "SKU_TEMP_1768145808/INK1/MID/v20260112_003653",
+            "HIGH": "SKU_TEMP_1768145808/INK1/HIGH/v20260112_003656"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "role-check",
+          "ts": "2026-01-12T00:37:09.824159"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_TEMP_1768145808_INK1_20260112_003711.json",
+      "pattern_baseline": "pattern_baselines\\SKU_TEMP_1768145808\\INK1\\PB_SKU_TEMP_1768145808_INK1_20260112_003711.json"
+    },
+    {
+      "sku": "SKU_SMOKE_BASELINE_1768145808",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_SMOKE_BASELINE_1768145808/INK1/LOW/v20260112_003705",
+        "MID": "SKU_SMOKE_BASELINE_1768145808/INK1/MID/v20260112_003705",
+        "HIGH": "SKU_SMOKE_BASELINE_1768145808/INK1/HIGH/v20260112_003705"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2026-01-12T00:37:05.304695",
+      "color_mode": "aggregate",
+      "activated_by": "smoke",
+      "activated_at": "2026-01-12T00:37:06.083274",
+      "activated_reason": "smoke-test",
+      "active_history": [
+        {
+          "from": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145808/INK1/LOW/v20260112_003705",
+            "MID": "SKU_SMOKE_BASELINE_1768145808/INK1/MID/v20260112_003705",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145808/INK1/HIGH/v20260112_003705"
+          },
+          "to": {
+            "LOW": "SKU_SMOKE_BASELINE_1768145808/INK1/LOW/v20260112_003705",
+            "MID": "SKU_SMOKE_BASELINE_1768145808/INK1/MID/v20260112_003705",
+            "HIGH": "SKU_SMOKE_BASELINE_1768145808/INK1/HIGH/v20260112_003705"
+          },
+          "action": "activate",
+          "actor": "smoke",
+          "reason": "smoke-test",
+          "ts": "2026-01-12T00:37:06.083264"
+        }
+      ],
+      "active_snapshot": "active_snapshots\\SKU_SMOKE_BASELINE_1768145808_INK1_20260112_003707.json",
+      "pattern_baseline": "pattern_baselines\\SKU_SMOKE_BASELINE_1768145808\\INK1\\PB_SKU_SMOKE_BASELINE_1768145808_INK1_20260112_003707.json"
     }
   ],
   "engine_version": "v7",

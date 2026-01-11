@@ -4,7 +4,6 @@ const v7 = window.v7 || (window.v7 = { api: {}, utils: {}, state: {}, render: {}
 
 v7.utils.byId = (id) => document.getElementById(id);
 window.byId = v7.utils.byId;
-v7.utils.toPretty = (obj) => JSON.stringify(obj, null, 2);
 
 v7.utils.safeText = (id, text) => {
     const el = v7.utils.byId(id);

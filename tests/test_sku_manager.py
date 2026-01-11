@@ -291,6 +291,7 @@ def test_multi_sku_batch_processing():
         assert all(r.sku == "SKU002" for r in results002)
 
 
+@pytest.mark.skip(reason="CLI tool (src/main.py) removed - web UI is primary interface")
 def test_cli_sku_list_command():
     """Test CLI sku list command"""
     import subprocess
@@ -301,6 +302,7 @@ def test_cli_sku_list_command():
     assert "SKU Code" in result.stdout or "No SKUs found" in result.stdout
 
 
+@pytest.mark.skip(reason="CLI tool (src/main.py) removed - web UI is primary interface")
 def test_cli_sku_show_command():
     """Test CLI sku show command"""
     import subprocess

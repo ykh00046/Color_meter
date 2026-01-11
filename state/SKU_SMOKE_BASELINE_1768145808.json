@@ -1,0 +1,14 @@
+{
+  "sku": "SKU_SMOKE_BASELINE_1768145808",
+  "last_mode": "LOW",
+  "history": [
+    {
+      "ts": 1768145828,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1768145829,
+      "mode": "LOW"
+    }
+  ]
+}
