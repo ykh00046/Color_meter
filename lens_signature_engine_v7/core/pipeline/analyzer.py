@@ -14,13 +14,14 @@ from ..anomaly.anomaly_score import score_anomaly, score_anomaly_relative
 from ..anomaly.blob_detector import detect_center_blobs
 from ..anomaly.defect_classifier import classify_defect
 from ..anomaly.heatmap import anomaly_heatmap
+from ..anomaly.pattern_baseline import extract_pattern_features
 from ..decision.decision_builder import build_decision
 from ..decision.decision_engine import decide
 from ..gate.gate_engine import run_gate
 from ..geometry.lens_geometry import detect_lens_circle
 from ..insight.summary import build_v3_summary
 from ..insight.trend import build_v3_trend
-from ..measure.color_masks import build_color_masks
+from ..measure.color_masks import build_color_masks, build_color_masks_with_retry
 from ..measure.ink_match import compute_cluster_deltas
 from ..measure.v2_diagnostics import build_v2_diagnostics
 from ..measure.v2_flags import build_v2_flags
@@ -1181,9 +1182,11 @@ def evaluate_per_color(
         )
         return dec, {}
 
-    # Step 3: Generate color masks
+    # Step 3: Generate color masks with 2-pass retry logic
     try:
-        color_masks, mask_metadata = build_color_masks(test_bgr, cfg, expected_k=expected_ink_count, geom=geom)
+        color_masks, mask_metadata = build_color_masks_with_retry(
+            test_bgr, cfg, expected_k=expected_ink_count, geom=geom, confidence_threshold=0.7, enable_retry=True
+        )
     except Exception as e:
         codes, messages = _reason_meta(["COLOR_SEGMENTATION_FAILED"])
         dec = Decision(
@@ -1202,19 +1205,52 @@ def evaluate_per_color(
         )
         return dec, {}
 
-    # Verify color count matches expected
+    # Extract segmentation metadata for debugging/warnings
+    segmentation_info = {
+        "segmentation_confidence": mask_metadata.get("segmentation_confidence"),
+        "detected_inks": mask_metadata.get("detected_inks"),
+        "segmentation_pass": mask_metadata.get("segmentation_pass"),
+        "retry_reason": mask_metadata.get("retry_reason"),
+    }
+
+    # Add warnings if ink count mismatch or retry occurred
+    segmentation_warnings = []
+    detected_inks = mask_metadata.get("detected_inks", len(mask_metadata.get("colors", [])))
+
+    if detected_inks != expected_ink_count:
+        segmentation_warnings.append(
+            f"EXPECTED_INK_COUNT_MISMATCH (expected={expected_ink_count}, detected={detected_inks})"
+        )
+
+    if mask_metadata.get("segmentation_pass") == "pass2_retry":
+        retry_reasons = mask_metadata.get("retry_reason", [])
+        segmentation_warnings.append(f"INK_SEGMENTATION_RETRIED_K{expected_ink_count + 1}")
+        if retry_reasons:
+            segmentation_warnings.extend(retry_reasons)
+
+    # Verify color count matches expected (fatal error - cannot proceed)
     detected_colors = len(mask_metadata.get("colors", []))
-    if detected_colors != expected_ink_count:
-        codes, messages = _reason_meta(["COLOR_COUNT_MISMATCH"])
+    if detected_colors == 0 or (
+        detected_colors < expected_ink_count and mask_metadata.get("k_used", 0) == expected_ink_count
+    ):
+        # Hard failure: no colors detected or severe segmentation failure
+        codes, messages = _reason_meta(["COLOR_SEGMENTATION_FAILED"])
         dec = Decision(
             label="RETAKE",
-            reasons=[f"COLOR_COUNT_MISMATCH:{detected_colors}vs{expected_ink_count}"],
+            reasons=["COLOR_SEGMENTATION_FAILED"] + segmentation_warnings,
             reason_codes=codes,
-            reason_messages=messages + [f"Detected {detected_colors} colors, expected {expected_ink_count}"],
+            reason_messages=messages
+            + [f"Detected {detected_colors} colors, expected {expected_ink_count}"]
+            + segmentation_warnings,
             gate=gate,
             signature=None,
             anomaly=None,
-            debug={"inference_valid": False, "detected_colors": detected_colors, "expected_colors": expected_ink_count},
+            debug={
+                "inference_valid": False,
+                "detected_colors": detected_colors,
+                "expected_colors": expected_ink_count,
+                **segmentation_info,
+            },
             diagnostics={"color_mode": "per_color", "mask_metadata": mask_metadata},
             best_mode="",
             mode_scores={},

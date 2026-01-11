@@ -319,6 +319,152 @@ def build_color_masks(
     return color_masks, metadata
 
 
+def calculate_segmentation_confidence(
+    metadata: Dict[str, Any],
+    expected_k: int,
+) -> float:
+    """
+    Calculate confidence score for color segmentation quality.
+
+    Evaluates:
+    1. Inter-cluster distance (separation quality)
+    2. Area ratio balance (no extreme imbalance)
+    3. Expected vs detected ink count match
+
+    Args:
+        metadata: Metadata from build_color_masks()
+        expected_k: Expected number of ink colors
+
+    Returns:
+        Confidence score [0.0, 1.0] where:
+        - 1.0 = perfect segmentation (good separation, balanced areas, count match)
+        - 0.5 = uncertain segmentation
+        - 0.0 = poor segmentation (clusters merged, severe imbalance)
+    """
+    colors = metadata.get("colors", [])
+    if len(colors) < 2:
+        return 0.0  # Need at least 2 clusters
+
+    # 1. Inter-cluster distance (L* separation)
+    # Good separation: darkest and lightest clusters far apart
+    L_values = [c["lab_centroid"][0] for c in colors]
+    L_range = max(L_values) - min(L_values)
+
+    # Normalize to [0, 1]: L_range > 40 is good, < 15 is poor
+    separation_score = min(1.0, max(0.0, (L_range - 15.0) / 25.0))
+
+    # 2. Area ratio balance
+    # Check if any cluster dominates (> 80%) or too small (< 5%)
+    area_ratios = [c["area_ratio"] for c in colors]
+    max_ratio = max(area_ratios)
+    min_ratio = min(area_ratios)
+
+    # Penalize extreme imbalance
+    if max_ratio > 0.85 or min_ratio < 0.03:
+        balance_score = 0.3
+    elif max_ratio > 0.75 or min_ratio < 0.05:
+        balance_score = 0.6
+    else:
+        balance_score = 1.0
+
+    # 3. Expected vs detected ink count
+    detected_inks = sum(1 for c in colors if c["role"] == "ink")
+    count_match = detected_inks == expected_k
+    count_score = 1.0 if count_match else 0.5
+
+    # Weighted average
+    confidence = separation_score * 0.4 + balance_score * 0.3 + count_score * 0.3
+
+    return round(float(confidence), 3)
+
+
+def build_color_masks_with_retry(
+    test_bgr: np.ndarray,
+    cfg: Dict[str, Any],
+    expected_k: int,
+    geom: Optional[LensGeometry] = None,
+    confidence_threshold: float = 0.7,
+    enable_retry: bool = True,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+    """
+    Build color masks with 2-pass retry logic for better ink separation.
+
+    Two-pass strategy:
+    1. First pass: k = expected_k
+    2. If confidence low or ink count mismatch: retry with k = expected_k + 1
+    3. Choose better result based on confidence and ink count match
+
+    Args:
+        test_bgr: Input BGR image
+        cfg: Configuration dict
+        expected_k: Expected number of ink colors
+        geom: Optional pre-computed lens geometry
+        confidence_threshold: Retry if confidence < this (default: 0.7)
+        enable_retry: Enable 2-pass retry logic (default: True)
+
+    Returns:
+        Tuple of (color_masks, metadata) with best result
+    """
+    # Pass 1: Try with expected_k
+    masks1, meta1 = build_color_masks(test_bgr, cfg, expected_k, geom)
+
+    # Calculate confidence
+    confidence1 = calculate_segmentation_confidence(meta1, expected_k)
+    detected_inks1 = sum(1 for c in meta1["colors"] if c["role"] == "ink")
+
+    # Add confidence and detected count to metadata
+    meta1["segmentation_confidence"] = confidence1
+    meta1["detected_inks"] = detected_inks1
+    meta1["segmentation_pass"] = "pass1_only"
+
+    # Check if retry needed
+    ink_count_mismatch = detected_inks1 != expected_k
+    low_confidence = confidence1 < confidence_threshold
+
+    if not enable_retry or (not ink_count_mismatch and not low_confidence):
+        # Pass 1 result is good enough
+        return masks1, meta1
+
+    # Pass 2: Retry with k = expected_k + 1
+    masks2, meta2 = build_color_masks(test_bgr, cfg, expected_k + 1, geom)
+    confidence2 = calculate_segmentation_confidence(meta2, expected_k)
+    detected_inks2 = sum(1 for c in meta2["colors"] if c["role"] == "ink")
+
+    meta2["segmentation_confidence"] = confidence2
+    meta2["detected_inks"] = detected_inks2
+    meta2["segmentation_pass"] = "pass2_retry"
+
+    # Decide which result to use
+    # Priority: ink count match > confidence
+    use_pass2 = False
+
+    if detected_inks2 == expected_k and detected_inks1 != expected_k:
+        # Pass 2 matches expected count, Pass 1 doesn't → use Pass 2
+        use_pass2 = True
+    elif detected_inks1 == expected_k and detected_inks2 != expected_k:
+        # Pass 1 matches, Pass 2 doesn't → use Pass 1
+        use_pass2 = False
+    else:
+        # Both match or both mismatch → use higher confidence
+        use_pass2 = confidence2 > confidence1
+
+    if use_pass2:
+        meta2["retry_reason"] = []
+        if ink_count_mismatch:
+            meta2["retry_reason"].append(f"INK_COUNT_MISMATCH (expected={expected_k}, pass1_detected={detected_inks1})")
+        if low_confidence:
+            meta2["retry_reason"].append(f"LOW_CONFIDENCE (pass1_confidence={confidence1})")
+        meta2["pass1_confidence"] = confidence1
+        meta2["pass1_detected_inks"] = detected_inks1
+        return masks2, meta2
+    else:
+        # Use Pass 1 even though we retried
+        meta1["segmentation_pass"] = "pass1_chosen"
+        meta1["pass2_confidence"] = confidence2
+        meta1["pass2_detected_inks"] = detected_inks2
+        return masks1, meta1
+
+
 def filter_masks_by_role(
     color_masks: Dict[str, np.ndarray],
     metadata: Dict[str, Any],
