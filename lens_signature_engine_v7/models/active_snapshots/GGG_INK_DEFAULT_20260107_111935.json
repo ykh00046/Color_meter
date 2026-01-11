@@ -1,0 +1,200 @@
+{
+  "schema_version": "1.0",
+  "sku": "GGG",
+  "ink": "INK_DEFAULT",
+  "active": {
+    "LOW": "GGG/INK_DEFAULT/LOW/v20260107_111928",
+    "MID": "GGG/INK_DEFAULT/MID/v20260107_111929",
+    "HIGH": "GGG/INK_DEFAULT/HIGH/v20260107_111930"
+  },
+  "active_versions": {
+    "LOW": "v20260107_111928",
+    "MID": "v20260107_111929",
+    "HIGH": "v20260107_111930"
+  },
+  "created_at": "2026-01-07T11:19:35.993895",
+  "cfg_hash": "sha256:e1c06d3889a523eb1dfa3ae79df5e0ea9bc681f0a03f17622a77667ef5157ebc",
+  "config_snapshot_hash": "sha256:e1c06d3889a523eb1dfa3ae79df5e0ea9bc681f0a03f17622a77667ef5157ebc",
+  "config_snapshot": {
+    "polar": {
+      "R": 260,
+      "T": 720
+    },
+    "gate": {
+      "center_off_max": 0.12,
+      "blur_min": 40.0,
+      "illum_max": 0.1,
+      "diagnostic_on_fail": true
+    },
+    "signature": {
+      "r_start": 0.1,
+      "r_end": 0.95,
+      "corr_min": 0.92,
+      "de_mean_max": 10.0,
+      "de_p95_max": 19.839113616943358,
+      "use_band_model": true,
+      "band_k": 2.5,
+      "fail_ratio_max": 0.08,
+      "use_weighted_segments": true,
+      "segments": [
+        {
+          "name": "inner",
+          "start": 0.0,
+          "end": 0.33,
+          "weight": 1.2
+        },
+        {
+          "name": "mid",
+          "start": 0.33,
+          "end": 0.66,
+          "weight": 1.0
+        },
+        {
+          "name": "outer",
+          "start": 0.66,
+          "end": 1.0,
+          "weight": 1.4
+        }
+      ],
+      "segment_fail_ratio_max": 0.18,
+      "use_segment_k": true,
+      "segment_k": {
+        "inner": 2.8,
+        "mid": 2.5,
+        "outer": 2.8
+      }
+    },
+    "anomaly": {
+      "r_start": 0.15,
+      "r_end": 0.95,
+      "angular_unif_max": 0.18,
+      "center_frac": 0.28,
+      "center_blob_max": 1,
+      "center_blob_min_area": 25,
+      "enable_heatmap": true,
+      "heatmap_downsample_T": 180,
+      "heatmap_downsample_R": 130
+    },
+    "registration": {
+      "order_check_enabled": false,
+      "order_metric": "L_mean",
+      "order_direction": "asc",
+      "sep_threshold": 1.0,
+      "max_within_std": null
+    },
+    "mode_stability": {
+      "enabled": true,
+      "window": 10,
+      "emit_shift_flag": true
+    },
+    "pattern_baseline": {
+      "require": true,
+      "use_relative": true,
+      "margins": {
+        "blob_count": 1,
+        "blob_area_ratio": 0.2,
+        "uniformity": 0.03,
+        "coverage_eps": 0.01,
+        "sharpness_eps": 0.03
+      }
+    },
+    "diagnostics": {
+      "delta_L_threshold": 4.372100830078125,
+      "delta_a_threshold": 0.8,
+      "delta_b_threshold": 0.8,
+      "coverage_l_delta": 5.0,
+      "coverage_delta_pp_threshold": 7.906862745098037,
+      "edge_sharpness_delta_threshold": 10.16973738670349
+    },
+    "v2_ink": {
+      "enabled": true,
+      "auto_k_enabled": true,
+      "auto_k_expand_max": 4,
+      "auto_k_conf_abs_min": 0.1,
+      "auto_k_conf_abs_span": 0.25,
+      "auto_k_conf_gap_span": 0.1,
+      "auto_k_mismatch_conf_thr": 0.7,
+      "auto_k_low_conf_thr": 0.4,
+      "dark_top_p": 0.25,
+      "chroma_top_p": 0.35,
+      "min_samples": 8000,
+      "min_samples_warn": 2000,
+      "l_weight": 0.3,
+      "kmeans_attempts": 10,
+      "rng_seed": 123,
+      "min_area_ratio_warn": 0.03,
+      "separation_d0": 3.0,
+      "separation_k": 1.0,
+      "match_max_deltaE": 6.0,
+      "match_spread_warn": 3.0,
+      "roi_r_start": 0.15,
+      "roi_r_end": 0.95
+    },
+    "white_balance": {
+      "enabled": true,
+      "optical_zone_ratio": 0.3,
+      "p_low": 50.0,
+      "p_high": 99.0
+    }
+  },
+  "config_snapshot_auto_tune": {
+    "schema_version": "auto_tune.v1",
+    "status": "APPLIED",
+    "generated_at": "2026-01-07T11:19:35.993336",
+    "expected_ink_count": 3,
+    "signature": {
+      "p95_max": 16.532594680786133,
+      "mean_max": 5.973921298980713,
+      "corr_min": 0.9690231084823608
+    },
+    "color_shift_abs_max": {
+      "delta_L": 3.6434173583984375,
+      "delta_a": 0.138671875,
+      "delta_b": 0.6429443359375
+    },
+    "pattern": {
+      "coverage_delta_pp_abs_max": 6.589052287581698,
+      "edge_sharpness_delta_abs_max": 8.474781155586243
+    },
+    "ink": {
+      "off_track_max": 0.0
+    },
+    "errors": []
+  },
+  "registration_summary": {
+    "order_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "order_values": {},
+    "order_ok": true,
+    "sep_threshold": 1.0,
+    "separation": {
+      "LOW_MID": 12.110488891601562,
+      "MID_HIGH": 7.795336723327637,
+      "LOW_HIGH": 12.751177787780762
+    },
+    "min_pairwise_separation": 7.795336723327637,
+    "separation_ok": true,
+    "within_mode_stability": {
+      "LOW": null,
+      "MID": null,
+      "HIGH": null
+    },
+    "within_mode_threshold": null,
+    "within_mode_ok": null,
+    "geom_consistency": {
+      "center_drift_px": 45.60877227783203,
+      "radius_drift_ratio": 0.3902091681957245,
+      "passed": null
+    },
+    "warnings": [
+      "WITHIN_MODE_THRESHOLD_DISABLED",
+      "GEOM_THRESHOLD_DISABLED"
+    ]
+  },
+  "warnings": [
+    "WITHIN_MODE_THRESHOLD_DISABLED",
+    "GEOM_THRESHOLD_DISABLED"
+  ],
+  "path": "active_snapshots\\GGG_INK_DEFAULT_20260107_111935.json"
+}

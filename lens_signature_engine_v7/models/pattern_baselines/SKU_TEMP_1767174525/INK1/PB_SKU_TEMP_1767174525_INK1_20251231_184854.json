@@ -1,0 +1,67 @@
+{
+  "schema_version": "pattern_baseline.v1",
+  "sku": "SKU_TEMP_1767174525",
+  "ink": "INK1",
+  "active": {
+    "LOW": "SKU_TEMP_1767174525/INK1/LOW/v20251231_184847",
+    "MID": "SKU_TEMP_1767174525/INK1/MID/v20251231_184850",
+    "HIGH": "SKU_TEMP_1767174525/INK1/HIGH/v20251231_184853"
+  },
+  "active_versions": {
+    "LOW": "v20251231_184847",
+    "MID": "v20251231_184850",
+    "HIGH": "v20251231_184853"
+  },
+  "generated_at": "2025-12-31T18:48:54.878538",
+  "source": {
+    "std_images": {
+      "LOW": [
+        "data\\samples\\INK1\\A1.png"
+      ],
+      "MID": [
+        "data\\samples\\INK1\\A1.png"
+      ],
+      "HIGH": [
+        "data\\samples\\INK1\\A1.png"
+      ]
+    }
+  },
+  "features": {
+    "center_blob": {
+      "count": {
+        "mean": 1.0,
+        "max": 1.0
+      },
+      "total_area": {
+        "mean": 68.0,
+        "max": 68.0
+      }
+    },
+    "angular_uniformity": {
+      "mean": 0.0700543224811554,
+      "max": 0.0700543224811554
+    },
+    "dot": {
+      "coverage": {
+        "mean": 0.30310362577438354,
+        "min": 0.30310362577438354,
+        "max": 0.30310362577438354
+      },
+      "edge_sharpness": {
+        "mean": 4.578854084014893,
+        "min": 4.578854084014893,
+        "max": 4.578854084014893
+      }
+    }
+  },
+  "policy": {
+    "margins": {
+      "blob_count": 1,
+      "blob_area_ratio": 0.2,
+      "uniformity": 0.03,
+      "coverage_eps": 0.01,
+      "sharpness_eps": 0.03
+    }
+  },
+  "path": "pattern_baselines/SKU_TEMP_1767174525/INK1/PB_SKU_TEMP_1767174525_INK1_20251231_184854.json"
+}

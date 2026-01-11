@@ -1,0 +1,14 @@
+{
+  "sku": "SKU_V2_SHADOW",
+  "last_mode": "LOW",
+  "history": [
+    {
+      "ts": 1766716921,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766800343,
+      "mode": "LOW"
+    }
+  ]
+}

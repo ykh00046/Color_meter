@@ -60,6 +60,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Mount v7 results for visualization artifacts
+V7_RESULTS_DIR = BASE_DIR.parent / "results" / "v7" / "web"
+V7_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/v7_results", StaticFiles(directory=str(V7_RESULTS_DIR)), name="v7_results")
+
 analysis_service = AnalysisService()
 
 
@@ -81,13 +87,13 @@ async def startup_event():
 
 
 # Include API routers
-from src.web.routers import comparison, inspection, sku, std, test
+from src.web.routers import inspection, sku, std, test, v7
 
 app.include_router(std.router)
 app.include_router(test.router)
-app.include_router(comparison.router)
 app.include_router(sku.router)
 app.include_router(inspection.router)
+app.include_router(v7.router)
 
 
 def load_sku_config(sku: str, config_dir: Path = Path("config/sku_db")) -> dict:
@@ -205,10 +211,46 @@ async def stats_page(request: Request):
     return templates.TemplateResponse("stats.html", {"request": request})
 
 
-@app.get("/compare", response_class=HTMLResponse)
-async def compare_page(request: Request):
-    """STD vs Sample one-off comparison page"""
-    return templates.TemplateResponse("compare.html", {"request": request})
+@app.get("/v7", response_class=HTMLResponse)
+async def v7_page(request: Request):
+    """Lens Signature Engine v7 MVP page"""
+    return templates.TemplateResponse("v7_mvp.html", {"request": request})
+
+
+@app.get("/demo_3d", response_class=HTMLResponse)
+async def demo_3d_viz(request: Request):
+    """3D Visualization Demo - Showcase Plotly.js capabilities"""
+    return templates.TemplateResponse("demo_3d_viz.html", {"request": request})
+
+
+@app.get("/demo_ui_improvements", response_class=HTMLResponse)
+async def demo_ui_improvements(request: Request):
+    """UI Improvements Demo - 8 key enhancements"""
+    return templates.TemplateResponse("demo_ui_improvements.html", {"request": request})
+
+
+@app.get("/demo_heatmap", response_class=HTMLResponse)
+async def demo_heatmap(request: Request):
+    """Interactive Heatmap Demo - Canvas-based drill-down"""
+    return templates.TemplateResponse("demo_heatmap.html", {"request": request})
+
+
+@app.get("/v7_core", response_class=HTMLResponse)
+async def v7_core_page(request: Request):
+    """Core V7 UI (same as /v7)"""
+    return templates.TemplateResponse("v7_mvp.html", {"request": request})
+
+
+@app.get("/single_analysis", response_class=HTMLResponse)
+async def single_analysis_page(request: Request):
+    """Single Sample Analysis - Quality assessment without STD comparison"""
+    return templates.TemplateResponse("single_analysis.html", {"request": request})
+
+
+@app.get("/calibration", response_class=HTMLResponse)
+async def calibration_page(request: Request):
+    """Color Calibration - ColorChecker-based color accuracy verification"""
+    return templates.TemplateResponse("calibration.html", {"request": request})
 
 
 # ================================
@@ -269,6 +311,47 @@ def parse_inspection_options(options: Optional[str]) -> bool:
         return False
 
 
+def _load_std_reference(sku_config: dict) -> Tuple[Optional[np.ndarray], Optional[Any]]:
+    params = sku_config.get("params", {})
+    std_ref_path = params.get("std_ref_image_path") or params.get("std_ref_path")
+    if not std_ref_path:
+        return None, None
+
+    path = Path(std_ref_path)
+    if not path.is_absolute():
+        path = (BASE_DIR / path).resolve()
+    else:
+        path = path.resolve()
+
+    try:
+        path.relative_to(BASE_DIR.resolve())
+    except ValueError:
+        logger.warning(f"STD reference path outside base dir: {path}")
+        return None, None
+
+    if not path.exists():
+        logger.warning(f"STD reference image not found: {path}")
+        return None, None
+
+    img_bgr = cv2.imread(str(path))
+    if img_bgr is None:
+        logger.warning(f"STD reference image load failed: {path}")
+        return None, None
+
+    try:
+        from src.core.lens_detector import DetectorConfig, LensDetector
+
+        lens_detector = LensDetector(DetectorConfig())
+        lens_detection = lens_detector.detect(img_bgr)
+        if lens_detection is None:
+            logger.warning("STD reference lens detection failed")
+            return None, None
+        return img_bgr, lens_detection
+    except Exception as exc:
+        logger.warning(f"STD reference lens detection error: {exc}")
+        return None, None
+
+
 def run_2d_zone_analysis(img_bgr, lens_detection, sku_config: dict, run_dir: Path):
     """Run 2D zone analysis using zone_analyzer_2d.
 
@@ -287,13 +370,25 @@ def run_2d_zone_analysis(img_bgr, lens_detection, sku_config: dict, run_dir: Pat
             f"radius={lens_detection.radius}"
         )
 
-        # Execute 2D analysis
+        params = sku_config.get("params", {})
+        debug_save_on = params.get("debug_save_on_2d")
+        if not debug_save_on:
+            debug_save_on = ["retake", "low_confidence"]
+        elif isinstance(debug_save_on, str):
+            debug_save_on = [debug_save_on]
+        debug_low_confidence = float(params.get("debug_low_confidence_threshold", 0.75))
+        std_ref_image, std_ref_lens = _load_std_reference(sku_config)
+
         result_2d, debug_info_2d = analyze_lens_zones_2d(
             img_bgr=img_bgr,
             lens_detection=lens_detection,
             sku_config=sku_config,
             ink_mask_config=InkMaskConfig(),
-            save_debug=True,
+            std_ref_image=std_ref_image,
+            std_ref_lens=std_ref_lens,
+            save_debug=False,
+            save_debug_on=debug_save_on,
+            debug_low_confidence=debug_low_confidence,
             debug_prefix=str(run_dir / "debug_2d"),
         )
 
@@ -621,7 +716,12 @@ async def inspect_image(
     # 5. Run pipeline
     pipeline = InspectionPipeline(sku_config, save_intermediates=True)
     try:
-        result = pipeline.process(str(input_path), sku, save_dir=run_dir)
+        result = pipeline.process(
+            str(input_path),
+            sku,
+            save_dir=run_dir,
+            run_1d_judgment=not use_2d_analysis,
+        )
     except PipelineError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -894,7 +994,12 @@ async def recompute_analysis(
     # 5. Run pipeline with new parameters
     pipeline = InspectionPipeline(sku_config, save_intermediates=True)
     try:
-        result = pipeline.process(str(temp_image_path), sku, save_dir=run_dir)
+        result = pipeline.process(
+            str(temp_image_path),
+            sku,
+            save_dir=run_dir,
+            run_1d_judgment=False,
+        )
     except PipelineError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1057,7 +1162,12 @@ async def inspect_v2(
     try:
         logger.info(f"[INSPECT_V2] Calling pipeline.process() for {file.filename}")
 
-        inspection_result = pipeline.process(image_path=str(input_path), sku=sku, save_dir=run_dir)
+        inspection_result = pipeline.process(
+            image_path=str(input_path),
+            sku=sku,
+            save_dir=run_dir,
+            run_1d_judgment=False,
+        )
 
         logger.info(f"[INSPECT_V2] Pipeline completed: {inspection_result.judgment}")
 
@@ -1077,13 +1187,26 @@ async def inspect_v2(
         if lens_detection is None:
             raise ValueError("lens_detection not found in pipeline result")
 
+        params = sku_config.get("params", {})
+        debug_save_on = params.get("debug_save_on_2d")
+        if not debug_save_on:
+            debug_save_on = ["retake", "low_confidence"]
+        elif isinstance(debug_save_on, str):
+            debug_save_on = [debug_save_on]
+        debug_low_confidence = float(params.get("debug_low_confidence_threshold", 0.75))
+        std_ref_image, std_ref_lens = _load_std_reference(sku_config)
+
         # 2D 분석 실행
         result_2d, debug_info_2d = analyze_lens_zones_2d(
             img_bgr=img_bgr,
             lens_detection=lens_detection,
             sku_config=sku_config,
             ink_mask_config=InkMaskConfig(),
-            save_debug=True,
+            std_ref_image=std_ref_image,
+            std_ref_lens=std_ref_lens,
+            save_debug=False,
+            save_debug_on=debug_save_on,
+            debug_low_confidence=debug_low_confidence,
             debug_prefix=str(run_dir / "debug_2d"),
         )
 
@@ -1291,1121 +1414,3 @@ def _resolve_ink_mapping(sku_config: dict, zone_names: list[str]) -> dict[str, s
 
     normalized = {str(k).upper(): str(v) for k, v in mapping.items()}
     return {name: normalized.get(name.upper(), "ink1") for name in zone_names}
-
-
-def _summarize_ink_deltas(zone_deltas: list[dict], ink_mapping: dict[str, str]) -> dict[str, dict]:
-    buckets: dict[str, dict[str, list]] = {}
-    for item in zone_deltas:
-        zone_name = item.get("zone")
-        if not zone_name:
-            continue
-        ink_name = ink_mapping.get(zone_name, "ink1")
-        bucket = buckets.setdefault(
-            ink_name,
-            {"zones": [], "delta_L": [], "delta_a": [], "delta_b": [], "delta_e": []},
-        )
-        bucket["zones"].append(zone_name)
-        bucket["delta_L"].append(float(item.get("delta_L", 0.0)))
-        bucket["delta_a"].append(float(item.get("delta_a", 0.0)))
-        bucket["delta_b"].append(float(item.get("delta_b", 0.0)))
-        bucket["delta_e"].append(float(item.get("delta_e", 0.0)))
-
-    summary: dict[str, dict] = {}
-    for ink_name, values in buckets.items():
-        deltas = values["delta_e"]
-        if not deltas:
-            continue
-        summary[ink_name] = {
-            "zones": values["zones"],
-            "mean_delta_e": float(np.mean(deltas)),
-            "max_delta_e": float(np.max(deltas)),
-            "mean_delta_L": float(np.mean(values["delta_L"])),
-            "mean_delta_a": float(np.mean(values["delta_a"])),
-            "mean_delta_b": float(np.mean(values["delta_b"])),
-        }
-
-    return summary
-
-
-def _resolve_ink_thresholds(sku_config: dict, ink_names: list[str]) -> dict[str, dict]:
-    thresholds = sku_config.get("params", {}).get("ink_thresholds") or {}
-    default_threshold = sku_config.get("default_threshold", None)
-    default_entry = thresholds.get("default")
-    if default_entry is None and default_threshold is not None:
-        default_entry = {"max_delta_e": float(default_threshold)}
-
-    resolved: dict[str, dict] = {}
-    for name in ink_names:
-        entry = thresholds.get(name) or thresholds.get(name.lower()) or thresholds.get(name.upper())
-        if entry is None and default_entry is not None:
-            entry = dict(default_entry)
-        if entry:
-            resolved[name] = entry
-    return resolved
-
-
-def _resolve_quality_thresholds(sku_config: dict) -> dict[str, dict]:
-    defaults = {
-        "blur": {"delta_warn": -50.0},
-        "histogram": {"lab_mean": 0.2, "hsv_mean": 0.2},
-        "dot_stats": {"dot_count_delta": 50, "dot_coverage_delta": 0.05},
-    }
-
-    raw = sku_config.get("params", {}).get("quality_thresholds") or {}
-    resolved = {}
-    for key, default in defaults.items():
-        entry = raw.get(key) or {}
-        merged = dict(default)
-        merged.update(entry)
-        resolved[key] = merged
-    return resolved
-
-
-def _evaluate_ink_flags(ink_deltas: dict[str, dict], ink_thresholds: dict[str, dict]) -> list[dict]:
-    flags: list[dict] = []
-    for ink_name, deltas in ink_deltas.items():
-        threshold = ink_thresholds.get(ink_name) or {}
-        max_limit = threshold.get("max_delta_e")
-        mean_limit = threshold.get("mean_delta_e")
-        if max_limit is not None and deltas.get("max_delta_e", 0.0) > float(max_limit):
-            flags.append(
-                {
-                    "ink": ink_name,
-                    "metric": "max_delta_e",
-                    "value": deltas.get("max_delta_e"),
-                    "threshold": float(max_limit),
-                }
-            )
-        if mean_limit is not None and deltas.get("mean_delta_e", 0.0) > float(mean_limit):
-            flags.append(
-                {
-                    "ink": ink_name,
-                    "metric": "mean_delta_e",
-                    "value": deltas.get("mean_delta_e"),
-                    "threshold": float(mean_limit),
-                }
-            )
-    return flags
-
-
-def _compare_quality_metrics(ref_metrics: Optional[dict], test_metrics: Optional[dict]) -> Optional[dict]:
-    if not ref_metrics or not test_metrics:
-        return None
-
-    blur_delta = None
-    ref_blur = (ref_metrics.get("blur") or {}).get("score")
-    test_blur = (test_metrics.get("blur") or {}).get("score")
-    if ref_blur is not None and test_blur is not None:
-        blur_delta = float(test_blur) - float(ref_blur)
-
-    hist_diff = _compare_histograms(ref_metrics.get("histogram"), test_metrics.get("histogram"))
-    dot_delta = _compare_dot_stats(ref_metrics.get("dot_stats"), test_metrics.get("dot_stats"))
-
-    return {
-        "blur_delta": blur_delta,
-        "hist_diff": hist_diff,
-        "dot_delta": dot_delta,
-    }
-
-
-def _compare_histograms(ref_hist: Optional[dict], test_hist: Optional[dict]) -> Optional[dict]:
-    if not ref_hist or not test_hist:
-        return None
-
-    if ref_hist.get("bins") != test_hist.get("bins"):
-        return None
-
-    def _l1(a: list, b: list) -> float:
-        arr_a = np.asarray(a, dtype=np.float32)
-        arr_b = np.asarray(b, dtype=np.float32)
-        if arr_a.shape != arr_b.shape:
-            return float("nan")
-        return float(np.sum(np.abs(arr_a - arr_b)))
-
-    def _space_diff(space: str, channels: list[str]) -> dict:
-        diffs = {}
-        values = []
-        for ch in channels:
-            a = (ref_hist.get(space) or {}).get(ch)
-            b = (test_hist.get(space) or {}).get(ch)
-            if a is None or b is None:
-                continue
-            diff = _l1(a, b)
-            diffs[ch] = diff
-            values.append(diff)
-        diffs["mean"] = float(np.mean(values)) if values else None
-        return diffs
-
-    return {
-        "method": "l1",
-        "lab": _space_diff("lab", ["L", "a", "b"]),
-        "hsv": _space_diff("hsv", ["H", "S", "V"]),
-    }
-
-
-def _compare_dot_stats(ref_stats: Optional[dict], test_stats: Optional[dict]) -> Optional[dict]:
-    if not ref_stats or not test_stats:
-        return None
-
-    keys = ["dot_count", "dot_coverage", "dot_area_mean", "dot_area_std"]
-    deltas = {}
-    for key in keys:
-        if ref_stats.get(key) is None or test_stats.get(key) is None:
-            continue
-        deltas[key] = float(test_stats[key]) - float(ref_stats[key])
-
-    return deltas if deltas else None
-
-
-def _lens_info_from_detection(lens_detection: Optional[Any]) -> Optional[dict]:
-    if lens_detection is None:
-        return None
-
-    return {
-        "center_x": float(lens_detection.center_x),
-        "center_y": float(lens_detection.center_y),
-        "radius": float(lens_detection.radius),
-        "confidence": float(getattr(lens_detection, "confidence", 0.0)),
-    }
-
-
-def _center_offset_info(image_bgr: Optional[np.ndarray], lens_detection: Optional[Any]) -> Optional[dict]:
-    if image_bgr is None or lens_detection is None:
-        return None
-
-    img_h, img_w = image_bgr.shape[:2]
-    img_center_x = img_w / 2.0
-    img_center_y = img_h / 2.0
-    dx = float(lens_detection.center_x) - img_center_x
-    dy = float(lens_detection.center_y) - img_center_y
-    offset_px = float(np.hypot(dx, dy))
-    radius = float(lens_detection.radius) if lens_detection.radius else 0.0
-    offset_ratio = offset_px / radius if radius > 0 else None
-
-    return {
-        "image_width": int(img_w),
-        "image_height": int(img_h),
-        "image_center_x": img_center_x,
-        "image_center_y": img_center_y,
-        "offset_x": dx,
-        "offset_y": dy,
-        "offset_px": offset_px,
-        "offset_ratio": offset_ratio,
-    }
-
-
-def _compute_cluster_results(
-    image_bgr: Optional[np.ndarray],
-    lens_detection: Optional[Any],
-    sku_config: dict,
-    mask_source: str = "sample",
-    std_ref_image: Optional[np.ndarray] = None,
-    std_ref_lens: Optional[Any] = None,
-) -> Optional[dict]:
-    if image_bgr is None or lens_detection is None:
-        return None
-
-    from itertools import permutations
-
-    from src.core.zone_analyzer_2d import InkMaskConfig, bgr_to_lab_float, build_ink_mask, circle_mask
-    from src.utils.color_delta import delta_e_cie2000
-
-    params = sku_config.get("params", {})
-    ink_profile = params.get("ink_profile", {})
-    if ink_profile.get("mode") != "cluster":
-        return None
-
-    k = int(ink_profile.get("k", 0))
-    if k <= 0:
-        return None
-
-    h, w = image_bgr.shape[:2]
-    cx = float(lens_detection.center_x)
-    cy = float(lens_detection.center_y)
-    radius = float(lens_detection.radius)
-
-    lens_mask = circle_mask((h, w), cx, cy, radius)
-
-    if mask_source == "std_warped":
-        ink_mask = _warp_std_ink_mask_to_test(
-            std_ref_image,
-            std_ref_lens,
-            image_bgr,
-            lens_detection,
-            sku_config,
-        )
-        if ink_mask is None:
-            mask_source = "sample_fallback"
-            ink_mask = build_ink_mask(image_bgr, lens_mask, InkMaskConfig())
-    else:
-        ink_mask = build_ink_mask(image_bgr, lens_mask, InkMaskConfig())
-        if mask_source == "std":
-            ink_mask = _buffer_mask(ink_mask, sku_config)
-
-    ink_mask = cv2.bitwise_and(ink_mask, ink_mask, mask=lens_mask)
-
-    optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
-    center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
-    r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
-    r_outer = 0.95
-
-    yy, xx = np.indices((h, w))
-    rr = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-    valid = (rr >= radius * r_inner) & (rr <= radius * r_outer) & (lens_mask > 0)
-    mask = valid & (ink_mask > 0)
-
-    if np.sum(mask) < max(100, k * 50):
-        return {"clusters": [], "match": [], "match_confidence": None}
-
-    lab = bgr_to_lab_float(image_bgr)
-    ab = lab[:, :, 1:3]
-    samples = ab[mask].astype(np.float32)
-
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.5)
-    flags = cv2.KMEANS_PP_CENTERS
-    compactness, labels, centers = cv2.kmeans(samples, k, None, criteria, 5, flags)
-
-    labels = labels.flatten()
-    total_pixels = int(samples.shape[0])
-
-    clusters = []
-    for idx in range(k):
-        idx_mask = labels == idx
-        count = int(np.sum(idx_mask))
-        if count == 0:
-            continue
-        mean_lab = lab[mask][idx_mask].mean(axis=0)
-        clusters.append(
-            {
-                "cluster_id": int(idx),
-                "pixels": count,
-                "coverage": float(count / total_pixels) if total_pixels > 0 else 0.0,
-                "mean_lab": [float(v) for v in mean_lab],
-                "mean_ab": [float(mean_lab[1]), float(mean_lab[2])],
-            }
-        )
-
-    return {
-        "clusters": clusters,
-        "algorithm": "kmeans",
-        "mask_source": mask_source,
-        "match": [],
-        "match_confidence": None,
-    }
-
-
-def _warp_std_ink_mask_to_test(
-    ref_image: Optional[np.ndarray],
-    ref_lens: Optional[Any],
-    test_image: Optional[np.ndarray],
-    test_lens: Optional[Any],
-    sku_config: dict,
-) -> Optional[np.ndarray]:
-    if ref_image is None or ref_lens is None or test_image is None or test_lens is None:
-        return None
-
-    from src.core.zone_analyzer_2d import InkMaskConfig, build_ink_mask, circle_mask
-
-    ref_h, ref_w = ref_image.shape[:2]
-    ref_cx = float(ref_lens.center_x)
-    ref_cy = float(ref_lens.center_y)
-    ref_radius = float(ref_lens.radius)
-    ref_lens_mask = circle_mask((ref_h, ref_w), ref_cx, ref_cy, ref_radius)
-    ref_ink_mask = build_ink_mask(ref_image, ref_lens_mask, InkMaskConfig())
-    ref_ink_mask = _buffer_mask(ref_ink_mask, sku_config)
-    ref_ink_mask = cv2.bitwise_and(ref_ink_mask, ref_ink_mask, mask=ref_lens_mask)
-
-    test_h, test_w = test_image.shape[:2]
-    test_cx = float(test_lens.center_x)
-    test_cy = float(test_lens.center_y)
-    test_radius = float(test_lens.radius)
-
-    shared_radius = min(ref_radius, test_radius)
-    r_bins = int(max(64, min(256, shared_radius)))
-    theta_bins = 360
-
-    polar = cv2.warpPolar(
-        ref_ink_mask,
-        (r_bins, theta_bins),
-        (ref_cx, ref_cy),
-        ref_radius,
-        cv2.WARP_POLAR_LINEAR + cv2.WARP_FILL_OUTLIERS,
-    )
-
-    warped = cv2.warpPolar(
-        polar,
-        (test_w, test_h),
-        (test_cx, test_cy),
-        test_radius,
-        cv2.WARP_POLAR_LINEAR + cv2.WARP_INVERSE_MAP,
-    )
-
-    return (warped > 0).astype(np.uint8)
-
-
-def _match_cluster_sets(ref_clusters: list, test_clusters: list) -> dict:
-    if not ref_clusters or not test_clusters:
-        return {"matches": [], "match_confidence": None}
-
-    from itertools import permutations
-
-    from src.utils.color_delta import delta_e_cie2000
-
-    k = min(len(ref_clusters), len(test_clusters))
-    ref_subset = ref_clusters[:k]
-    test_subset = test_clusters[:k]
-
-    cost_matrix = []
-    for r in ref_subset:
-        row = []
-        for t in test_subset:
-            row.append(delta_e_cie2000(r["mean_lab"], t["mean_lab"]))
-        cost_matrix.append(row)
-
-    best = None
-    second = None
-    best_perm = None
-
-    for perm in permutations(range(k)):
-        cost = sum(cost_matrix[i][perm[i]] for i in range(k))
-        if best is None or cost < best:
-            second = best
-            best = cost
-            best_perm = perm
-        elif second is None or cost < second:
-            second = cost
-
-    matches = []
-    if best_perm is not None:
-        for i, j in enumerate(best_perm):
-            matches.append(
-                {
-                    "ref_cluster_id": ref_subset[i].get("cluster_id"),
-                    "ref_std_id": ref_subset[i].get("std_cluster_id"),
-                    "ref_role": ref_subset[i].get("role"),
-                    "test_cluster_id": test_subset[j].get("cluster_id"),
-                    "delta_e": float(cost_matrix[i][j]),
-                }
-            )
-
-    match_conf = None
-    if best is not None and second is not None:
-        match_conf = float(second - best)
-
-    return {"matches": matches, "match_confidence": match_conf}
-
-
-def _compute_sample_outside_std_ratio(
-    ref_image: Optional[np.ndarray],
-    ref_lens: Optional[Any],
-    test_image: Optional[np.ndarray],
-    test_lens: Optional[Any],
-    sku_config: Optional[dict] = None,
-) -> Optional[float]:
-    if ref_image is None or ref_lens is None or test_image is None or test_lens is None:
-        return None
-
-    from src.core.zone_analyzer_2d import InkMaskConfig, build_ink_mask, circle_mask
-
-    shared_radius = min(float(ref_lens.radius), float(test_lens.radius))
-    r_bins = int(max(64, min(256, shared_radius)))
-    theta_bins = 360
-
-    def _polar_mask(img_bgr, lens, buffer_std: bool):
-        h, w = img_bgr.shape[:2]
-        cx = float(lens.center_x)
-        cy = float(lens.center_y)
-        radius = float(lens.radius)
-        lens_mask = circle_mask((h, w), cx, cy, radius)
-        ink_mask = build_ink_mask(img_bgr, lens_mask, InkMaskConfig())
-        if buffer_std and sku_config:
-            ink_mask = _buffer_mask(ink_mask, sku_config)
-        ink_mask = cv2.bitwise_and(ink_mask, ink_mask, mask=lens_mask)
-        polar = cv2.warpPolar(
-            ink_mask,
-            (r_bins, theta_bins),
-            (cx, cy),
-            radius,
-            cv2.WARP_POLAR_LINEAR + cv2.WARP_FILL_OUTLIERS,
-        )
-        return (polar > 0).astype(np.uint8)
-
-    ref_polar = _polar_mask(ref_image, ref_lens, True)
-    test_polar = _polar_mask(test_image, test_lens, False)
-
-    test_total = int(test_polar.sum())
-    if test_total == 0:
-        return 0.0
-
-    outside = int(((test_polar > 0) & (ref_polar == 0)).sum())
-    return float(outside / test_total)
-
-
-def _assign_roles_to_clusters(clusters: Optional[dict], std_clusters: Optional[list]) -> Optional[dict]:
-    if not clusters or not std_clusters:
-        return clusters
-
-    from itertools import permutations
-
-    cluster_list = clusters.get("clusters", [])
-    if not cluster_list:
-        return clusters
-
-    std_defs = []
-    for item in std_clusters:
-        sig = item.get("signature") or {}
-        mean_ab = sig.get("mean_ab")
-        if not mean_ab or len(mean_ab) != 2:
-            continue
-        std_defs.append(
-            {
-                "id": item.get("id"),
-                "role": item.get("role"),
-                "mean_ab": [float(mean_ab[0]), float(mean_ab[1])],
-            }
-        )
-
-    if not std_defs:
-        return clusters
-
-    k = min(len(std_defs), len(cluster_list))
-    std_subset = std_defs[:k]
-    cl_subset = cluster_list[:k]
-
-    cost_matrix = []
-    for s in std_subset:
-        row = []
-        for c in cl_subset:
-            cab = c.get("mean_ab")
-            if not cab or len(cab) != 2:
-                row.append(float("inf"))
-                continue
-            da = cab[0] - s["mean_ab"][0]
-            db = cab[1] - s["mean_ab"][1]
-            row.append(float(np.hypot(da, db)))
-        cost_matrix.append(row)
-
-    best = None
-    best_perm = None
-    for perm in permutations(range(k)):
-        cost = sum(cost_matrix[i][perm[i]] for i in range(k))
-        if best is None or cost < best:
-            best = cost
-            best_perm = perm
-
-    if best_perm is None:
-        return clusters
-
-    for i, j in enumerate(best_perm):
-        cl_subset[j]["std_cluster_id"] = std_subset[i]["id"]
-        cl_subset[j]["role"] = std_subset[i]["role"]
-
-    return clusters
-
-
-def _compute_zone_diagnostics(
-    radial_profile: Optional[Any],
-    sku_config: dict,
-    expected_zones: Optional[int],
-) -> Optional[dict]:
-    if radial_profile is None:
-        return None
-
-    from src.core.zone_segmenter import SegmenterConfig, ZoneSegmenter
-
-    params = sku_config.get("params", {})
-    optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
-    center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
-    r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
-    r_outer = 0.95
-
-    segmenter = ZoneSegmenter(SegmenterConfig())
-    return segmenter.diagnostics(
-        radial_profile,
-        expected_zones=expected_zones,
-        r_inner=r_inner,
-        r_outer=r_outer,
-    )
-
-
-def _compute_zone_ink_ratios(
-    image_bgr: Optional[np.ndarray],
-    lens_detection: Optional[Any],
-    zones: list,
-    sku_config: dict,
-) -> Optional[dict]:
-    if image_bgr is None or lens_detection is None or not zones:
-        return None
-
-    from src.core.zone_analyzer_2d import (
-        InkMaskConfig,
-        ZoneSpec,
-        build_ink_mask,
-        build_zone_masks_from_printband,
-        circle_mask,
-    )
-
-    h, w = image_bgr.shape[:2]
-    cx = float(lens_detection.center_x)
-    cy = float(lens_detection.center_y)
-    radius = float(lens_detection.radius)
-    lens_mask = circle_mask((h, w), cx, cy, radius)
-
-    ink_mask = build_ink_mask(image_bgr, lens_mask, InkMaskConfig())
-    ink_mask = _buffer_mask(ink_mask, sku_config)
-    ink_mask = cv2.bitwise_and(ink_mask, ink_mask, mask=lens_mask)
-
-    params = sku_config.get("params", {})
-    optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
-    center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
-    r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
-    r_outer = 0.95
-
-    print_inner = radius * r_inner
-    print_outer = radius * r_outer
-
-    zone_specs = [ZoneSpec(name=z.name, r_start_norm=z.r_start, r_end_norm=z.r_end) for z in zones]
-    zone_masks = build_zone_masks_from_printband(h, w, cx, cy, print_inner, print_outer, lens_mask, zone_specs)
-
-    ratios = {}
-    for name, zmask in zone_masks.items():
-        z = (zmask > 0) & (lens_mask > 0)
-        total_pixels = int(np.sum(z))
-        ink_pixels = int(np.sum((ink_mask > 0) & z))
-        ink_ratio = (ink_pixels / total_pixels) if total_pixels > 0 else 0.0
-        ratios[name] = {
-            "ink_pixels": ink_pixels,
-            "total_pixels": total_pixels,
-            "ink_ratio": ink_ratio,
-        }
-
-    return ratios
-
-
-def _buffer_mask(mask: np.ndarray, sku_config: dict) -> np.ndarray:
-    params = sku_config.get("params", {})
-    mask_policy = params.get("mask_policy", {})
-    buffer_iter = int(mask_policy.get("std_mask_buffer_iter", 1))
-    if buffer_iter <= 0:
-        return mask
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    return cv2.dilate(mask, kernel, iterations=buffer_iter)
-
-
-def _zone_stats_from_profile(profile: Optional[Any], r_start: float, r_end: float) -> Optional[dict]:
-    if profile is None:
-        return None
-
-    r0, r1 = sorted([r_start, r_end])
-    mask = (profile.r_normalized >= r0) & (profile.r_normalized < r1)
-    if np.sum(mask) == 0:
-        return None
-
-    mean_L = float(np.mean(profile.L[mask]))
-    mean_a = float(np.mean(profile.a[mask]))
-    mean_b = float(np.mean(profile.b[mask]))
-    return {
-        "mean_L": mean_L,
-        "mean_a": mean_a,
-        "mean_b": mean_b,
-    }
-
-
-def _build_compare_overlay(
-    image_bgr: Optional[np.ndarray],
-    lens_detection: Optional[Any],
-    zones: list,
-    zone_deltas: list[dict],
-    sku_config: dict,
-) -> Optional[np.ndarray]:
-    if image_bgr is None or lens_detection is None or not zones or not zone_deltas:
-        return None
-
-    delta_map = {z.get("zone"): z for z in zone_deltas if z.get("zone")}
-    default_threshold = float(sku_config.get("default_threshold", 0.0))
-
-    class _OverlayZoneResult:
-        def __init__(self, zone_name: str, delta_e: float, threshold: float) -> None:
-            self.zone_name = zone_name
-            self.delta_e = float(delta_e)
-            self.threshold = float(threshold)
-            self.is_ok = self.delta_e <= self.threshold if self.threshold > 0 else True
-
-    zone_results = []
-    for zone in zones:
-        delta = delta_map.get(zone.name)
-        if not delta:
-            continue
-        cfg = (sku_config.get("zones") or {}).get(zone.name) or {}
-        threshold = cfg.get("delta_e_threshold", cfg.get("threshold", default_threshold))
-        zone_results.append(_OverlayZoneResult(zone.name, delta.get("delta_e", 0.0), threshold))
-
-    if not zone_results:
-        return None
-
-    class _OverlayResult:
-        def __init__(self, zone_results_list: list[_OverlayZoneResult]) -> None:
-            self.zone_results = zone_results_list
-            self.overall_delta_e = float(np.mean([zr.delta_e for zr in zone_results_list]))
-            self.judgment = "OK" if all(zr.is_ok for zr in zone_results_list) else "NG"
-
-    overlay_result = _OverlayResult(zone_results)
-    visualizer = InspectionVisualizer(VisualizerConfig())
-    overlay = visualizer.visualize_zone_overlay(image_bgr, lens_detection, zones, overlay_result, show_result=False)
-
-    img_h, img_w = overlay.shape[:2]
-    img_center = (int(img_w / 2), int(img_h / 2))
-    cv2.drawMarker(
-        overlay,
-        img_center,
-        (255, 255, 0),
-        markerType=cv2.MARKER_CROSS,
-        markerSize=18,
-        thickness=2,
-        line_type=cv2.LINE_AA,
-    )
-
-    center_exclude_ratio = float(sku_config.get("params", {}).get("center_exclude_ratio", 0.0))
-    if center_exclude_ratio > 0:
-        center = (int(lens_detection.center_x), int(lens_detection.center_y))
-        radius = int(lens_detection.radius * center_exclude_ratio)
-        if radius > 0:
-            overlay_mask = overlay.copy()
-            cv2.circle(overlay_mask, center, radius, (80, 80, 80), -1, cv2.LINE_AA)
-            overlay = cv2.addWeighted(overlay_mask, 0.35, overlay, 0.65, 0)
-
-    return overlay
-
-
-@app.post("/compare")
-async def compare_lots(
-    reference_file: UploadFile = File(...),
-    test_files: list[UploadFile] = File(...),
-    sku: str = Form(...),
-):
-    """
-    PHASE7: Compare reference image against multiple test images (Lot comparison).
-
-    This endpoint performs batch analysis to detect color drift and consistency
-    issues across multiple lenses from the same lot.
-
-    Args:
-        reference_file: Reference image (golden sample)
-        test_files: List of test images to compare against reference
-        sku: SKU identifier
-
-    Returns:
-        dict: Comparison results with zone-level deltas and batch summary
-
-    Example Response:
-        {
-            "reference": {
-                "filename": "ref.jpg",
-                "zones": [...]
-            },
-            "tests": [
-                {
-                    "filename": "lot_002_001.jpg",
-                    "zone_deltas": [
-                        {
-                            "zone": "A",
-                            "delta_L": -2.3,
-                            "delta_a": 0.5,
-                            "delta_b": 1.2,
-                            "delta_e": 2.7
-                        }
-                    ],
-                    "overall_shift": "Darker and more yellow",
-                    "max_delta_e": 3.5
-                }
-            ],
-            "batch_summary": {
-                "mean_delta_e_per_zone": {"A": 2.3, "B": 1.8},
-                "max_delta_e_per_zone": {"A": 4.5, "B": 3.2},
-                "std_delta_e_per_zone": {"A": 0.8, "B": 0.5},
-                "stability_score": 0.82,
-                "outliers": ["lot_002_005.jpg"]
-            }
-        }
-    """
-    import cv2
-
-    from src.utils.file_io import read_json
-    from src.utils.security import validate_file_extension, validate_file_size
-
-    # Load SKU config
-    sku_config = load_sku_config(sku)
-
-    # 1. Process reference image
-    logger.info(f"[COMPARE] Processing reference: {reference_file.filename}")
-
-    if not validate_file_extension(reference_file.filename, [".jpg", ".jpeg", ".png", ".bmp"]):
-        raise HTTPException(status_code=400, detail=f"Invalid file type: {reference_file.filename}")
-
-    ref_content = await reference_file.read()
-    if not validate_file_size(len(ref_content), max_size_mb=10):
-        raise HTTPException(status_code=413, detail=f"File too large: {reference_file.filename}")
-    ref_run_id = uuid.uuid4().hex[:8]
-    ref_run_dir = RESULTS_DIR / f"ref_{ref_run_id}"
-    ref_run_dir.mkdir(parents=True, exist_ok=True)
-
-    ref_path = ref_run_dir / f"reference{Path(reference_file.filename).suffix}"
-    ref_path.write_bytes(ref_content)
-
-    # Run pipeline on reference
-    ref_pipeline = InspectionPipeline(sku_config, save_intermediates=False)
-    try:
-        ref_result = ref_pipeline.process(str(ref_path), sku, save_dir=ref_run_dir)
-    except PipelineError as e:
-        raise HTTPException(status_code=400, detail=f"Reference image processing failed: {str(e)}")
-
-    # Get reference zones
-    ref_zones = ref_result.zones
-    if not ref_zones:
-        raise HTTPException(status_code=400, detail="Reference image has no zones detected")
-
-    logger.info(f"[COMPARE] Reference has {len(ref_zones)} zones")
-    ref_metrics = getattr(ref_result, "metrics", None)
-    params = sku_config.get("params", {})
-    version_stamp = params.get("version_stamp")
-    expected_zones = params.get("expected_zones")
-    ref_ink_ratios = _compute_zone_ink_ratios(
-        ref_result.image, getattr(ref_result, "lens_detection", None), ref_zones, sku_config
-    )
-    ref_clusters = _compute_cluster_results(
-        ref_result.image,
-        getattr(ref_result, "lens_detection", None),
-        sku_config,
-        mask_source="std",
-    )
-    std_clusters = (params.get("ink_profile") or {}).get("std_clusters")
-    if std_clusters:
-        ref_clusters = _assign_roles_to_clusters(ref_clusters, std_clusters)
-    ink_mapping = _resolve_ink_mapping(sku_config, [z.name for z in ref_zones])
-    ink_thresholds = _resolve_ink_thresholds(sku_config, list(set(ink_mapping.values())))
-    quality_thresholds = _resolve_quality_thresholds(sku_config)
-    mask_policy = params.get("mask_policy", {})
-    std_ink_gate_min_ratio = float(mask_policy.get("min_ink_ratio_std", params.get("std_ink_gate_min_ratio", 0.15)))
-    effective_min_ratio = float(mask_policy.get("min_ink_ratio_sample", params.get("effective_min_ratio", 0.05)))
-    outside_warn = float(mask_policy.get("sample_outside_std_ratio_warn", 0.0))
-    outside_fail = float(mask_policy.get("sample_outside_std_ratio_fail", 0.0))
-    alignment_policy = params.get("alignment_policy", {})
-    warn_offset = float(alignment_policy.get("warn_center_offset_ratio", 0.0))
-    stop_offset = float(alignment_policy.get("stop_center_offset_ratio", 0.0))
-    require_ok = bool(alignment_policy.get("require_ok", False))
-
-    # 2. Process test images
-    test_results = []
-    all_deltas_per_zone = {zone.name: [] for zone in ref_zones}
-
-    for test_file in test_files:
-        logger.info(f"[COMPARE] Processing test: {test_file.filename}")
-
-        if not validate_file_extension(test_file.filename, [".jpg", ".jpeg", ".png", ".bmp"]):
-            raise HTTPException(status_code=400, detail=f"Invalid file type: {test_file.filename}")
-
-        test_content = await test_file.read()
-        if not validate_file_size(len(test_content), max_size_mb=10):
-            raise HTTPException(status_code=413, detail=f"File too large: {test_file.filename}")
-        test_run_id = uuid.uuid4().hex[:8]
-        test_run_dir = RESULTS_DIR / f"test_{test_run_id}"
-        test_run_dir.mkdir(parents=True, exist_ok=True)
-
-        test_path = test_run_dir / f"test{Path(test_file.filename).suffix}"
-        test_path.write_bytes(test_content)
-
-        # Run pipeline on test image
-        test_pipeline = InspectionPipeline(sku_config, save_intermediates=False)
-        try:
-            test_result = test_pipeline.process(str(test_path), sku, save_dir=test_run_dir)
-        except PipelineError as e:
-            logger.warning(f"[COMPARE] Test image {test_file.filename} failed: {e}")
-            continue
-
-        test_metrics = getattr(test_result, "metrics", None)
-        test_diagnostics = _compute_zone_diagnostics(
-            getattr(test_result, "radial_profile", None), sku_config, expected_zones
-        )
-        sample_outside_std_ratio = _compute_sample_outside_std_ratio(
-            ref_result.image,
-            getattr(ref_result, "lens_detection", None),
-            getattr(test_result, "image", None),
-            getattr(test_result, "lens_detection", None),
-            sku_config,
-        )
-        test_mask_source = (params.get("ink_profile") or {}).get("test_mask_source", "sample")
-        test_clusters = _compute_cluster_results(
-            getattr(test_result, "image", None),
-            getattr(test_result, "lens_detection", None),
-            sku_config,
-            mask_source=test_mask_source,
-            std_ref_image=ref_result.image,
-            std_ref_lens=getattr(ref_result, "lens_detection", None),
-        )
-        cluster_match = _match_cluster_sets(
-            (ref_clusters or {}).get("clusters", []),
-            (test_clusters or {}).get("clusters", []),
-        )
-        quality_deltas = _compare_quality_metrics(ref_metrics, test_metrics)
-        test_ink_ratios = _compute_zone_ink_ratios(
-            getattr(test_result, "image", None),
-            getattr(test_result, "lens_detection", None),
-            test_result.zones or [],
-            sku_config,
-        )
-        center_offset = _center_offset_info(
-            getattr(test_result, "image", None), getattr(test_result, "lens_detection", None)
-        )
-        alignment_status = "ok"
-        if center_offset and center_offset.get("offset_ratio") is not None:
-            ratio = float(center_offset["offset_ratio"])
-            if stop_offset and ratio >= stop_offset:
-                alignment_status = "stop"
-            elif warn_offset and ratio >= warn_offset:
-                alignment_status = "warn"
-
-        # Calculate zone deltas
-        zone_deltas = []
-        max_de = 0.0
-        delta_Ls = []
-        delta_as = []
-        delta_bs = []
-        zone_gate = {}
-        excluded_zones = []
-
-        test_zones = test_result.zones
-        test_profile = getattr(test_result, "radial_profile", None)
-        ref_profile = getattr(ref_result, "radial_profile", None)
-
-        # 4.6. Compare radial profiles (P1-2)
-        profile_details = None
-        if test_profile and ref_profile:
-            from src.core.profile_comparison import compare_radial_profiles
-
-            # Convert Profile objects to dict if they aren't already
-            def _to_dict(p):
-                if hasattr(p, "L"):
-                    return {"L": p.L.tolist(), "a": p.a.tolist(), "b": p.b.tolist()}
-                return p
-
-            profile_details = compare_radial_profiles(
-                test_profile=_to_dict(test_profile),
-                std_profile=_to_dict(ref_profile),
-            )
-            logger.info(f"[COMPARE] Profile similarity: {profile_details.get('profile_score', 0.0):.1f}")
-
-        if not (alignment_status == "stop" and require_ok):
-            # Match zones by name
-            for ref_zone in ref_zones:
-                # Recompute test zone stats using reference boundaries when possible
-                test_zone = next((z for z in test_zones if z.name == ref_zone.name), None)
-                test_stats = _zone_stats_from_profile(test_profile, ref_zone.r_start, ref_zone.r_end)
-
-                if test_zone is None:
-                    logger.warning(f"[COMPARE] Zone {ref_zone.name} not found in test image {test_file.filename}")
-                    continue
-
-                ref_ratio = None
-                test_ratio = None
-                if ref_ink_ratios and ref_zone.name in ref_ink_ratios:
-                    ref_ratio = ref_ink_ratios[ref_zone.name]["ink_ratio"]
-                if test_ink_ratios and test_zone and test_zone.name in test_ink_ratios:
-                    test_ratio = test_ink_ratios[test_zone.name]["ink_ratio"]
-
-                include = True
-                reason = None
-                if ref_ratio is not None and ref_ratio < std_ink_gate_min_ratio:
-                    include = False
-                    reason = "std_ink_ratio_below_threshold"
-                elif test_ratio is not None and test_ratio < effective_min_ratio:
-                    include = False
-                    reason = "test_ink_ratio_below_threshold"
-
-                zone_gate[ref_zone.name] = {
-                    "ref_ink_ratio": ref_ratio,
-                    "test_ink_ratio": test_ratio,
-                    "included": include,
-                    "reason": reason,
-                }
-
-                if not include:
-                    excluded_zones.append(ref_zone.name)
-                    continue
-
-                # Calculate deltas (reference boundaries preferred)
-                if test_stats is not None:
-                    delta_L = test_stats["mean_L"] - ref_zone.mean_L
-                    delta_a = test_stats["mean_a"] - ref_zone.mean_a
-                    delta_b = test_stats["mean_b"] - ref_zone.mean_b
-                else:
-                    delta_L = test_zone.mean_L - ref_zone.mean_L
-                    delta_a = test_zone.mean_a - ref_zone.mean_a
-                    delta_b = test_zone.mean_b - ref_zone.mean_b
-                delta_e = np.sqrt(delta_L**2 + delta_a**2 + delta_b**2)
-
-                max_de = max(max_de, delta_e)
-
-                delta_Ls.append(delta_L)
-                delta_as.append(delta_a)
-                delta_bs.append(delta_b)
-
-                zone_deltas.append(
-                    {
-                        "zone": ref_zone.name,
-                        "delta_L": round(float(delta_L), 2),
-                        "delta_a": round(float(delta_a), 2),
-                        "delta_b": round(float(delta_b), 2),
-                        "delta_e": round(float(delta_e), 2),
-                    }
-                )
-
-                all_deltas_per_zone[ref_zone.name].append(delta_e)
-
-        # Calculate overall shift description
-        avg_dL = np.mean(delta_Ls) if delta_Ls else 0.0
-        avg_da = np.mean(delta_as) if delta_as else 0.0
-        avg_db = np.mean(delta_bs) if delta_bs else 0.0
-        overall_shift = _describe_shift(avg_dL, avg_da, avg_db)
-        if alignment_status == "stop" and require_ok:
-            overall_shift = "alignment_stop"
-
-        diagnostic_flags = []
-        decision_blocked = False
-        decision_block_reasons = []
-        if alignment_status == "stop":
-            diagnostic_flags.append("alignment_stop")
-        elif alignment_status == "warn":
-            diagnostic_flags.append("alignment_warn")
-
-        if alignment_status == "stop":
-            decision_blocked = True
-            decision_block_reasons.append("alignment_stop")
-
-        if sample_outside_std_ratio is not None and outside_fail > 0:
-            if sample_outside_std_ratio >= outside_fail:
-                diagnostic_flags.append("outside_std_ratio_fail")
-                decision_blocked = True
-                decision_block_reasons.append("outside_std_ratio_fail")
-
-        ink_deltas = _summarize_ink_deltas(zone_deltas, ink_mapping)
-        ink_flags = _evaluate_ink_flags(ink_deltas, ink_thresholds)
-        cluster_max_de = max((m.get("delta_e", 0.0) for m in (cluster_match.get("matches", []) or [])), default=0.0)
-        if cluster_max_de > 0:
-            max_de = cluster_max_de
-
-        overlay_url = None
-        overlay = _build_compare_overlay(
-            image_bgr=test_result.image,
-            lens_detection=getattr(test_result, "lens_detection", None),
-            zones=test_result.zones or [],
-            zone_deltas=zone_deltas,
-            sku_config=sku_config,
-        )
-        if overlay is not None:
-            overlay_path = test_run_dir / "overlay_compare.png"
-            InspectionVisualizer(VisualizerConfig()).save_visualization(overlay, overlay_path)
-            overlay_url = f"/results/test_{test_run_id}/overlay_compare.png?v={int(time())}"
-
-        test_results.append(
-            {
-                "filename": test_file.filename,
-                "zone_deltas": zone_deltas,
-                "ink_deltas": ink_deltas,
-                "ink_flags": ink_flags,
-                "zone_diagnostics": test_diagnostics,
-                "zone_gate": zone_gate,
-                "excluded_zones": excluded_zones,
-                "decision_blocked": decision_blocked,
-                "decision_block_reasons": decision_block_reasons,
-                "alignment": {
-                    "status": alignment_status,
-                    "offset_ratio": (center_offset or {}).get("offset_ratio"),
-                    "warn_threshold": warn_offset,
-                    "stop_threshold": stop_offset,
-                },
-                "sample_outside_std_ratio": sample_outside_std_ratio,
-                "cluster_results": test_clusters,
-                "cluster_match": cluster_match.get("matches", []),
-                "match_confidence": cluster_match.get("match_confidence"),
-                "diagnostic_flags": diagnostic_flags,
-                "metrics": test_metrics,
-                "comparison": quality_deltas,
-                "overall_shift": overall_shift,
-                "max_delta_e": round(float(max_de), 2),
-                "profile_score": profile_details.get("profile_score", 0.0) if profile_details else 0.0,
-                "profile_details": profile_details,
-                "radial_profile": _to_dict(test_profile) if test_profile else None,
-                "overlay": overlay_url,
-                "lens_info": _lens_info_from_detection(getattr(test_result, "lens_detection", None)),
-                "center_offset": center_offset,
-            }
-        )
-
-    # 3. Calculate batch summary
-    batch_summary = {
-        "mean_delta_e_per_zone": {
-            zone: round(float(np.mean(deltas)), 2) if deltas else 0.0 for zone, deltas in all_deltas_per_zone.items()
-        },
-        "max_delta_e_per_zone": {
-            zone: round(float(np.max(deltas)), 2) if deltas else 0.0 for zone, deltas in all_deltas_per_zone.items()
-        },
-        "std_delta_e_per_zone": {
-            zone: round(float(np.std(deltas)), 2) if deltas else 0.0 for zone, deltas in all_deltas_per_zone.items()
-        },
-        "stability_score": round(_calculate_stability_score(test_results), 3),
-        "outliers": _detect_outliers(test_results),
-    }
-
-    # 4. Build response
-    response = {
-        "reference": {
-            "filename": reference_file.filename,
-            "metrics": ref_metrics,
-            "lens_info": _lens_info_from_detection(getattr(ref_result, "lens_detection", None)),
-            "center_offset": _center_offset_info(
-                getattr(ref_result, "image", None), getattr(ref_result, "lens_detection", None)
-            ),
-            "zone_diagnostics": _compute_zone_diagnostics(
-                getattr(ref_result, "radial_profile", None), sku_config, expected_zones
-            ),
-            "radial_profile": (
-                _to_dict(ref_result.radial_profile) if getattr(ref_result, "radial_profile", None) else None
-            ),
-            "zone_ink_ratios": ref_ink_ratios,
-            "cluster_results": ref_clusters,
-            "zones": [
-                {
-                    "name": z.name,
-                    "mean_L": round(float(z.mean_L), 2),
-                    "mean_a": round(float(z.mean_a), 2),
-                    "mean_b": round(float(z.mean_b), 2),
-                }
-                for z in ref_zones
-            ],
-        },
-        "tests": test_results,
-        "batch_summary": batch_summary,
-        "test_count": len(test_results),
-        "ink_mapping": ink_mapping,
-        "ink_thresholds": ink_thresholds,
-        "quality_thresholds": quality_thresholds,
-        "gate_thresholds": {
-            "std_ink_gate_min_ratio": std_ink_gate_min_ratio,
-            "effective_min_ratio": effective_min_ratio,
-            "sample_outside_std_ratio_warn": outside_warn,
-            "sample_outside_std_ratio_fail": outside_fail,
-            "alignment_warn_offset_ratio": warn_offset,
-            "alignment_stop_offset_ratio": stop_offset,
-        },
-        "decision_policy": params.get("decision_policy"),
-        "alignment_policy": alignment_policy,
-        "version_stamp": version_stamp,
-    }
-
-    logger.info(
-        f"[COMPARE] Completed: {len(test_results)}/{len(test_files)} images, "
-        f"stability={batch_summary['stability_score']:.2f}"
-    )
-
-    return response

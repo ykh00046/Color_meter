@@ -3,146 +3,252 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inspection Stats - Color Meter</title>
+    <title>Inspection Stats | Color Meter</title>
+    <meta name="description" content="검사 통계, OK/NG 추이, RETAKE 원인을 시각화한 Color Meter 통계 대시보드." />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
-        * { font-family: 'Manrope', sans-serif; }
-        body { background: radial-gradient(circle at 10% 20%, #0f172a 0%, #0b1020 40%, #0a0c16 100%); min-height: 100vh; }
-        .card { background: #0f172a; border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
-        .title { color: #e2e8f0; }
-        .text-sub { color: #94a3b8; }
+        :root {
+            --bg-0: #070b12;
+            --bg-1: #0d1424;
+            --panel: rgba(15, 23, 42, 0.86);
+            --panel-border: rgba(148, 163, 184, 0.18);
+            --primary: #ff9f1c;
+            --accent: #33d1ff;
+            --text-strong: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: radial-gradient(circle at 10% 20%, #152341 0%, var(--bg-1) 45%, var(--bg-0) 100%);
+            color: var(--text-strong);
+        }
+
+        h1, h2, h3 { font-family: 'Fraunces', serif; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+
+        .grid-overlay {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(90deg, rgba(51, 209, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(rgba(255, 159, 28, 0.04) 1px, transparent 1px);
+            background-size: 80px 80px;
+            opacity: 0.6;
+            z-index: 0;
+        }
+
+        .glass {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.35);
+        }
+
+        .cta-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #ff7a00 100%);
+            color: #0a0a0a;
+            border: none;
+        }
+
+        .cta-secondary {
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            color: var(--text-strong);
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .field {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: var(--text-strong);
+        }
     </style>
 </head>
-<body class="p-6 text-gray-100">
-    <div class="max-w-7xl mx-auto space-y-6">
-        <!-- Header -->
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-3xl font-bold title flex items-center gap-2">
-                    <i class="fas fa-chart-line text-cyan-400"></i>
-                    Inspection Statistics
-                </h1>
-                <p class="text-sub">Quality trends, pass rates, and RETAKE insights at a glance.</p>
+<body class="min-h-screen">
+    <div class="grid-overlay"></div>
+    <div class="relative z-10">
+        <header class="max-w-7xl mx-auto px-6 py-6">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-black text-xl font-bold">CM</div>
+                    <div>
+                        <p class="mono text-xs text-slate-400">INSPECTION STATS</p>
+                        <h1 class="text-3xl">검사 통계 & 품질 추이</h1>
+                    </div>
+                </div>
+                <nav class="flex flex-wrap gap-3 text-sm">
+                    <a href="/" class="cta-secondary px-4 py-2 rounded-full">Overview</a>
+                    <a href="/history" class="cta-secondary px-4 py-2 rounded-full">History</a>
+                    <a href="/v7" class="cta-secondary px-4 py-2 rounded-full">V7</a>
+                </nav>
             </div>
-            <div class="flex gap-2">
-                <a href="/" class="px-4 py-2 rounded-lg bg-slate-800 text-gray-100 font-semibold hover:bg-slate-700 transition border border-slate-700">
-                    <i class="fas fa-home mr-2"></i>Home
-                </a>
-                <a href="/compare" class="px-4 py-2 rounded-lg bg-slate-800 text-gray-100 font-semibold hover:bg-slate-700 transition border border-slate-700">
-                    <i class="fas fa-balance-scale mr-2"></i>Compare
-                </a>
-                <a href="/history" class="px-4 py-2 rounded-lg bg-slate-800 text-gray-100 font-semibold hover:bg-slate-700 transition border border-slate-700">
-                    <i class="fas fa-database mr-2"></i>History
-                </a>
-                <a href="/stats" class="px-4 py-2 rounded-lg bg-cyan-500 text-white font-semibold hover:bg-cyan-600 transition">
-                    <i class="fas fa-chart-pie mr-2"></i>Stats
-                </a>
-            </div>
-        </div>
+        </header>
 
-        <!-- Filters -->
-        <div class="card p-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label class="block text-sm text-sub mb-2">SKU Code</label>
-                    <input id="filter-sku" type="text" placeholder="e.g., SKU001" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-gray-100 focus:ring-2 focus:ring-cyan-500">
+        <main class="max-w-7xl mx-auto px-6 pb-16 space-y-8">
+            <section class="glass rounded-3xl p-6">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <p class="mono text-xs text-slate-400">FILTERS</p>
+                        <h2 class="text-2xl">기간과 SKU 기준으로 분석</h2>
+                    </div>
+                    <div class="text-xs text-slate-500">필터는 모든 차트와 표에 동시 반영됩니다.</div>
                 </div>
-                <div>
-                    <label class="block text-sm text-sub mb-2">Start Date</label>
-                    <input id="filter-start" type="date" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-gray-100 focus:ring-2 focus:ring-cyan-500">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                    <div>
+                        <label class="text-xs text-slate-400">SKU Code</label>
+                        <input id="filter-sku" type="text" placeholder="SKU001" class="field mt-2 w-full px-3 py-2 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400">Start Date</label>
+                        <input id="filter-start" type="date" class="field mt-2 w-full px-3 py-2 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400">End Date</label>
+                        <input id="filter-end" type="date" class="field mt-2 w-full px-3 py-2 rounded-lg">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button onclick="applyFilters()" class="cta-primary flex-1 px-4 py-2 rounded-lg font-semibold">Apply</button>
+                        <button onclick="resetFilters()" class="cta-secondary px-4 py-2 rounded-lg">Reset</button>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm text-sub mb-2">End Date</label>
-                    <input id="filter-end" type="date" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-gray-100 focus:ring-2 focus:ring-cyan-500">
-                </div>
-                <div class="flex items-end gap-2">
-                    <button onclick="applyFilters()" class="flex-1 px-4 py-2 rounded-lg bg-cyan-500 text-white font-semibold hover:bg-cyan-600 transition">
-                        <i class="fas fa-filter mr-2"></i>Apply
-                    </button>
-                    <button onclick="resetFilters()" class="px-4 py-2 rounded-lg bg-slate-800 text-sub hover:bg-slate-700 transition">
-                        Reset
-                    </button>
-                </div>
-            </div>
-        </div>
+            </section>
 
-        <!-- Summary cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="card p-5">
-                <p class="text-sub text-sm">Total Inspections</p>
-                <p class="text-3xl font-bold mt-1" id="stat-total">-</p>
-                <p class="text-xs text-sub mt-1" id="stat-range"></p>
-            </div>
-            <div class="card p-5">
-                <p class="text-sub text-sm">Pass Rate</p>
-                <p class="text-3xl font-bold text-emerald-300 mt-1" id="stat-pass-rate">-</p>
-                <p class="text-xs text-sub mt-1">OK + OK_WITH_WARNING</p>
-            </div>
-            <div class="card p-5">
-                <p class="text-sub text-sm">Avg ΔE</p>
-                <p class="text-3xl font-bold mt-1" id="stat-avg-delta-e">-</p>
-                <p class="text-xs text-sub mt-1">Overall color difference</p>
-            </div>
-            <div class="card p-5">
-                <p class="text-sub text-sm">Avg Confidence</p>
-                <p class="text-3xl font-bold mt-1" id="stat-avg-confidence">-</p>
-                <p class="text-xs text-sub mt-1">Inspection confidence</p>
-            </div>
-        </div>
+            <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="glass rounded-2xl p-5">
+                    <p class="text-xs text-slate-400">Total Inspections</p>
+                    <p class="text-3xl font-semibold mt-1" id="stat-total">-</p>
+                    <p class="text-xs text-slate-500 mt-1" id="stat-range"></p>
+                </div>
+                <div class="glass rounded-2xl p-5">
+                    <p class="text-xs text-slate-400">Pass Rate</p>
+                    <p class="text-3xl font-semibold text-emerald-300 mt-1" id="stat-pass-rate">-</p>
+                    <p class="text-xs text-slate-500 mt-1">OK + OK_WITH_WARNING</p>
+                </div>
+                <div class="glass rounded-2xl p-5">
+                    <p class="text-xs text-slate-400">Avg Delta E</p>
+                    <p class="text-3xl font-semibold mt-1" id="stat-avg-delta-e">-</p>
+                    <p class="text-xs text-slate-500 mt-1">Overall color difference</p>
+                </div>
+                <div class="glass rounded-2xl p-5">
+                    <p class="text-xs text-slate-400">Avg Confidence</p>
+                    <p class="text-3xl font-semibold mt-1" id="stat-avg-confidence">-</p>
+                    <p class="text-xs text-slate-500 mt-1">Inspection confidence</p>
+                </div>
+            </section>
 
-        <!-- Charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div class="card p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-semibold text-lg text-gray-100">OK/NG/RETAKE</h3>
-                    <span class="text-xs text-sub">Last 30 days</span>
+            <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="glass rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg">OK/NG/RETAKE</h3>
+                        <span class="text-xs text-slate-500">Last 30 days</span>
+                    </div>
+                    <canvas id="chart-judgment"></canvas>
                 </div>
-                <canvas id="chart-judgment"></canvas>
-            </div>
-            <div class="card p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-semibold text-lg text-gray-100">RETAKE Reasons</h3>
-                    <span class="text-xs text-sub">Last 30 days</span>
+                <div class="glass rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg">RETAKE Reasons</h3>
+                        <span class="text-xs text-slate-500">Last 30 days</span>
+                    </div>
+                    <canvas id="chart-retake"></canvas>
                 </div>
-                <canvas id="chart-retake"></canvas>
-            </div>
-            <div class="card p-5 lg:col-span-1">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="font-semibold text-lg text-gray-100">Daily Trend</h3>
-                    <span class="text-xs text-sub">Last 30 days</span>
+                <div class="glass rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-lg">Daily Trend</h3>
+                        <span class="text-xs text-slate-500">Last 30 days</span>
+                    </div>
+                    <canvas id="chart-daily"></canvas>
                 </div>
-                <canvas id="chart-daily"></canvas>
-            </div>
-        </div>
+            </section>
 
-        <!-- SKU table -->
-        <div class="card p-5">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="font-semibold text-lg text-gray-100">SKU Breakdown</h3>
-                <span class="text-xs text-sub">Sorted by volume</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-left text-sm">
-                    <thead>
-                        <tr class="text-sub border-b border-slate-800">
-                            <th class="py-3 pr-4 font-semibold">SKU</th>
-                            <th class="py-3 pr-4 font-semibold">Total</th>
-                            <th class="py-3 pr-4 font-semibold">Pass Rate</th>
-                            <th class="py-3 pr-4 font-semibold">Avg ΔE</th>
-                            <th class="py-3 pr-4 font-semibold">Avg Confidence</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sku-table"></tbody>
-                </table>
-            </div>
-        </div>
+            <section class="glass rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="mono text-xs text-slate-400">SKU BREAKDOWN</p>
+                        <h2 class="text-2xl">SKU별 결과</h2>
+                    </div>
+                    <span class="text-xs text-slate-500">Sorted by volume</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left text-sm">
+                        <thead class="text-xs text-slate-400 uppercase border-b border-slate-800">
+                            <tr>
+                                <th class="py-3 pr-4">SKU</th>
+                                <th class="py-3 pr-4">Total</th>
+                                <th class="py-3 pr-4">Pass Rate</th>
+                                <th class="py-3 pr-4">Avg ΔE</th>
+                                <th class="py-3 pr-4">Avg Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sku-table"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script>
         let chartJudgment, chartRetake, chartDaily;
+        const STATS_FILTERS_KEY = 'cm_stats_filters_v1';
+        const FILTER_IDS = ['filter-sku', 'filter-start', 'filter-end'];
+
+        const debounce = (fn, delay = 350) => {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), delay);
+            };
+        };
+
+        function getFilterValues() {
+            return {
+                sku: document.getElementById('filter-sku').value,
+                start: document.getElementById('filter-start').value,
+                end: document.getElementById('filter-end').value
+            };
+        }
+
+        function setFilterValues(filters) {
+            if (!filters) return;
+            document.getElementById('filter-sku').value = filters.sku || '';
+            document.getElementById('filter-start').value = filters.start || '';
+            document.getElementById('filter-end').value = filters.end || '';
+        }
+
+        function saveFilters() {
+            try {
+                localStorage.setItem(STATS_FILTERS_KEY, JSON.stringify(getFilterValues()));
+            } catch (error) {
+                console.warn('Failed to save filters:', error);
+            }
+        }
+
+        function loadSavedFilters() {
+            try {
+                const saved = localStorage.getItem(STATS_FILTERS_KEY);
+                if (saved) setFilterValues(JSON.parse(saved));
+            } catch (error) {
+                console.warn('Failed to load saved filters:', error);
+            }
+        }
+
+        function setupAutoApply() {
+            const autoApply = debounce(() => applyFilters());
+            FILTER_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const eventName = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'input';
+                el.addEventListener(eventName, autoApply);
+                if (eventName === 'change') {
+                    el.addEventListener('input', autoApply);
+                }
+            });
+        }
 
         function getDateRangeParams() {
             const start = document.getElementById('filter-start').value;
@@ -155,6 +261,7 @@
         }
 
         function applyFilters() {
+            saveFilters();
             loadSummary();
             loadJudgmentChart();
             loadRetakeChart();
@@ -166,6 +273,11 @@
             document.getElementById('filter-sku').value = '';
             document.getElementById('filter-start').value = '';
             document.getElementById('filter-end').value = '';
+            try {
+                localStorage.removeItem(STATS_FILTERS_KEY);
+            } catch (error) {
+                console.warn('Failed to reset saved filters:', error);
+            }
             applyFilters();
         }
 
@@ -286,23 +398,24 @@
             const entries = Object.entries(data.stats_by_sku || {}).sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
 
             if (entries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-sub">No data</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-slate-400">No data</td></tr>';
                 return;
             }
 
             tbody.innerHTML = entries.map(([sku, stats]) => `
                 <tr class="border-b border-slate-800">
-                    <td class="py-3 pr-4 font-medium text-gray-100">${sku}</td>
-                    <td class="py-3 pr-4 text-sub">${stats.total}</td>
-                    <td class="py-3 pr-4 text-sub">${(stats.pass_rate * 100).toFixed(1)}%</td>
-                    <td class="py-3 pr-4 text-sub">${stats.avg_delta_e.toFixed(2)}</td>
-                    <td class="py-3 pr-4 text-sub">${(stats.avg_confidence * 100).toFixed(1)}%</td>
+                    <td class="py-3 pr-4 font-medium text-slate-200">${sku}</td>
+                    <td class="py-3 pr-4 text-slate-400">${stats.total}</td>
+                    <td class="py-3 pr-4 text-slate-400">${(stats.pass_rate * 100).toFixed(1)}%</td>
+                    <td class="py-3 pr-4 text-slate-400">${stats.avg_delta_e.toFixed(2)}</td>
+                    <td class="py-3 pr-4 text-slate-400">${(stats.avg_confidence * 100).toFixed(1)}%</td>
                 </tr>
             `).join('');
         }
 
-        // Init
         window.addEventListener('load', () => {
+            loadSavedFilters();
+            setupAutoApply();
             applyFilters();
         });
     </script>

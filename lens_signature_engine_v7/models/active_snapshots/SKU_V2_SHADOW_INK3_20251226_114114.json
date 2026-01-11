@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_V2_SHADOW",
+  "ink": "INK3",
+  "active": {
+    "LOW": "SKU_V2_SHADOW/INK3/LOW/v20251226_114058",
+    "MID": "SKU_V2_SHADOW/INK3/MID/v20251226_114058",
+    "HIGH": "SKU_V2_SHADOW/INK3/HIGH/v20251226_114058"
+  },
+  "active_versions": {
+    "LOW": "v20251226_114058",
+    "MID": "v20251226_114058",
+    "HIGH": "v20251226_114058"
+  },
+  "created_at": "2025-12-26T11:41:14.560268",
+  "cfg_hash": "sha256:ebc3fe88eb0f8e1601d7d7d17020b9b1a0b2372cbdc8acaa6fe7baf6cd63962e",
+  "registration_summary": {
+    "order_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "order_values": {},
+    "order_ok": true,
+    "sep_threshold": 1.0,
+    "separation": {
+      "LOW_MID": 3.714151620864868,
+      "MID_HIGH": 3.7347614765167236,
+      "LOW_HIGH": 4.4513678550720215
+    },
+    "min_pairwise_separation": 3.714151620864868,
+    "separation_ok": true,
+    "within_mode_stability": {
+      "LOW": null,
+      "MID": null,
+      "HIGH": null
+    },
+    "within_mode_threshold": null,
+    "within_mode_ok": null,
+    "geom_consistency": {
+      "center_drift_px": 39.03639602661133,
+      "radius_drift_ratio": 0.44308358430862427,
+      "passed": null
+    },
+    "warnings": [
+      "WITHIN_MODE_THRESHOLD_DISABLED",
+      "GEOM_THRESHOLD_DISABLED"
+    ]
+  },
+  "warnings": [
+    "WITHIN_MODE_THRESHOLD_DISABLED",
+    "GEOM_THRESHOLD_DISABLED"
+  ],
+  "path": "active_snapshots\\SKU_V2_SHADOW_INK3_20251226_114114.json"
+}

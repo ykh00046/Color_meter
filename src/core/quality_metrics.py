@@ -4,18 +4,20 @@ from typing import Any, Dict, Optional
 import cv2
 import numpy as np
 
-from src.core.zone_analyzer_2d import InkMaskConfig, build_ink_mask, circle_mask
-
 logger = logging.getLogger(__name__)
 
 
-def compute_quality_metrics(image_bgr: np.ndarray, lens_detection: Optional[Any] = None) -> Dict[str, Any]:
+def compute_quality_metrics(
+    image_bgr: np.ndarray,
+    lens_detection: Optional[Any] = None,
+    include_dot_stats: bool = True,
+) -> Dict[str, Any]:
     if image_bgr is None or image_bgr.size == 0:
         return {}
 
     lens_mask = None
     if lens_detection is not None:
-        lens_mask = circle_mask(
+        lens_mask = _circle_mask(
             image_bgr.shape[:2],
             float(lens_detection.center_x),
             float(lens_detection.center_y),
@@ -27,9 +29,10 @@ def compute_quality_metrics(image_bgr: np.ndarray, lens_detection: Optional[Any]
         "histogram": compute_histograms(image_bgr, lens_mask=lens_mask),
     }
 
-    dot_stats = compute_dot_stats(image_bgr, lens_mask=lens_mask)
-    if dot_stats is not None:
-        metrics["dot_stats"] = dot_stats
+    if include_dot_stats:
+        dot_stats = compute_dot_stats(image_bgr, lens_mask=lens_mask)
+        if dot_stats is not None:
+            metrics["dot_stats"] = dot_stats
 
     return metrics
 
@@ -73,6 +76,8 @@ def compute_dot_stats(
 ) -> Optional[Dict[str, Any]]:
     if lens_mask is None:
         return None
+
+    from src.core.zone_analyzer_2d import InkMaskConfig, build_ink_mask
 
     ink_mask = build_ink_mask(image_bgr, lens_mask, InkMaskConfig())
     ink_mask = cv2.bitwise_and(ink_mask, ink_mask, mask=lens_mask)
@@ -121,3 +126,17 @@ def _calc_hist(
     if total > 0:
         hist /= total
     return hist.flatten().tolist()
+
+
+def _circle_mask(
+    shape: tuple,
+    center_x: float,
+    center_y: float,
+    radius: float,
+) -> np.ndarray:
+    """Build a binary circle mask."""
+    h, w = shape
+    yy, xx = np.indices((h, w))
+    rr = np.sqrt((xx - center_x) ** 2 + (yy - center_y) ** 2)
+    mask = (rr <= radius).astype(np.uint8) * 255
+    return mask

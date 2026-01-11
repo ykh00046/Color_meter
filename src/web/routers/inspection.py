@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, desc, func
+from sqlalchemy import and_, case, desc, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from src.models import InspectionHistory, JudgmentType
@@ -359,7 +360,19 @@ def get_inspection_stats(
         query = query.filter(InspectionHistory.sku_code == sku_code)
 
     # Total inspections
-    total_inspections = query.count()
+    try:
+        total_inspections = query.count()
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {
+                "total_inspections": 0,
+                "judgment_counts": {},
+                "pass_rate": 0.0,
+                "avg_delta_e": 0.0,
+                "avg_confidence": 0.0,
+                "time_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            }
+        raise
 
     if total_inspections == 0:
         return {
@@ -372,11 +385,23 @@ def get_inspection_stats(
         }
 
     # Judgment counts
-    judgment_counts_query = (
-        query.with_entities(InspectionHistory.judgment, func.count(InspectionHistory.id).label("count"))
-        .group_by(InspectionHistory.judgment)
-        .all()
-    )
+    try:
+        judgment_counts_query = (
+            query.with_entities(InspectionHistory.judgment, func.count(InspectionHistory.id).label("count"))
+            .group_by(InspectionHistory.judgment)
+            .all()
+        )
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {
+                "total_inspections": 0,
+                "judgment_counts": {},
+                "pass_rate": 0.0,
+                "avg_delta_e": 0.0,
+                "avg_confidence": 0.0,
+                "time_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            }
+        raise
 
     judgment_counts = {j.value: count for j, count in judgment_counts_query}
 
@@ -385,10 +410,22 @@ def get_inspection_stats(
     pass_rate = pass_count / total_inspections if total_inspections > 0 else 0.0
 
     # Average delta_e and confidence
-    avg_stats = query.with_entities(
-        func.avg(InspectionHistory.overall_delta_e).label("avg_delta_e"),
-        func.avg(InspectionHistory.confidence).label("avg_confidence"),
-    ).first()
+    try:
+        avg_stats = query.with_entities(
+            func.avg(InspectionHistory.overall_delta_e).label("avg_delta_e"),
+            func.avg(InspectionHistory.confidence).label("avg_confidence"),
+        ).first()
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {
+                "total_inspections": 0,
+                "judgment_counts": {},
+                "pass_rate": 0.0,
+                "avg_delta_e": 0.0,
+                "avg_confidence": 0.0,
+                "time_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            }
+        raise
 
     return {
         "total_inspections": total_inspections,
@@ -430,20 +467,35 @@ def get_stats_by_sku(
         start_date = end_date - timedelta(days=days)
 
     # Query by SKU
-    results = (
-        db.query(
-            InspectionHistory.sku_code,
-            func.count(InspectionHistory.id).label("total"),
-            func.sum(
-                func.case((InspectionHistory.judgment.in_([JudgmentType.OK, JudgmentType.OK_WITH_WARNING]), 1), else_=0)
-            ).label("pass_count"),
-            func.avg(InspectionHistory.overall_delta_e).label("avg_delta_e"),
-            func.avg(InspectionHistory.confidence).label("avg_confidence"),
+    try:
+        results = (
+            db.query(
+                InspectionHistory.sku_code,
+                func.count(InspectionHistory.id).label("total"),
+                func.sum(
+                    case(
+                        (InspectionHistory.judgment.in_([JudgmentType.OK, JudgmentType.OK_WITH_WARNING]), 1),
+                        else_=0,
+                    )
+                ).label("pass_count"),
+                func.avg(InspectionHistory.overall_delta_e).label("avg_delta_e"),
+                func.avg(InspectionHistory.confidence).label("avg_confidence"),
+            )
+            .filter(InspectionHistory.created_at >= start_date)
+            .group_by(InspectionHistory.sku_code)
+            .all()
         )
-        .filter(InspectionHistory.created_at >= start_date)
-        .group_by(InspectionHistory.sku_code)
-        .all()
-    )
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {
+                "time_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat(),
+                    "days": days,
+                },
+                "stats_by_sku": {},
+            }
+        raise
 
     stats_by_sku = {}
     for sku_code, total, pass_count, avg_delta_e, avg_confidence in results:
@@ -483,31 +535,36 @@ def get_daily_stats(
     end_dt = end_date.date() if end_date else datetime.utcnow().date()
     start_dt = start_date.date() if start_date else end_dt - timedelta(days=days - 1)
 
-    query = db.query(
-        func.date(InspectionHistory.created_at).label("date"),
-        func.count(InspectionHistory.id).label("total"),
-        func.sum(
-            func.case(
-                (InspectionHistory.judgment.in_([JudgmentType.OK, JudgmentType.OK_WITH_WARNING]), 1),
-                else_=0,
-            )
-        ).label("pass_count"),
-        func.sum(
-            func.case(
-                (InspectionHistory.judgment == JudgmentType.NG, 1),
-                else_=0,
-            )
-        ).label("ng_count"),
-        func.sum(
-            func.case(
-                (InspectionHistory.judgment == JudgmentType.RETAKE, 1),
-                else_=0,
-            )
-        ).label("retake_count"),
-    ).filter(
-        func.date(InspectionHistory.created_at) >= start_dt,
-        func.date(InspectionHistory.created_at) <= end_dt,
-    )
+    try:
+        query = db.query(
+            func.date(InspectionHistory.created_at).label("date"),
+            func.count(InspectionHistory.id).label("total"),
+            func.sum(
+                case(
+                    (InspectionHistory.judgment.in_([JudgmentType.OK, JudgmentType.OK_WITH_WARNING]), 1),
+                    else_=0,
+                )
+            ).label("pass_count"),
+            func.sum(
+                case(
+                    (InspectionHistory.judgment == JudgmentType.NG, 1),
+                    else_=0,
+                )
+            ).label("ng_count"),
+            func.sum(
+                case(
+                    (InspectionHistory.judgment == JudgmentType.RETAKE, 1),
+                    else_=0,
+                )
+            ).label("retake_count"),
+        ).filter(
+            func.date(InspectionHistory.created_at) >= start_dt,
+            func.date(InspectionHistory.created_at) <= end_dt,
+        )
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {"start": start_dt.isoformat(), "end": end_dt.isoformat(), "series": []}
+        raise
 
     if sku_code:
         query = query.filter(InspectionHistory.sku_code == sku_code)
@@ -515,7 +572,14 @@ def get_daily_stats(
     query = query.group_by(func.date(InspectionHistory.created_at)).order_by(func.date(InspectionHistory.created_at))
 
     series = []
-    for row in query.all():
+    try:
+        rows = query.all()
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {"start": start_dt.isoformat(), "end": end_dt.isoformat(), "series": []}
+        raise
+
+    for row in rows:
         pass_rate = (row.pass_count or 0) / row.total if row.total else 0.0
         series.append(
             {
@@ -557,7 +621,16 @@ def get_retake_reason_stats(
     if sku_code:
         query = query.filter(InspectionHistory.sku_code == sku_code)
 
-    records = query.all()
+    try:
+        records = query.all()
+    except SQLAlchemyError as exc:
+        if "no such table: inspection_history" in str(exc):
+            return {
+                "total": 0,
+                "reasons": [],
+                "time_range": {"start": start_dt.isoformat(), "end": end_dt.isoformat(), "days": days},
+            }
+        raise
 
     reason_counts: Dict[str, int] = {}
     total = 0

@@ -9,3 +9,25 @@ data/samples/
 tests/.coverage
 __pycache__/
 *.pyc
+
+# Lens Signature Engine v7 runtime state (added by cleanup script)
+lens_signature_engine_v7/state/
+lens_signature_engine_v7/state_test/
+lens_signature_engine_v7/.coverage
+lens_signature_engine_v7/approvals/
+lens_signature_engine_v7/models/TMP_*.json
+lens_signature_engine_v7/result_v7_*.json
+
+# Python cache
+lens_signature_engine_v7/**/__pycache__/
+lens_signature_engine_v7/**/*.pyc
+lens_signature_engine_v7/**/*.pyo
+
+# Temporary directories
+.gemini-clipboard/
+feedback_pack_v2/
+std_registration_pkg/
+
+# Large test/sample files (>5MB)
+lens_signature_engine_v7/share_pkg/inspect_ink*.json
+lens_signature_engine_v7/share_pkg/std_reg_*.json

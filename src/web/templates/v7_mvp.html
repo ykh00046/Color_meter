@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Meter v7 Signature Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151e32', 900: '#0f172a', 950: '#020617' },
+                        brand: { 500: '#3b82f6', 600: '#2563eb' },
+                        status: { ok: '#10b981', warn: '#f59e0b', ng: '#ef4444' }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --base-black: #0f172a; --surface-dark: #151e32; --surface-elevated: #1e293b; --surface-panel: #111827; --border-dim: #334155; --border-bright: #475569; --amber-primary: #3b82f6; --amber-bright: #60a5fa; --amber-glow: rgba(59, 130, 246, 0.35); --cyan-data: #22d3ee; --green-ok: #10b981; --green-glow: rgba(16, 185, 129, 0.25); --red-error: #ef4444; --yellow-warning: #f59e0b; --text-primary: #e2e8f0; --text-secondary: #cbd5e1; --text-dim: #94a3b8; }
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .font-technical { font-family: 'Inter', sans-serif; letter-spacing: 0.08em; font-weight: 700; }
+        body { background: #0f172a; color: var(--text-primary); min-height: 100vh; overflow: hidden; position: relative; }
+        body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(to right, rgba(59, 130, 246, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(59, 130, 246, 0.05) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; z-index: 0; }
+        .content-wrapper { position: relative; z-index: 1; }
+        .terminal-panel { background: linear-gradient(180deg, rgba(17, 27, 42, 0.95), rgba(10, 16, 26, 0.9)); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 24px 60px rgba(7, 11, 18, 0.6); position: relative; backdrop-filter: blur(10px); border-radius: 12px; }
+        .terminal-input { background: rgba(12, 18, 28, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text-primary); padding: 12px 16px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; width: 100%; transition: all 0.2s; }
+        .terminal-input:focus { outline: none; border-color: var(--amber-primary); box-shadow: 0 0 0 2px var(--amber-glow); }
+        .btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; font-weight: 700; padding: 12px 24px; border-radius: 8px; transition: all 0.2s; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--amber-glow); }
+        .btn-secondary { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); padding: 10px 16px; border-radius: 8px; transition: all 0.2s; }
+        .btn-secondary:hover { background: rgba(30, 41, 59, 0.8); border-color: var(--amber-primary); color: white; }
+        .tab-button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: var(--text-dim); border-radius: 8px; transition: all 0.2s; }
+        .tab-button.active { background: var(--brand-600); color: white; }
+        .tab-content { display: none; animation: slideIn 0.3s ease-out; }
+        .tab-content.active { display: block; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Analysis Grid specific */
+        .image-viewer { background: #000; border: 1px solid var(--border-dim); position: relative; overflow: hidden; border-radius: 12px; }
+        .analysis-canvas-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .hotspot-overlay { position: absolute; inset: 0; pointer-events: none; }
+        .viz-toggle { display: flex; gap: 4px; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 6px; }
+        .viz-button { padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; color: var(--text-dim); transition: all 0.2s; }
+        .viz-button.active { background: var(--brand-600); color: white; }
+
+        /* Data Grid */
+        .data-grid { display: grid; gap: 12px; }
+        .data-cell { background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border-left: 3px solid var(--border-dim); }
+        .data-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .data-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--text-primary); }
+
+        /* Reason Card */
+        .reason-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 16px; border-radius: 10px; transition: all 0.2s; }
+        .reason-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+        .reason-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.05em; }
+        .reason-status { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; }
+
+        /* Ink Palette */
+        .ink-row { display: flex; align-items: center; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+        .ink-swatch-split { width: 40px; height: 40px; border-radius: 6px; overflow: hidden; display: flex; border: 1px solid rgba(255,255,255,0.2); }
+        .ink-swatch-half { flex: 1; height: 100%; }
+
+        /* Trajectory */
+        .traj-gauge { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; position: relative; overflow: hidden; }
+        .traj-fill { height: 100%; background: linear-gradient(90deg, var(--green-ok), var(--yellow-warning)); }
+        .traj-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="flex text-sm text-slate-200">
+    <!-- Sidebar -->
+    <aside class="w-16 md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col z-50">
+        <div class="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-slate-800">
+            <div class="w-8 h-8 rounded bg-brand-600 flex items-center justify-center text-white font-bold">V7</div>
+            <span class="ml-3 font-bold text-lg hidden md:block text-white">Color Meter</span>
+        </div>
+        <nav class="flex-1 py-6 space-y-1 px-2">
+            <button onclick="switchTab('inspection')" id="tab-inspection" class="tab-button active">
+                <i class="fa-solid fa-crosshairs w-5 text-center"></i><span class="hidden md:block">Inspection</span>
+            </button>
+            <button onclick="switchTab('registration')" id="tab-registration" class="tab-button">
+                <i class="fa-solid fa-layer-group w-5 text-center"></i><span class="hidden md:block">Registration</span>
+            </button>
+            <button onclick="switchTab('std-admin')" id="tab-std-admin" class="tab-button">
+                <i class="fa-solid fa-clock-rotate-left w-5 text-center"></i><span class="hidden md:block">History</span>
+            </button>
+            <button onclick="switchTab('test')" id="tab-test" class="tab-button">
+                <i class="fa-solid fa-flask w-5 text-center"></i><span class="hidden md:block">Test Lab</span>
+            </button>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="h-16 bg-slate-900/80 backdrop-blur border-b border-slate-800 flex items-center justify-between px-6 z-40">
+            <span class="text-xs font-mono text-slate-400">V7 Signature Engine Console</span>
+            <div class="flex gap-2">
+                <button id="btnRefreshProducts" class="btn-secondary py-1.5"><i class="fa-solid fa-rotate"></i></button>
+                <a href="/" class="btn-secondary py-1.5">Home</a>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-[1600px] mx-auto space-y-6">
+
+                <!-- INSPECTION TAB -->
+                <div id="view-inspection" class="tab-content active space-y-6">
+                    <div class="terminal-panel p-6">
+                        <!-- Control Bar -->
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
+                            <div class="md:col-span-3">
+                                <label class="data-label">Product</label>
+                                <select id="inspProductSelect" class="terminal-input"><option value="" disabled selected>Select SKU...</option></select>
+                            </div>
+                            <div class="md:col-span-3">
+                                <label class="data-label">Image</label>
+                                <div class="relative">
+                                    <input id="inspFiles" type="file" class="absolute inset-0 opacity-0 cursor-pointer">
+                                    <div class="terminal-input truncate flex items-center justify-between pointer-events-none">
+                                        <span id="inspFileName" class="text-text-dim">Upload Image...</span>
+                                        <i class="fa-solid fa-upload"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="data-label">Mode</label>
+                                <select id="inspMode" class="terminal-input">
+                                    <option value="all" selected>All</option>
+                                    <option value="pattern">Pattern & Color</option>
+                                    <option value="gate">Gate Only</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="data-label">Expected Ink</label>
+                                <input id="inspInkCountDisplay" class="terminal-input text-center" value="-" disabled>
+                            </div>
+                            <div class="md:col-span-2 flex items-end">
+                                <button id="btnInspect" class="btn-primary w-full">Run Inspection</button>
+                            </div>
+                        </div>
+
+                        <!-- Result Area -->
+                        <div id="inspResultArea" class="hidden space-y-6">
+
+                            <!-- Unified Summary Card -->
+                            <div id="unifiedSummaryCard"></div>
+
+                            <!-- Judgment Bar -->
+                            <div id="inspSummaryCard" class="terminal-panel p-4 flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-slate-600">
+                                <div>
+                                    <div class="flex items-center gap-3">
+                                        <span id="inspLabel" class="text-3xl font-black text-white">READY</span>
+                                        <span id="inspVersionBadge" class="text-xs font-mono text-text-dim px-2 py-1 rounded bg-white/5">-</span>
+                                        <span id="inspUncertainBadge" class="hidden text-xs font-bold text-amber-400 border border-amber-400 px-2 py-1 rounded">UNCERTAIN</span>
+                                    </div>
+                                    <p id="inspSummaryLine" class="text-sm text-text-secondary mt-1">-</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button id="inspActionPrimary" class="btn-secondary text-xs font-bold">CONFIRM</button>
+                                    <button id="inspActionSecondary" class="btn-secondary text-xs">DETAILS</button>
+                                </div>
+                            </div>
+
+                            <!-- Reason Cards -->
+                            <div id="inspReasonCards" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+                            <!-- Analysis Layout (Integrated) -->
+                            <div class="space-y-6">
+                                <!-- 1. Visual Viewer (Full Width) -->
+                                <div class="terminal-panel p-1 rounded-xl overflow-hidden relative group">
+                                    <div class="absolute top-4 right-4 z-10 flex gap-2">
+                                        <button onclick="setViz('overlay')" id="viz-overlay" class="viz-button active bg-black/50 backdrop-blur hover:bg-brand-600">OVERLAY</button>
+                                        <button onclick="setViz('heatmap')" id="viz-heatmap" class="viz-button bg-black/50 backdrop-blur hover:bg-brand-600">HEATMAP</button>
+                                    </div>
+                                    <div id="analysisViewer" class="image-viewer aspect-[21/9] bg-black flex items-center justify-center">
+                                        <div id="analysisCanvasWrap" class="analysis-canvas-wrap w-full h-full">
+                                            <img id="inspMainImg" class="w-full h-full object-contain" src="">
+                                            <canvas id="hotspotOverlay" class="absolute inset-0 w-full h-full"></canvas>
+                                        </div>
+                                        <div id="inspImageEmpty" class="absolute inset-0 flex items-center justify-center text-text-dim">Waiting for image...</div>
+                                        <div id="hotspotTooltip" class="hidden absolute bg-slate-900 border border-slate-700 p-2 rounded text-xs z-50 pointer-events-none shadow-xl"></div>
+                                    </div>
+                                </div>
+
+                                <!-- 2. Detail Panels (2-Column Grid) -->
+                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                                    <!-- Left: Signature & Color -->
+                                    <div id="detailSignature" class="terminal-panel p-6 space-y-6 hidden">
+                                        <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                                            <h3 class="text-sm font-bold text-white tracking-wider">SIGNATURE & COLOR</h3>
+                                            <span id="metric-best-mode" class="text-xs font-mono text-text-dim">-</span>
+                                        </div>
+
+                                        <div id="corePanelMetrics"></div>
+
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div class="data-cell">
+                                                <p class="data-label">Correlation</p>
+                                                <div class="flex items-baseline gap-2">
+                                                    <p id="metric-corr" class="data-value">-</p>
+                                                    <span id="metric-corr-thr" class="text-[10px] text-text-dim">min -</span>
+                                                </div>
+                                            </div>
+                                            <div class="data-cell">
+                                                <p class="data-label">ΔE Mean / P95</p>
+                                                <div class="flex items-baseline gap-2">
+                                                    <p id="metric-de-mean" class="data-value">-</p>
+                                                    <span class="text-xs text-text-dim">/</span>
+                                                    <p id="metric-de-p95" class="data-value text-base">-</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div id="detailColor" class="space-y-2">
+                                            <div class="flex justify-between items-center mb-1">
+                                                <p class="data-label">Color Shift (Δ Lab)</p>
+                                                <div id="directionDisplay"></div>
+                                            </div>
+                                            <div class="grid grid-cols-3 gap-2 mb-2">
+                                                <div class="bg-white/5 p-2 rounded text-center"><span class="text-[10px] block text-text-dim">L</span><span id="metric-delta-l" class="font-mono font-bold">-</span></div>
+                                                <div class="bg-white/5 p-2 rounded text-center"><span class="text-[10px] block text-text-dim">a</span><span id="metric-delta-a" class="font-mono font-bold">-</span></div>
+                                                <div class="bg-white/5 p-2 rounded text-center"><span class="text-[10px] block text-text-dim">b</span><span id="metric-delta-b" class="font-mono font-bold">-</span></div>
+                                            </div>
+                                            <div class="h-32 w-full"><canvas id="colorChart"></canvas></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right: Ink Analysis -->
+                                    <div id="inkPanelStack" class="terminal-panel p-6 space-y-6 hidden">
+                                        <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                                            <h3 class="text-sm font-bold text-white tracking-wider">INK ANALYSIS</h3>
+                                            <div id="inkPanelMetrics"></div>
+                                            <span id="trajStatusBadge" class="text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-text-dim">N/A</span>
+                                        </div>
+
+                                        <!-- Consistency Gauge -->
+                                        <div class="bg-black/20 p-4 rounded-lg space-y-2">
+                                            <div class="flex justify-between items-end">
+                                                <span class="text-xs text-text-dim font-bold">CONSISTENCY SCORE</span>
+                                                <div id="inkKDisplay"></div>
+                                                <span id="trajOffTrackNumber" class="text-2xl font-black font-mono text-white">-</span>
+                                            </div>
+                                            <div class="traj-gauge">
+                                                <div id="trajGaugeFill" class="traj-fill" style="width: 0%"></div>
+                                                <div id="trajGaugeLimit" class="traj-marker" style="left: 0%"></div>
+                                            </div>
+                                            <div class="flex justify-between text-[10px] text-text-dim font-mono">
+                                                <span>STABLE</span><span>WARNING</span><span>CRITICAL</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Ink Palette List -->
+                                        <div class="space-y-2">
+                                            <p class="data-label">Ink Comparison (STD vs Sample)</p>
+                                            <div id="inkComparisonPalette" class="space-y-2">
+                                                <!-- Dynamic Rows -->
+                                            </div>
+                                            <div id="inkPaletteEmpty" class="text-center py-4 text-xs text-text-dim">No ink data available.</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Gate Panel (Conditional) -->
+                                    <div id="detailGate" class="terminal-panel p-6 space-y-6 hidden col-span-1 lg:col-span-2">
+                                        <h3 class="text-sm font-bold text-white tracking-wider border-b border-white/5 pb-2">GATE CHECKS</h3>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div class="data-cell"><p class="data-label">Center Offset</p><p id="metric-center" class="data-value">-</p></div>
+                                            <div class="data-cell"><p class="data-label">Sharpness</p><p id="metric-blur" class="data-value">-</p></div>
+                                            <div class="data-cell"><p class="data-label">Illumination</p><p id="metric-illum" class="data-value">-</p></div>
+                                            <div class="data-cell"><p class="data-label">Dot Count</p><p id="metric-dot-count" class="data-value">-</p></div>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+
+                            <!-- KPI Panel (New) -->
+                            <div id="engineerKpiPanel" class="hidden mt-8 terminal-panel p-6 border-l-4 border-cyan-500 bg-slate-900/40">
+                                <div class="flex justify-between items-center mb-4 cursor-pointer" onclick="toggleKpi()">
+                                    <h3 class="text-sm font-bold text-cyan-400 tracking-wider flex items-center gap-2">
+                                        <i class="fa-solid fa-microchip"></i> ENGINEER KPI REPORT
+                                    </h3>
+                                    <span id="kpiArrow" class="text-xs text-text-dim">▼</span>
+                                </div>
+                                <div id="kpiContent" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 hidden">
+                                    <!-- Dynamic KPI Content -->
+                                </div>
+                            </div>
+
+                            <!-- Logs -->
+                            <div class="pt-6 border-t border-slate-800">
+                                <button onclick="toggleDetails()" class="btn-secondary w-full text-xs font-mono">View Technical Logs</button>
+                                <div id="inspCommentary" class="hidden mt-2 p-4 bg-black/30 rounded text-xs text-text-secondary whitespace-pre-line"></div>
+                                <div id="inspDetails" class="hidden mt-2 p-4 bg-black/50 rounded font-mono text-[10px] text-text-dim overflow-x-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- REGISTRATION TAB -->
+                <div id="view-registration" class="tab-content space-y-6">
+                    <div class="terminal-panel p-8">
+                        <h2 class="text-xl font-bold text-white mb-6">Register New STD</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div><label class="data-label">SKU Name</label><input id="regSku" class="terminal-input" placeholder="e.g. PRODUCT_V1"></div>
+                            <div><label class="data-label">Ink Count</label>
+                                <select id="regInkCount" class="terminal-input">
+                                    <option value="" disabled selected>Select...</option>
+                                    <option value="1">1 Ink</option>
+                                    <option value="2">2 Inks</option>
+                                    <option value="3">3 Inks</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="p-4 bg-surface-elevated rounded-lg border border-slate-700">
+                                <p class="data-label mb-2">LOW Mode</p><input id="regLow" type="file" multiple class="text-xs text-text-dim">
+                            </div>
+                            <div class="p-4 bg-surface-elevated rounded-lg border border-slate-700">
+                                <p class="data-label mb-2">MID Mode</p><input id="regMid" type="file" multiple class="text-xs text-text-dim">
+                            </div>
+                            <div class="p-4 bg-surface-elevated rounded-lg border border-slate-700">
+                                <p class="data-label mb-2">HIGH Mode</p><input id="regHigh" type="file" multiple class="text-xs text-text-dim">
+                            </div>
+                        </div>
+                        <button id="btnRegister" class="btn-primary w-full py-4 text-base">Register & Auto-Activate</button>
+
+                        <div id="regResultArea" class="hidden mt-6 p-6 bg-black/20 rounded-xl border border-slate-700">
+                            <p id="regStatusLabel" class="font-bold text-lg mb-2 text-white">-</p>
+                            <pre id="regSummaryText" class="text-xs font-mono text-cyan-data mb-4"></pre>
+                            <div id="regFailurePanel" class="hidden space-y-2 mb-4">
+                                <div id="regFailureList" class="space-y-2"></div>
+                            </div>
+                            <button id="regBtnGoActivate" class="btn-secondary w-full hidden border-rose-500 text-rose-400 hover:bg-rose-500/10">Force Activate (Unsafe)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HISTORY TAB -->
+                <div id="view-std-admin" class="tab-content space-y-6">
+                    <div class="terminal-panel p-8">
+                        <div class="flex justify-between mb-6"><h2 class="text-xl font-bold text-white">STD History</h2><button id="btnStdReload" class="btn-secondary"><i class="fa-solid fa-rotate"></i></button></div>
+                        <div class="overflow-x-auto"><table class="w-full text-xs text-left"><thead class="text-text-dim uppercase border-b border-slate-700"><tr><th class="py-3">SKU</th><th>Ink</th><th>Status</th><th>Version</th><th>Date</th></tr></thead><tbody id="stdTableBody" class="divide-y divide-slate-800"></tbody></table></div>
+                    </div>
+                </div>
+
+                <!-- TEST TAB -->
+                <div id="view-test" class="tab-content space-y-6">
+                    <div class="terminal-panel p-8">
+                        <h2 class="text-xl font-bold text-white mb-6">Test Lab</h2>
+                        <!-- Simplified Test UI -->
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div><label class="data-label">Ink Count</label><select id="testInkCount" class="terminal-input"><option value="3">3 Inks</option></select></div>
+                            <div><label class="data-label">Mode</label><select id="testMode" class="terminal-input"><option value="all">All</option></select></div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mb-4">
+                            <input id="testLow" type="file" class="text-xs"><input id="testMid" type="file" class="text-xs"><input id="testHigh" type="file" class="text-xs">
+                        </div>
+                        <button id="btnTestRun" class="btn-primary w-full">Run Test</button>
+                        <div id="testResultArea" class="hidden mt-4 bg-black/20 p-4 rounded"><pre id="testReportJson" class="text-xs font-mono text-text-dim overflow-auto max-h-64"></pre></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Hidden Inputs -->
+    <input type="hidden" id="regInk" value="INK_DEFAULT">
+
+    <!-- Scripts with Cache Busting -->
+    <script src="/static/js/v7/state.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/utils.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/copy.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/api.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/viewer.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/visuals.js?v=FIX_FINAL_V4"></script>
+    <script src="/static/js/v7/ui_improvements.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/ink_visuals.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/diagnostics_visuals.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/products.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/inspection.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/registration.js?v=FIX_FINAL_V4"></script>
+    <script src="/static/js/v7/std_admin.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/result_tabs.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/test.js?v=FIX_FINAL_V3"></script>
+    <script src="/static/js/v7/main.js?v=FIX_FINAL_V3"></script>
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById(`view-${tab}`).classList.add('active');
+        }
+        function toggleDetails() {
+            const el = document.getElementById('inspDetails');
+            const note = document.getElementById('inspCommentary');
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden'); note.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden'); note.classList.add('hidden');
+            }
+        }
+        // KPI Toggle
+        function toggleKpi() {
+            const content = document.getElementById('kpiContent');
+            const arrow = document.getElementById('kpiArrow');
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                arrow.textContent = '▲';
+            } else {
+                content.classList.add('hidden');
+                arrow.textContent = '▼';
+            }
+        }
+        function setViz(type) {
+            const img = document.getElementById('inspMainImg');
+            const canvas = document.getElementById('hotspotOverlay');
+            const artifacts = (window.v7 && window.v7.state && window.v7.state.currentArtifacts) || {};
+            if (!img) return;
+            document.querySelectorAll('.viz-button').forEach(b => b.classList.remove('active'));
+            document.getElementById(`viz-${type}`).classList.add('active');
+            if (type === 'overlay') {
+                img.src = artifacts.overlay || "";
+                if (canvas) canvas.style.display = 'block';
+            } else {
+                img.src = artifacts.heatmap || artifacts.overlay || "";
+                if (canvas) canvas.style.display = 'none';
+            }
+            const empty = document.getElementById('inspImageEmpty');
+            if (empty) empty.style.display = (img.getAttribute('src') ? 'none' : 'flex');
+        }
+    </script>
+</body>
+</html>

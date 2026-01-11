@@ -1,0 +1,28 @@
+{
+  "white_balance": {
+    "optical_zone_ratio": 0.28
+  },
+  "signature": {
+    "segments": [
+      {
+        "name": "inner_gold",
+        "start": 0.35,
+        "end": 0.55,
+        "weight": 1.5
+      },
+      {
+        "name": "outer_brown",
+        "start": 0.55,
+        "end": 0.95,
+        "weight": 1.0
+      }
+    ]
+  },
+  "v2_ink": {
+    "roi_r_start": 0.4,
+    "kmeans_attempts": 20
+  },
+  "anomaly": {
+    "center_blob_max": 5
+  }
+}

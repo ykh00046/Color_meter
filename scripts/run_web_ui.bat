@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal
 title Color Meter Web UI Launcher
@@ -8,9 +8,9 @@ set PYTHONIOENCODING=utf-8
 
 set VENV_DIR=venv
 
-if exist %VENV_DIR%\Scripts\activate.bat (
+if exist %VENV_DIR%\Scriptsctivate.bat (
     echo [INFO] Activating virtual environment...
-    call %VENV_DIR%\Scripts\activate.bat
+    call %VENV_DIR%\Scriptsctivate.bat
 ) else (
     echo [INFO] Virtual environment not found. Creating...
     python -m venv %VENV_DIR%
@@ -18,7 +18,7 @@ if exist %VENV_DIR%\Scripts\activate.bat (
         echo [ERROR] Failed to create virtual environment.
         goto :end
     )
-    call %VENV_DIR%\Scripts\activate.bat
+    call %VENV_DIR%\Scriptsctivate.bat
 )
 
 echo.

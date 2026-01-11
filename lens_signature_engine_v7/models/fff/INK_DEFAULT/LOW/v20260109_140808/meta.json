@@ -1,0 +1,35 @@
+{
+  "schema_version": "std_registry_meta.v1",
+  "sku": "FFF",
+  "ink": "INK_DEFAULT",
+  "mode": "LOW",
+  "version": "v20260109_140808",
+  "color_mode": "aggregate",
+  "inputs": {
+    "std_images": [
+      "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260109_140807\\F1.png"
+    ],
+    "expected_ink_count": 3
+  },
+  "outputs": {
+    "has_band": false,
+    "R": 260,
+    "T": 720,
+    "r_start": 0.1,
+    "r_end": 0.95
+  },
+  "stats": {
+    "n_std": 1
+  },
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:9d0d628ece09e3b782f159c1ec84df148e7d0b4bc15bcfac4bd9832d935d3b4d",
+    "cfg_sources": [
+      "C:\\X\\Color_meter\\lens_signature_engine_v7\\configs\\default.json"
+    ],
+    "cfg_warnings": []
+  },
+  "created_by": "SYSTEM",
+  "created_at": "2026-01-09T14:08:08.733361",
+  "notes": ""
+}

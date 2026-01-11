@@ -1,0 +1,208 @@
+{
+  "phase_filter": "STD_REGISTRATION",
+  "total_images": 21,
+  "label_counts": {
+    "STD_ACCEPTABLE": 16,
+    "STD_RETAKE": 5
+  },
+  "files": [
+    {
+      "file": "results\\inspect_ink1.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\inspect_ink2.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\inspect_ink3.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\result_ink1.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\result_ink2.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\result_ink3.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink1.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 1,
+        "STD_RETAKE": 2
+      },
+      "reasons": {
+        "CENTER_NOT_IN_FRAME": 2
+      },
+      "gate_reasons": {
+        "CENTER_NOT_IN_FRAME": 2
+      },
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink2_b.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 2,
+        "STD_RETAKE": 1
+      },
+      "reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "gate_reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink2_c.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 2,
+        "STD_RETAKE": 1
+      },
+      "reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "gate_reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink2_d.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 3
+      },
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink2_e.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 2,
+        "STD_RETAKE": 1
+      },
+      "reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "gate_reasons": {
+        "CENTER_NOT_IN_FRAME": 1
+      },
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink3_f.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 3
+      },
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\std_reg_ink3_g.json",
+      "total": 3,
+      "phases": {
+        "STD_REGISTRATION": 3
+      },
+      "labels": {
+        "STD_ACCEPTABLE": 3
+      },
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\summary_inspection.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    },
+    {
+      "file": "results\\summary_std_registration.json",
+      "total": 0,
+      "phases": {},
+      "labels": {},
+      "reasons": {},
+      "gate_reasons": {},
+      "best_modes": {},
+      "anomaly_types": {}
+    }
+  ]
+}

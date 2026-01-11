@@ -98,7 +98,14 @@ class InspectionPipeline:
 
         logger.info("InspectionPipeline initialized")
 
-    def process(self, image_path: str, sku: str, save_dir: Optional[Path] = None) -> InspectionResult:
+    def process(
+        self,
+        image_path: str,
+        sku: str,
+        save_dir: Optional[Path] = None,
+        run_1d_judgment: bool = True,
+        include_dot_stats: bool = True,
+    ) -> InspectionResult:
         """
         단일 이미지 처리.
 
@@ -216,7 +223,11 @@ class InspectionPipeline:
             if isinstance(sample_percentile, (int, float)) and 0 <= sample_percentile <= 100:
                 self.radial_profiler.config.sample_percentile = float(sample_percentile)
 
-            quality_metrics = compute_quality_metrics(processed_image, lens_detection)
+            quality_metrics = compute_quality_metrics(
+                processed_image,
+                lens_detection,
+                include_dot_stats=include_dot_stats,
+            )
             logger.debug("Step 3: Extracting radial profile")
             radial_profile = self.radial_profiler.extract_profile(processed_image, lens_detection)
 
@@ -227,6 +238,58 @@ class InspectionPipeline:
             expected_zones = self.sku_config.get("params", {}).get("expected_zones")
             if expected_zones:
                 logger.debug(f"Using expected_zones hint: {expected_zones}")
+
+            if not run_1d_judgment:
+                suggestions.append("Run 2D analysis for final judgment.")
+                inspection_result = InspectionResult(
+                    sku=sku,
+                    timestamp=datetime.now(),
+                    judgment="RETAKE",
+                    overall_delta_e=0.0,
+                    zone_results=[],
+                    ng_reasons=[],
+                    confidence=0.0,
+                    retake_reasons=[
+                        {
+                            "code": "1d_judgment_skipped",
+                            "reason": "1D judgment was skipped by configuration.",
+                            "actions": ["Run 2D analysis for final judgment."],
+                            "lever": "use_2d_analysis",
+                        }
+                    ],
+                )
+
+                inspection_result.lens_detection = lens_detection
+                inspection_result.zones = []
+                inspection_result.image = image
+                inspection_result.radial_profile = radial_profile
+                inspection_result.metrics = quality_metrics
+                inspection_result.diagnostics = diagnostics if diagnostics else None
+                inspection_result.warnings = warnings if warnings else None
+                inspection_result.suggestions = suggestions if suggestions else None
+
+                processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                logger.info(
+                    "Processing complete (1D judgment skipped): "
+                    f"time={processing_time:.1f}ms, "
+                    f"diagnostics={len(diagnostics)}, warnings={len(warnings)}, suggestions={len(suggestions)}"
+                )
+
+                if self.save_intermediates and save_dir:
+                    self._save_intermediates(
+                        save_dir,
+                        image_path.stem,
+                        {
+                            "processed_image": processed_image,
+                            "lens_detection": lens_detection,
+                            "radial_profile": radial_profile,
+                            "zones": [],
+                            "inspection_result": inspection_result,
+                            "processing_time_ms": processing_time,
+                        },
+                    )
+
+                return inspection_result
 
             # 인쇄 영역 범위 추정 (SKU config 기반)
             params = self.sku_config.get("params", {})

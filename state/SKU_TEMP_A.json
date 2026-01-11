@@ -1,0 +1,30 @@
+{
+  "sku": "SKU_TEMP_A",
+  "last_mode": "HIGH",
+  "history": [
+    {
+      "ts": 1766645194,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766645194,
+      "mode": "MID"
+    },
+    {
+      "ts": 1766645194,
+      "mode": "HIGH"
+    },
+    {
+      "ts": 1766649517,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766649517,
+      "mode": "MID"
+    },
+    {
+      "ts": 1766649517,
+      "mode": "HIGH"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2025-12-25T09:32:52.426126",
+  "items": [
+    {
+      "sku": "SKU_DEMO",
+      "ink": "INK_A",
+      "active": {
+        "LOW": "SKU_DEMO/INK_A/LOW/v20251224_145927",
+        "MID": "SKU_DEMO/INK_A/MID/v20251224_145935",
+        "HIGH": "SKU_DEMO/INK_A/HIGH/v20251224_145945"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "demo",
+      "created_at": "2025-12-24T14:15:21.823088"
+    },
+    {
+      "sku": "SKU_DEMO",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_DEMO/INK1/LOW/v20251224_150919",
+        "MID": "SKU_DEMO/INK1/MID/v20251224_150928",
+        "HIGH": "SKU_DEMO/INK1/HIGH/v20251224_150936"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "demo",
+      "created_at": "2025-12-24T15:09:19.789070"
+    },
+    {
+      "sku": "SKU_TEMP",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_TEMP/INK1/LOW/v20251225_093248",
+        "MID": "SKU_TEMP/INK1/MID/v20251225_093248",
+        "HIGH": "SKU_TEMP/INK1/HIGH/v20251225_093248"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2025-12-24T15:15:23.731956"
+    },
+    {
+      "sku": "SKU_TEMP",
+      "ink": "INK2",
+      "active": {
+        "LOW": "SKU_TEMP/INK2/LOW/v20251225_093249",
+        "MID": "SKU_TEMP/INK2/MID/v20251225_093249",
+        "HIGH": "SKU_TEMP/INK2/HIGH/v20251225_093250"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2025-12-24T15:15:24.802998"
+    },
+    {
+      "sku": "SKU_TEMP",
+      "ink": "INK3",
+      "active": {
+        "LOW": "SKU_TEMP/INK3/LOW/v20251225_093251",
+        "MID": "SKU_TEMP/INK3/MID/v20251225_093251",
+        "HIGH": "SKU_TEMP/INK3/HIGH/v20251225_093252"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "",
+      "created_at": "2025-12-24T15:15:25.979832"
+    }
+  ]
+}

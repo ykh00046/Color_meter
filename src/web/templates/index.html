@@ -1,76 +1,421 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Meter - Home</title>
+    <title>Color Meter | 렌즈 품질 분석</title>
+    <meta name="description" content="렌즈 품질 분석 - STD 비교 및 단독 샘플 분석" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { font-family: 'Manrope', sans-serif; }
-        body {
-            background: radial-gradient(circle at 15% 20%, #11182c, #0b1020 45%, #060912 100%);
-            color: #e2e8f0;
+        :root {
+            --bg-dark: #0a0f1e;
+            --bg-card: #111827;
+            --border: rgba(148, 163, 184, 0.2);
+            --primary: #f59e0b;
+            --primary-hover: #fbbf24;
+            --secondary: #3b82f6;
+            --secondary-hover: #60a5fa;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
         }
-        .card { background: rgba(15,23,42,0.9); border: 1px solid rgba(255,255,255,0.06); }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1f35 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(148, 163, 184, 0.4);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--primary);
+            color: #000;
+            padding: 1rem 2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--secondary);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: var(--secondary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-calibration {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-calibration:hover {
+            background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--primary);
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .icon {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .icon-compare {
+            background: linear-gradient(135deg, #f59e0b, #fb923c);
+            color: #000;
+        }
+
+        .icon-single {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+            color: #fff;
+        }
+
+        .icon-calibration {
+            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            color: #fff;
+        }
+
+        header {
+            padding: 1.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #000;
+        }
+
+        nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        nav a:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .hero {
+            text-align: center;
+            padding: 4rem 0;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            padding: 3rem 0;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-desc {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            color: var(--primary);
+            font-weight: 700;
+            margin-right: 0.5rem;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 0;
+            margin-top: 4rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .quick-links {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .hero p { font-size: 1rem; }
+            .cta-buttons { flex-direction: column; }
+            .features { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
-<body class="p-6">
-    <div class="max-w-6xl mx-auto space-y-6">
-        <!-- Header -->
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-3xl font-bold flex items-center gap-2">
-                    <span class="text-cyan-400">Color Meter</span>
-                    <span class="text-sm text-gray-400">STD vs Sample 비교 분석 도구</span>
-                </h1>
-                <p class="text-sm text-gray-400">렌즈 이미지의 색상/품질 편차를 빠르게 비교하고 조치 포인트를 확인합니다.</p>
-            </div>
-            <div class="flex gap-2">
-                <a href="/compare" class="px-4 py-2 rounded-lg bg-cyan-500 text-white font-semibold hover:bg-cyan-600 transition">STD vs Sample 비교</a>
-                <a href="/history" class="px-4 py-2 rounded-lg bg-slate-800 text-gray-100 border border-slate-700 hover:bg-slate-700 transition">History</a>
-                <a href="/stats" class="px-4 py-2 rounded-lg bg-slate-800 text-gray-100 border border-slate-700 hover:bg-slate-700 transition">Stats</a>
+<body>
+    <header>
+        <div class="container">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <a href="/" class="logo">
+                    <div class="logo-icon">CM</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 1.125rem;">Color Meter</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Lens Quality Analysis</div>
+                    </div>
+                </a>
+                <nav style="display: flex; gap: 0.5rem;">
+                    <a href="/history">History</a>
+                    <a href="/stats">Stats</a>
+                </nav>
             </div>
         </div>
+    </header>
 
-        <!-- Hero -->
-        <div class="card rounded-2xl p-6 flex flex-col md:flex-row gap-6">
-            <div class="flex-1 space-y-3">
-                <p class="text-lg font-semibold text-white">지금 바로 비교 시작</p>
-                <p class="text-sm text-gray-300">초기에는 STD와 Sample 이미지를 업로드해 비교하고, 편차/조치 가이드를 확인합니다. 기준이 안정화되면 배치/이력/통계 기능을 활용하세요.</p>
-                <div class="flex gap-3">
-                    <a href="/compare" class="px-4 py-3 rounded-lg bg-cyan-500 text-white font-semibold hover:bg-cyan-600 transition">STD vs Sample 비교</a>
-                    <a href="/history" class="px-4 py-3 rounded-lg bg-slate-700 text-white hover:bg-slate-600 transition">최근 기록 보기</a>
+    <main class="container">
+        <section class="hero">
+            <div class="badge" style="margin-bottom: 1.5rem;">v7 Engine Ready</div>
+            <h1>렌즈 품질을 빠르고 정확하게<br/>분석합니다</h1>
+            <p>STD 비교, 단독 분석, 색 정확도 교정까지<br/>세 가지 분석 모드를 지원합니다.</p>
+
+            <div class="cta-buttons">
+                <a href="/v7" class="btn-primary">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                    비교
+                </a>
+                <a href="/single_analysis" class="btn-secondary">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    단독
+                </a>
+                <a href="/calibration" class="btn-calibration">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                    교정
+                </a>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="card">
+                <div class="icon icon-compare">VS</div>
+                <h2 class="feature-title">STD 비교 분석</h2>
+                <p class="feature-desc">표준(STD) 이미지와 테스트 샘플을 비교하여 색상 차이를 정량적으로 평가합니다.</p>
+                <ul class="feature-list">
+                    <li>Delta E 기반 색상 차이 측정</li>
+                    <li>Lab 공간 이동 방향 분석</li>
+                    <li>방사형 프로파일 비교</li>
+                    <li>잉크 클러스터 매칭</li>
+                    <li>영역별 편차 히트맵</li>
+                    <li>자동 OK/NG 판정</li>
+                </ul>
+                <div style="margin-top: 1.5rem;">
+                    <a href="/v7" class="btn-primary" style="width: 100%;">비교 분석 시작</a>
                 </div>
             </div>
-            <div class="w-full md:w-80 bg-slate-900/60 border border-slate-700 rounded-xl p-4">
-                <p class="text-sm text-gray-400 mb-3">분석 요약</p>
-                <ul class="space-y-2 text-sm text-gray-200">
-                    <li>Delta E 및 Delta L/a/b 방향 요약</li>
-                    <li>조치 가이드(밝기/색상/잉크 편차)</li>
-                    <li>품질 지표(선명도/히스토그램/도트)</li>
-                    <li>배치 안정성 및 이력 확인</li>
-                </ul>
-            </div>
-        </div>
 
-        <!-- Links -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <a href="/compare" class="card p-4 rounded-xl hover:border-cyan-400 transition">
-                <p class="text-cyan-400 font-semibold mb-1">STD vs Sample 비교</p>
-                <p class="text-sm text-gray-300">STD 대비 편차와 조치 가이드를 즉시 확인합니다.</p>
-            </a>
-            <a href="/history" class="card p-4 rounded-xl hover:border-cyan-400 transition">
-                <p class="text-cyan-400 font-semibold mb-1">History</p>
-                <p class="text-sm text-gray-300">샘플/배치 기록과 상세 결과를 확인합니다.</p>
-            </a>
-            <a href="/stats" class="card p-4 rounded-xl hover:border-cyan-400 transition">
-                <p class="text-cyan-400 font-semibold mb-1">Stats</p>
-                <p class="text-sm text-gray-300">OK/NG/RETAKE 비율과 지표 추이를 확인합니다.</p>
-            </a>
+            <div class="card">
+                <div class="icon icon-single">1</div>
+                <h2 class="feature-title">단독 샘플 분석</h2>
+                <p class="feature-desc">STD 없이 샘플 자체의 품질을 종합적으로 평가합니다. 연구개발 및 초기 평가에 적합합니다.</p>
+                <ul class="feature-list">
+                    <li>종합 품질 점수 (0-100)</li>
+                    <li>Gate 기하학적 검사</li>
+                    <li>색상 분포 히스토그램</li>
+                    <li>방사형 균일성 분석</li>
+                    <li>잉크 색상 클러스터 검출</li>
+                    <li>패턴 품질 및 경고 시스템</li>
+                </ul>
+                <div style="margin-top: 1.5rem;">
+                    <a href="/single_analysis" class="btn-secondary" style="width: 100%;">단독 분석 시작</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="icon icon-calibration">🎯</div>
+                <h2 class="feature-title">색 정확도 교정</h2>
+                <p class="feature-desc">ColorChecker를 사용하여 측정 환경(카메라+조명)의 색 정확도를 검증합니다. 측정 전 필수 점검 항목입니다.</p>
+                <ul class="feature-list">
+                    <li>24패치 표준 색상 비교</li>
+                    <li>ΔE (Delta E) 정확도 평가</li>
+                    <li>Lab 채널별 Bias 분석</li>
+                    <li>측정 환경 적합성 판정</li>
+                    <li>색온도/밝기 조정 가이드</li>
+                    <li>Pass/Fail 자동 판정</li>
+                </ul>
+                <div style="margin-top: 1.5rem;">
+                    <a href="/calibration" class="btn-calibration" style="width: 100%;">교정 시작</a>
+                </div>
+            </div>
+        </section>
+
+        <section style="text-align: center; padding: 3rem 0;">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">추가 기능</h3>
+                <div class="quick-links">
+                    <a href="/history" style="color: var(--text-secondary); text-decoration: none; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 0.5rem; transition: all 0.2s ease;">
+                        검사 이력
+                    </a>
+                    <a href="/stats" style="color: var(--text-secondary); text-decoration: none; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 0.5rem; transition: all 0.2s ease;">
+                        통계 대시보드
+                    </a>
+                </div>
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">
+                    과거 검사 결과 조회 및 통계 분석
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>© 2025 Color Meter. Lens Quality Analysis System.</p>
+            <p style="margin-top: 0.5rem; font-size: 0.75rem;">Powered by Lens Signature Engine v7</p>
         </div>
-    </div>
+    </footer>
+
+    <style>
+        .quick-links a:hover {
+            border-color: var(--primary);
+            color: var(--text-primary);
+        }
+    </style>
 </body>
 </html>

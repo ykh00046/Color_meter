@@ -1,0 +1,67 @@
+{
+  "schema_version": "pattern_baseline.v1",
+  "sku": "fff",
+  "ink": "INK_DEFAULT",
+  "active": {
+    "LOW": "fff/INK_DEFAULT/LOW/v20260107_020014",
+    "MID": "fff/INK_DEFAULT/MID/v20260107_020015",
+    "HIGH": "fff/INK_DEFAULT/HIGH/v20260107_020016"
+  },
+  "active_versions": {
+    "LOW": "v20260107_020014",
+    "MID": "v20260107_020015",
+    "HIGH": "v20260107_020016"
+  },
+  "generated_at": "2026-01-07T02:00:18.309744",
+  "source": {
+    "std_images": {
+      "LOW": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_020013\\F1.png"
+      ],
+      "MID": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_020013\\F2.png"
+      ],
+      "HIGH": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_020013\\F3.png"
+      ]
+    }
+  },
+  "features": {
+    "center_blob": {
+      "count": {
+        "mean": 2.0,
+        "max": 3.0
+      },
+      "total_area": {
+        "mean": 303.6666564941406,
+        "max": 444.0
+      }
+    },
+    "angular_uniformity": {
+      "mean": 0.06395108997821808,
+      "max": 0.08126083016395569
+    },
+    "dot": {
+      "coverage": {
+        "mean": 0.31295761466026306,
+        "min": 0.2896581292152405,
+        "max": 0.3584134578704834
+      },
+      "edge_sharpness": {
+        "mean": 5.5736083984375,
+        "min": 3.933051824569702,
+        "max": 7.056203842163086
+      }
+    }
+  },
+  "policy": {
+    "margins": {
+      "blob_count": 1,
+      "blob_area_ratio": 0.2,
+      "uniformity": 0.03,
+      "coverage_eps": 0.01,
+      "sharpness_eps": 0.03
+    }
+  },
+  "path": "pattern_baselines/fff/INK_DEFAULT/PB_fff_INK_DEFAULT_20260107_020018.json"
+}

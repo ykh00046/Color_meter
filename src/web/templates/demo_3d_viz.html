@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Visualization Demo - Lens Signature Engine v7</title>
+
+    <!-- Plotly.js CDN -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0f172a;
+            color: #cbd5e1;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #60a5fa;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        h2 {
+            color: #94a3b8;
+            margin: 30px 0 15px 0;
+            font-size: 18px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 5px;
+        }
+
+        .info {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info p {
+            margin: 5px 0;
+            font-size: 13px;
+        }
+
+        .viz-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+
+        .plot {
+            width: 100%;
+            height: 500px;
+            margin: 10px 0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #334155;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #475569;
+            border-color: #64748b;
+        }
+
+        button:active {
+            background: #1e293b;
+        }
+
+        .status {
+            color: #10b981;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .error {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 3D Visualization Demo - Lens Signature Engine v7</h1>
+
+        <div class="info">
+            <p><strong>Purpose:</strong> Showcase 3D visualization capabilities for per-color lens inspection</p>
+            <p><strong>Technologies:</strong> Plotly.js for interactive 3D plots</p>
+            <p><strong>Modes:</strong> Cylindrical, Surface, Lab Scatter, Per-Color Comparison</p>
+        </div>
+
+        <!-- Cylindrical Mode -->
+        <h2>1. Cylindrical Mode - Polar ΔE Visualization</h2>
+        <div class="viz-container">
+            <p>Wraps theta (angular position) around a cylinder, with radial distance from center and ΔE as height.</p>
+            <div class="controls">
+                <button onclick="demo.generateCylindricalData()">Generate Cylindrical View</button>
+                <button onclick="demo.addNoise('cylindrical')">Add Noise</button>
+                <button onclick="demo.clearPlot('plot1')">Clear</button>
+            </div>
+            <div id="plot1" class="plot"></div>
+            <div id="status1" class="status"></div>
+        </div>
+
+        <!-- Surface Mode -->
+        <h2>2. Surface Mode - ΔE(θ, r) Heatmap</h2>
+        <div class="viz-container">
+            <p>3D surface plot showing ΔE as a function of theta and normalized radius.</p>
+            <div class="controls">
+                <button onclick="demo.generateSurfaceData()">Generate Surface Plot</button>
+                <button onclick="demo.addDefect('surface')">Add Defect Region</button>
+                <button onclick="demo.clearPlot('plot2')">Clear</button>
+            </div>
+            <div id="plot2" class="plot"></div>
+            <div id="status2" class="status"></div>
+        </div>
+
+        <!-- Lab Scatter Mode -->
+        <h2>3. Lab Space Scatter - Test vs STD</h2>
+        <div class="viz-container">
+            <p>3D scatter plot in Lab color space showing test samples vs STD reference with trajectory paths.</p>
+            <div class="controls">
+                <button onclick="demo.generateLabScatterData()">Generate Lab Scatter</button>
+                <button onclick="demo.addTrajectory('lab')">Add Trajectory</button>
+                <button onclick="demo.clearPlot('plot3')">Clear</button>
+            </div>
+            <div id="plot3" class="plot"></div>
+            <div id="status3" class="status"></div>
+        </div>
+
+        <!-- Per-Color Comparison -->
+        <h2>4. Per-Color Comparison - Multi-Ink Visualization</h2>
+        <div class="viz-container">
+            <p>Shows each ink color as separate traces in Lab space with STD reference centroids.</p>
+            <div class="controls">
+                <button onclick="demo.generatePerColorData()">Generate Per-Color View</button>
+                <button onclick="demo.addColorShift('percolor')">Simulate Color Shift</button>
+                <button onclick="demo.clearPlot('plot4')">Clear</button>
+            </div>
+            <div id="plot4" class="plot"></div>
+            <div id="status4" class="status"></div>
+        </div>
+    </div>
+
+    <!-- Load the 3D visualization module -->
+    <script src="/static/js/v7/visuals_3d.js"></script>
+
+    <script>
+        // Demo functionality
+        const demo = {
+            // State
+            currentData: {
+                cylindrical: null,
+                surface: null,
+                lab: null,
+                percolor: null
+            },
+
+            // Generate synthetic cylindrical data
+            generateCylindricalData() {
+                const theta = [];
+                const r = [];
+                const deltaE = [];
+
+                // Generate spiral pattern with varying ΔE
+                for (let t = 0; t < 360; t += 2) {
+                    for (let ri = 0; ri < 1; ri += 0.05) {
+                        theta.push(t);
+                        r.push(ri);
+                        // Create wave pattern in ΔE
+                        const de = 3 + 2 * Math.sin(t * Math.PI / 30) + Math.random() * 0.5;
+                        deltaE.push(de);
+                    }
+                }
+
+                this.currentData.cylindrical = { theta, r, deltaE };
+
+                v7.visuals3d.renderCylindrical('plot1', this.currentData.cylindrical,
+                    'Cylindrical View - Synthetic Data');
+                document.getElementById('status1').textContent =
+                    `✓ Generated ${theta.length} points`;
+            },
+
+            // Generate synthetic surface data
+            generateSurfaceData() {
+                const thetaSteps = 180;
+                const rSteps = 100;
+
+                const theta = Array.from({ length: thetaSteps }, (_, i) => i * 2);
+                const r = Array.from({ length: rSteps }, (_, i) => i / (rSteps - 1));
+                const deltaE2D = [];
+
+                // Create wave pattern
+                for (let ri = 0; ri < rSteps; ri++) {
+                    const row = [];
+                    for (let ti = 0; ti < thetaSteps; ti++) {
+                        const de = 2 +
+                            Math.sin(ti * Math.PI / 30) * Math.cos(ri * Math.PI / 20) +
+                            Math.random() * 0.5;
+                        row.push(Math.max(0, de));
+                    }
+                    deltaE2D.push(row);
+                }
+
+                this.currentData.surface = { theta, r, deltaE2D };
+
+                v7.visuals3d.renderSurface('plot2', this.currentData.surface,
+                    'Surface Plot - ΔE Heatmap');
+                document.getElementById('status2').textContent =
+                    `✓ Generated ${thetaSteps}×${rSteps} grid`;
+            },
+
+            // Generate Lab space scatter data
+            generateLabScatterData() {
+                const nPoints = 500;
+
+                // STD reference (centered around a typical ink color)
+                const reference = {
+                    L: [30, 40, 50],
+                    a: [10, 15, 12],
+                    b: [20, 25, 22]
+                };
+
+                // Test samples (scattered around reference with some drift)
+                const test = {
+                    L: [],
+                    a: [],
+                    b: [],
+                    deltaE: []
+                };
+
+                for (let i = 0; i < nPoints; i++) {
+                    const L = 40 + (Math.random() - 0.5) * 20;
+                    const a = 12 + (Math.random() - 0.5) * 10;
+                    const b = 22 + (Math.random() - 0.5) * 10;
+
+                    // Calculate ΔE to closest reference point
+                    let minDE = Infinity;
+                    for (let j = 0; j < reference.L.length; j++) {
+                        const de = Math.sqrt(
+                            Math.pow(L - reference.L[j], 2) +
+                            Math.pow(a - reference.a[j], 2) +
+                            Math.pow(b - reference.b[j], 2)
+                        );
+                        minDE = Math.min(minDE, de);
+                    }
+
+                    test.L.push(L);
+                    test.a.push(a);
+                    test.b.push(b);
+                    test.deltaE.push(minDE);
+                }
+
+                this.currentData.lab = { test, reference, trajectory: [] };
+
+                v7.visuals3d.renderLabScatter('plot3', this.currentData.lab,
+                    'Lab Space Scatter - Test vs STD');
+                document.getElementById('status3').textContent =
+                    `✓ Generated ${nPoints} test points, ${reference.L.length} ref points`;
+            },
+
+            // Generate per-color comparison data
+            generatePerColorData() {
+                const colors = [
+                    {
+                        color_id: 'color_0',
+                        role: 'ink',
+                        color_hex: '#2E241F',
+                        reference: { L: 30, a: 5, b: 10 },
+                        test: {
+                            L: Array.from({ length: 200 }, () => 30 + (Math.random() - 0.5) * 8),
+                            a: Array.from({ length: 200 }, () => 5 + (Math.random() - 0.5) * 4),
+                            b: Array.from({ length: 200 }, () => 10 + (Math.random() - 0.5) * 4)
+                        }
+                    },
+                    {
+                        color_id: 'color_1',
+                        role: 'ink',
+                        color_hex: '#8B7355',
+                        reference: { L: 60, a: 15, b: 30 },
+                        test: {
+                            L: Array.from({ length: 200 }, () => 60 + (Math.random() - 0.5) * 10),
+                            a: Array.from({ length: 200 }, () => 15 + (Math.random() - 0.5) * 6),
+                            b: Array.from({ length: 200 }, () => 30 + (Math.random() - 0.5) * 6)
+                        }
+                    },
+                    {
+                        color_id: 'color_2',
+                        role: 'ink',
+                        color_hex: '#D4AF37',
+                        reference: { L: 85, a: 0, b: 40 },
+                        test: {
+                            L: Array.from({ length: 200 }, () => 85 + (Math.random() - 0.5) * 12),
+                            a: Array.from({ length: 200 }, () => 0 + (Math.random() - 0.5) * 8),
+                            b: Array.from({ length: 200 }, () => 40 + (Math.random() - 0.5) * 8)
+                        }
+                    }
+                ];
+
+                this.currentData.percolor = { colors };
+
+                v7.visuals3d.renderPerColorComparison('plot4', this.currentData.percolor,
+                    'Per-Color Comparison - 3 Ink Colors');
+                document.getElementById('status4').textContent =
+                    `✓ Generated ${colors.length} colors`;
+            },
+
+            // Helper functions
+            addNoise(mode) {
+                alert('Add noise feature coming soon!');
+            },
+
+            addDefect(mode) {
+                alert('Add defect feature coming soon!');
+            },
+
+            addTrajectory(mode) {
+                if (!this.currentData.lab) {
+                    alert('Generate Lab scatter data first!');
+                    return;
+                }
+
+                // Add LOW/MID/HIGH trajectory
+                const trajectory = [{
+                    name: 'LOW→MID→HIGH',
+                    color: '#60a5fa',
+                    L: [30, 40, 50],
+                    a: [10, 15, 12],
+                    b: [20, 25, 22]
+                }];
+
+                this.currentData.lab.trajectory = trajectory;
+                v7.visuals3d.renderLabScatter('plot3', this.currentData.lab,
+                    'Lab Space Scatter - With Trajectory');
+                document.getElementById('status3').textContent += ' + trajectory added';
+            },
+
+            addColorShift(mode) {
+                alert('Color shift simulation coming soon!');
+            },
+
+            clearPlot(plotId) {
+                const el = document.getElementById(plotId);
+                if (el) {
+                    el.innerHTML = '';
+                }
+                const statusId = plotId.replace('plot', 'status');
+                const statusEl = document.getElementById(statusId);
+                if (statusEl) {
+                    statusEl.textContent = 'Plot cleared';
+                }
+            }
+        };
+
+        // Auto-generate all plots on page load
+        window.addEventListener('load', () => {
+            console.log('3D Visualization Demo loaded');
+            setTimeout(() => {
+                demo.generateCylindricalData();
+                demo.generateSurfaceData();
+                demo.generateLabScatterData();
+                demo.generatePerColorData();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

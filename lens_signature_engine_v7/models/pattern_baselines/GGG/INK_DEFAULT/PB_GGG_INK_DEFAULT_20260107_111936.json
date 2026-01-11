@@ -1,0 +1,67 @@
+{
+  "schema_version": "pattern_baseline.v1",
+  "sku": "GGG",
+  "ink": "INK_DEFAULT",
+  "active": {
+    "LOW": "GGG/INK_DEFAULT/LOW/v20260107_111928",
+    "MID": "GGG/INK_DEFAULT/MID/v20260107_111929",
+    "HIGH": "GGG/INK_DEFAULT/HIGH/v20260107_111930"
+  },
+  "active_versions": {
+    "LOW": "v20260107_111928",
+    "MID": "v20260107_111929",
+    "HIGH": "v20260107_111930"
+  },
+  "generated_at": "2026-01-07T11:19:36.090288",
+  "source": {
+    "std_images": {
+      "LOW": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_111928\\G1.png"
+      ],
+      "MID": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_111928\\G2.png"
+      ],
+      "HIGH": [
+        "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20260107_111928\\G3.png"
+      ]
+    }
+  },
+  "features": {
+    "center_blob": {
+      "count": {
+        "mean": 2.0,
+        "max": 3.0
+      },
+      "total_area": {
+        "mean": 168.3333282470703,
+        "max": 267.0
+      }
+    },
+    "angular_uniformity": {
+      "mean": 0.11832177639007568,
+      "max": 0.13352473080158234
+    },
+    "dot": {
+      "coverage": {
+        "mean": 0.3065313398838043,
+        "min": 0.2986164391040802,
+        "max": 0.31225427985191345
+      },
+      "edge_sharpness": {
+        "mean": 7.238230228424072,
+        "min": 4.519618988037109,
+        "max": 8.685832977294922
+      }
+    }
+  },
+  "policy": {
+    "margins": {
+      "blob_count": 1,
+      "blob_area_ratio": 0.2,
+      "uniformity": 0.03,
+      "coverage_eps": 0.01,
+      "sharpness_eps": 0.03
+    }
+  },
+  "path": "pattern_baselines/GGG/INK_DEFAULT/PB_GGG_INK_DEFAULT_20260107_111936.json"
+}

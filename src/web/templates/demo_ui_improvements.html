@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Improvements Demo - Lens Signature Engine v7</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0f172a;
+            color: #cbd5e1;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #60a5fa;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .info {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info p {
+            margin: 5px 0;
+            font-size: 13px;
+        }
+
+        .demo-section {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+
+        .demo-section h2 {
+            color: #94a3b8;
+            font-size: 16px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 8px;
+        }
+
+        .demo-section h3 {
+            color: #cbd5e1;
+            font-size: 14px;
+            margin: 15px 0 10px 0;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: #334155;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #475569;
+            border-color: #64748b;
+        }
+
+        button.active {
+            background: #3b82f6;
+            border-color: #2563eb;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .demo-box {
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 150px;
+        }
+
+        .demo-label {
+            color: #64748b;
+            font-size: 11px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Unified Summary Card Styles (matching main module) */
+        .unified-summary {
+            background: #1e293b;
+            border: 2px solid #334155;
+            padding: 20px;
+            border-radius: 6px;
+        }
+
+        .terminal-panel {
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        code {
+            background: #1e293b;
+            color: #60a5fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 UI Improvements Demo - Lens Signature Engine v7</h1>
+
+        <div class="info">
+            <p><strong>목표:</strong> 작업자가 3초 안에 판단 + 근거를 파악</p>
+            <p><strong>구현:</strong> 8가지 핵심 UI 개선사항</p>
+            <p><strong>상태:</strong> ✅ Production Ready</p>
+        </div>
+
+        <!-- 1. Unified Summary Card -->
+        <div class="demo-section">
+            <h2>1. Unified Summary Card (통합 요약 카드)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> 탭 전환 없이 3초 안에 "결론 + 이유" 파악
+            </p>
+
+            <div class="demo-controls">
+                <button onclick="demo.loadScenario('pass')">시나리오: PASS</button>
+                <button onclick="demo.loadScenario('uncertain')">시나리오: UNCERTAIN</button>
+                <button onclick="demo.loadScenario('ng')">시나리오: NG_COLOR</button>
+            </div>
+
+            <div id="unifiedSummaryCard" class="unified-summary"></div>
+        </div>
+
+        <!-- 2. Core/Ink Same-Scale Panels -->
+        <div class="demo-section">
+            <h2>2. Core/Ink Same-Scale Display (동일 스케일 표시)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> 서로 다른 지표지만 같은 판단 프레임 (OK/WARN/NG)
+            </p>
+
+            <div class="demo-grid">
+                <div class="demo-box">
+                    <div class="demo-label">Core (Signature)</div>
+                    <div id="corePanelMetrics"></div>
+                </div>
+                <div class="demo-box">
+                    <div class="demo-label">Ink</div>
+                    <div id="inkPanelMetrics"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Direction Clarity -->
+        <div class="demo-section">
+            <h2>3. Direction Dual-Mode Clarity (ROI vs Global 명확화)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> "왜 direction 값과 ROI ΔE가 다르지?" 질문 사라짐
+            </p>
+
+            <div id="directionDisplay"></div>
+        </div>
+
+        <!-- 4. Pattern Color Score -->
+        <div class="demo-section">
+            <h2>4. Pattern_Color Score Policy Labels (정책 라벨)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> 점수에 과신 방지 (policy 표시 + uncertain cap)
+            </p>
+
+            <div id="patternColorScoreDisplay"></div>
+        </div>
+
+        <!-- 5. Forced K Badge -->
+        <div class="demo-section">
+            <h2>5. Ink "Forced_to_Expected" Status (강제 적용 표시)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> auto-k 불확실성 명확화
+            </p>
+
+            <div id="inkKDisplay"></div>
+        </div>
+
+        <!-- 6. Radial Summary -->
+        <div class="demo-section">
+            <h2>6. Radial Profile Summary→Expand (요약→확장)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> UI 가벼워지고 의미 있는 숫자만 표시
+            </p>
+
+            <div id="radialProfileDisplay"></div>
+        </div>
+
+        <!-- 7. Sparsity Warning -->
+        <div class="demo-section">
+            <h2>7. Standardized Data Sparsity Warning (표준화된 경고)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> 문구 흔들림 없음 + 불필요한 공포감 제거
+            </p>
+
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <span>Trend Analysis:</span>
+                <div id="sparsityWarningDemo"></div>
+            </div>
+        </div>
+
+        <!-- 8. Auto-Scroll -->
+        <div class="demo-section">
+            <h2>8. Reason→Evidence Auto-Scroll (자동 스크롤)</h2>
+            <p style="margin-bottom: 15px; color: #94a3b8; font-size: 13px;">
+                <strong>효과:</strong> "왜?" → "증거" 동선 1클릭
+            </p>
+
+            <div class="demo-controls">
+                <button onclick="v7.uiImprovements.scrollToEvidence('V2_INK_SHIFT_SUMMARY')">
+                    V2_INK_SHIFT → Jump
+                </button>
+                <button onclick="v7.uiImprovements.scrollToEvidence('DELTAE_P95_HIGH')">
+                    DELTAE_P95_HIGH → Jump
+                </button>
+                <button onclick="v7.uiImprovements.scrollToEvidence('GATE_CENTER_OFFSET')">
+                    GATE_CENTER_OFFSET → Jump
+                </button>
+            </div>
+
+            <div style="margin-top: 15px; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 4px;">
+                <div id="inkTrajectorySection" style="padding: 20px; border: 1px dashed #334155; margin-bottom: 10px;">
+                    <strong>Ink Trajectory Section</strong> (자동 스크롤 대상)
+                </div>
+                <div id="signatureDeltaESection" style="padding: 20px; border: 1px dashed #334155; margin-bottom: 10px;">
+                    <strong>Signature ΔE Section</strong> (자동 스크롤 대상)
+                </div>
+                <div id="gateGeometrySection" style="padding: 20px; border: 1px dashed #334155;">
+                    <strong>Gate Geometry Section</strong> (자동 스크롤 대상)
+                </div>
+            </div>
+        </div>
+
+        <!-- Integration Code -->
+        <div class="demo-section">
+            <h2>📋 Integration Code</h2>
+            <h3>Step 1: 스크립트 로드</h3>
+            <pre style="background: #0f172a; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px;"><code>&lt;script src="/static/js/v7/ui_improvements.js"&gt;&lt;/script&gt;</code></pre>
+
+            <h3>Step 2: HTML 컨테이너 추가</h3>
+            <pre style="background: #0f172a; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px;"><code>&lt;div id="unifiedSummaryCard"&gt;&lt;/div&gt;
+&lt;div id="corePanelMetrics"&gt;&lt;/div&gt;
+&lt;div id="inkPanelMetrics"&gt;&lt;/div&gt;</code></pre>
+
+            <h3>Step 3: JavaScript 호출</h3>
+            <pre style="background: #0f172a; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px;"><code>// 검사 결과 렌더링 시
+v7.uiImprovements.renderUnifiedSummary(decision, v2Diag, ops);
+v7.uiImprovements.renderSameScalePanels(decision, v2Diag);
+v7.uiImprovements.renderDirectionClarified(v2Diag);
+// ... 나머지 함수들</code></pre>
+        </div>
+    </div>
+
+    <!-- Load modules -->
+    <script src="/static/js/v7/utils.js"></script>
+    <script src="/static/js/v7/ui_improvements.js"></script>
+
+    <script>
+        // Mock v7.utils if not loaded
+        if (typeof window.v7 === 'undefined') {
+            window.v7 = { utils: {}, uiImprovements: {} };
+        }
+
+        if (!v7.utils.byId) {
+            v7.utils.byId = (id) => document.getElementById(id);
+        }
+
+        if (!v7.utils.getReasonInfo) {
+            v7.utils.getReasonInfo = (code) => {
+                const infoMap = {
+                    'V2_INK_SHIFT_SUMMARY': { title: 'Ink trajectory shift', desc: 'Significant color shift detected' },
+                    'DELTAE_P95_HIGH': { title: 'ΔE spike detected', desc: 'p95 exceeds threshold' },
+                    'CORR_LOW': { title: 'Low correlation', desc: 'Pattern mismatch' },
+                    'GATE_CENTER_OFFSET': { title: 'Center offset', desc: 'Lens not centered' }
+                };
+                return infoMap[code] || { title: code, desc: '' };
+            };
+        }
+
+        // Demo functionality
+        const demo = {
+            loadScenario(scenario) {
+                let decision, v2Diag, ops;
+
+                if (scenario === 'pass') {
+                    decision = {
+                        label: 'OK',
+                        best_mode: 'MID',
+                        signature: { passed: true, score_corr: 0.998, delta_e_mean: 1.23, delta_e_p95: 3.45 },
+                        gate: { passed: true }
+                    };
+                    v2Diag = {
+                        expected_ink_count: 3,
+                        auto_estimation: { auto_k_best: 3, confidence: 0.85, forced_to_expected: false },
+                        ink_match: {
+                            direction: {
+                                roi: { delta_L: 0.5, delta_a: -0.2, delta_b: 0.3 },
+                                global: { delta_L: 1.2, delta_a: -0.5, delta_b: 0.7 }
+                            },
+                            trajectory_summary: { max_off_track: 2.34, max_de: 4.56 }
+                        }
+                    };
+                    ops = { judgment: 'PASS', top_signals: [], pattern_color: { score: 0.85, policy: 'heuristic_v1', uncertain: false } };
+
+                } else if (scenario === 'uncertain') {
+                    decision = {
+                        label: 'OK',
+                        best_mode: 'LOW',
+                        signature: { passed: true, score_corr: 0.989, delta_e_mean: 2.34, delta_e_p95: 5.67 },
+                        gate: { passed: true }
+                    };
+                    v2Diag = {
+                        expected_ink_count: 3,
+                        auto_estimation: { auto_k_best: 3, confidence: 0.45, forced_to_expected: true },
+                        ink_match: {
+                            warning: 'Low confidence',
+                            direction: {
+                                roi: { delta_L: 2.3, delta_a: -1.2, delta_b: 0.8 },
+                                global: { delta_L: 3.5, delta_a: -2.1, delta_b: 1.5 }
+                            },
+                            trajectory_summary: { max_off_track: 6.08, max_de: 12.34 }
+                        },
+                        warnings: ['Uncertain ink matching']
+                    };
+                    ops = {
+                        judgment: 'MANUAL_REVIEW',
+                        top_signals: [
+                            { code: 'V2_INK_SHIFT_SUMMARY', value: { detail: 'Ink trajectory shows shift' } }
+                        ],
+                        pattern_color: { score: 0.63, policy: 'heuristic_v1', uncertain: true }
+                    };
+
+                } else if (scenario === 'ng') {
+                    decision = {
+                        label: 'NG_COLOR',
+                        best_mode: 'MID',
+                        signature: { passed: false, score_corr: 0.912, delta_e_mean: 8.45, delta_e_p95: 15.23 },
+                        gate: { passed: true }
+                    };
+                    v2Diag = {
+                        expected_ink_count: 3,
+                        auto_estimation: { auto_k_best: 2, confidence: 0.35, forced_to_expected: false },
+                        ink_match: {
+                            warning: 'Color mismatch',
+                            direction: {
+                                roi: { delta_L: 5.6, delta_a: -3.4, delta_b: 2.1 },
+                                global: { delta_L: 6.8, delta_a: -4.2, delta_b: 3.3 }
+                            },
+                            trajectory_summary: { max_off_track: 15.67, max_de: 28.90 }
+                        },
+                        warnings: ['Unexpected k', 'High deltaE']
+                    };
+                    ops = {
+                        judgment: 'NG_COLOR',
+                        top_signals: [
+                            { code: 'V2_INK_SHIFT_SUMMARY', value: { detail: 'Severe color shift' } },
+                            { code: 'DELTAE_P95_HIGH', value: { detail: 'ΔE p95 = 15.23' } },
+                            { code: 'V2_INK_UNEXPECTED_K', value: { detail: 'Expected 3, got 2' } }
+                        ],
+                        pattern_color: { score: 0.32, policy: 'heuristic_v1', uncertain: true }
+                    };
+                }
+
+                // Render all improvements
+                v7.uiImprovements.renderUnifiedSummary(decision, v2Diag, ops);
+                v7.uiImprovements.renderSameScalePanels(decision, v2Diag);
+                v7.uiImprovements.renderDirectionClarified(v2Diag);
+                v7.uiImprovements.renderPatternColorScore(ops);
+                v7.uiImprovements.renderForcedKBadge(v2Diag);
+
+                // Radial summary
+                const radialData = {
+                    summary: {
+                        knee_r_de: 0.45,
+                        fade_slope_outer_de: 0.012,
+                        inner_mean_de: 1.23,
+                        outer_mean_de: 2.34
+                    }
+                };
+                v7.uiImprovements.renderRadialSummary(radialData);
+
+                // Sparsity warning
+                const v3Summary = {
+                    data_sparsity: 'insufficient',
+                    confidence: 'low',
+                    window_effective: 10,
+                    window_requested: 50
+                };
+                const sparsityEl = document.getElementById('sparsityWarningDemo');
+                if (sparsityEl) {
+                    sparsityEl.innerHTML = v7.uiImprovements.renderSparsityWarning(v3Summary);
+                }
+            }
+        };
+
+        // Auto-load PASS scenario on page load
+        window.addEventListener('load', () => {
+            demo.loadScenario('pass');
+        });
+    </script>
+</body>
+</html>

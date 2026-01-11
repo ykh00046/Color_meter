@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signature Engine v1.1 - Lens Inspection Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Terminal Color Palette */
+            --base-black: #000000;
+            --surface-dark: #0a0a0a;
+            --surface-elevated: #141414;
+            --surface-panel: #1a1a1a;
+            --border-dim: #2a2a2a;
+            --border-bright: #3a3a3a;
+
+            /* Accent Colors - CRT Inspired */
+            --amber-primary: #ff9500;
+            --amber-bright: #ffb84d;
+            --amber-glow: rgba(255, 149, 0, 0.3);
+            --cyan-data: #00e5ff;
+            --green-ok: #00ff41;
+            --green-glow: rgba(0, 255, 65, 0.2);
+            --red-error: #ff3b30;
+            --yellow-warning: #ffcc00;
+
+            /* Text */
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-dim: #606060;
+            --text-amber: #ffb84d;
+        }
+
+        * {
+            font-family: 'Outfit', -apple-system, sans-serif;
+            box-sizing: border-box;
+        }
+
+        .font-mono { font-family: 'IBM Plex Mono', monospace; }
+        .font-technical { font-family: 'Rajdhani', sans-serif; letter-spacing: 0.05em; }
+
+        body {
+            background: var(--base-black);
+            color: var(--text-primary);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Technical Grid Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(90deg, rgba(255, 149, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(rgba(255, 149, 0, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Noise Texture Overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='3.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
+
+        .content-wrapper {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Panel Styles */
+        .terminal-panel {
+            background: var(--surface-elevated);
+            border: 2px solid var(--border-dim);
+            position: relative;
+        }
+
+        .terminal-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent,
+                var(--amber-primary) 50%,
+                transparent);
+            opacity: 0.3;
+        }
+
+        /* Glow Effect */
+        .glow-amber {
+            box-shadow: 0 0 20px var(--amber-glow), 0 0 40px var(--amber-glow);
+        }
+
+        .glow-green {
+            box-shadow: 0 0 20px var(--green-glow), 0 0 40px var(--green-glow);
+        }
+
+        /* Tab System */
+        .tab-rail {
+            background: var(--surface-dark);
+            border: 2px solid var(--border-dim);
+            position: relative;
+            display: flex;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 16px 24px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: all 0.3s ease;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .tab-button:hover {
+            background: var(--surface-elevated);
+            color: var(--text-secondary);
+        }
+
+        .tab-button.active {
+            background: var(--surface-elevated);
+            border: 1px solid var(--amber-primary);
+            color: var(--amber-primary);
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--amber-primary);
+            box-shadow: 0 0 10px var(--amber-glow);
+        }
+
+        .tab-content {
+            display: none;
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Input Styles */
+        .terminal-input {
+            background: var(--surface-dark);
+            border: 2px solid var(--border-dim);
+            color: var(--text-primary);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px;
+            padding: 14px 16px;
+            transition: all 0.2s ease;
+        }
+
+        .terminal-input:focus {
+            outline: none;
+            border-color: var(--amber-primary);
+            box-shadow: 0 0 0 4px var(--amber-glow);
+        }
+
+        .terminal-input::placeholder {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        /* File Upload Zone */
+        .upload-zone {
+            background: var(--surface-dark);
+            border: 2px dashed var(--border-dim);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--amber-primary);
+            background: var(--surface-elevated);
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--amber-bright);
+            background: var(--surface-elevated);
+            box-shadow: inset 0 0 20px var(--amber-glow);
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--amber-primary) 0%, #ff7a00 100%);
+            color: #000;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 16px 32px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px var(--amber-glow);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: var(--surface-elevated);
+            border: 2px solid var(--border-bright);
+            color: var(--text-secondary);
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 12px 24px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--amber-primary);
+            color: var(--amber-primary);
+        }
+
+        /* Judgment Result Cards */
+        .judgment-card {
+            border: 3px solid;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .judgment-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, currentColor 0%, transparent 70%);
+            opacity: 0.05;
+            pointer-events: none;
+        }
+
+        .judgment-ok {
+            border-color: var(--green-ok);
+            background: linear-gradient(135deg, rgba(0,255,65,0.05) 0%, transparent 50%);
+        }
+
+        .judgment-ng-pattern {
+            border-color: var(--yellow-warning);
+            background: linear-gradient(135deg, rgba(255,204,0,0.05) 0%, transparent 50%);
+        }
+
+        .judgment-ng-color {
+            border-color: var(--red-error);
+            background: linear-gradient(135deg, rgba(255,59,48,0.05) 0%, transparent 50%);
+        }
+
+        .judgment-retake {
+            border-color: var(--text-dim);
+            background: linear-gradient(135deg, rgba(96,96,96,0.05) 0%, transparent 50%);
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border: 1px solid;
+        }
+
+        /* Visualization Controls */
+        .viz-toggle {
+            background: var(--surface-dark);
+            border: 1px solid var(--border-dim);
+            padding: 4px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .viz-button {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .viz-button:hover {
+            background: var(--surface-elevated);
+            color: var(--text-secondary);
+        }
+
+        .viz-button.active {
+            background: var(--amber-primary);
+            border-color: var(--amber-primary);
+            color: #000;
+            font-weight: 700;
+        }
+
+        /* Image Viewer with Scan Lines */
+        .image-viewer {
+            background: var(--base-black);
+            border: 2px solid var(--border-dim);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-viewer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(255,255,255,0.02) 0px,
+                transparent 1px,
+                transparent 2px,
+                rgba(255,255,255,0.02) 3px
+            );
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .image-viewer img {
+            position: relative;
+            z-index: 0;
+        }
+
+        /* Technical Divider */
+        .tech-divider {
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent,
+                var(--border-bright) 20%,
+                var(--border-bright) 80%,
+                transparent);
+            position: relative;
+        }
+
+        .tech-divider::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background: var(--amber-primary);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--amber-glow);
+        }
+
+        /* Loading Animation */
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-dim);
+            border-top-color: var(--amber-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Pulse Animation for Indicators */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Data Grid */
+        .data-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .data-cell {
+            background: var(--surface-dark);
+            border-left: 3px solid var(--border-bright);
+            padding: 12px 16px;
+        }
+
+        .data-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 6px;
+        }
+
+        .data-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 18px;
+            color: var(--amber-bright);
+            font-weight: 600;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .tab-button {
+                font-size: 12px;
+                padding: 12px 16px;
+            }
+
+            .btn-primary {
+                font-size: 14px;
+                padding: 14px 24px;
+            }
+        }
+
+        /* Alert Box */
+        .alert-box {
+            background: var(--surface-elevated);
+            border-left: 4px solid var(--yellow-warning);
+            padding: 16px 20px;
+            display: flex;
+            align-items: start;
+            gap: 16px;
+        }
+
+        /* v2 Diagnostics Panel */
+        .v2-panel {
+            background: var(--surface-dark);
+            border: 1px solid rgba(0, 229, 255, 0.2);
+            position: relative;
+        }
+
+        .v2-panel::before {
+            content: 'DIAGNOSTIC';
+            position: absolute;
+            top: -10px;
+            left: 16px;
+            background: var(--surface-elevated);
+            padding: 0 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px;
+            color: var(--cyan-data);
+            letter-spacing: 0.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="content-wrapper p-4 md:p-8">
+        <div class="max-w-7xl mx-auto space-y-6">
+
+            <!-- Terminal Header -->
+            <div class="terminal-panel p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-6">
+                        <!-- System Icon -->
+                        <div class="relative">
+                            <div class="w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center glow-amber">
+                                <svg class="w-8 h-8 text-black" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </div>
+                            <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-green-ok rounded-full pulse"></div>
+                        </div>
+
+                        <!-- Title -->
+                        <div>
+                            <h1 class="font-technical text-3xl font-bold tracking-wide flex items-center gap-3">
+                                <span class="text-white">SIGNATURE ENGINE</span>
+                                <span class="status-badge border-amber-primary text-amber-primary">v1.1</span>
+                            </h1>
+                            <p class="font-mono text-xs text-text-dim mt-1">LENS QUALITY INSPECTION TERMINAL</p>
+                        </div>
+                    </div>
+
+                    <!-- Header Actions -->
+                    <div class="flex items-center gap-3">
+                        <button id="btnRefreshProducts" class="btn-secondary p-3" title="Refresh Products">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                        <a href="/" class="btn-secondary px-5 py-3 font-technical">HOME</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tab-rail">
+                <button onclick="switchTab('inspection')" id="tab-inspection" class="tab-button active">
+                    <span class="font-mono text-xs mr-2">01</span> INSPECTION
+                </button>
+                <button onclick="switchTab('registration')" id="tab-registration" class="tab-button">
+                    <span class="font-mono text-xs mr-2">02</span> STD REGISTER
+                </button>
+                <button onclick="switchTab('activation')" id="tab-activation" class="tab-button">
+                    <span class="font-mono text-xs mr-2">03</span> ACTIVATE
+                </button>
+            </div>
+
+            <!-- TAB 1: INSPECTION -->
+            <div id="view-inspection" class="tab-content active space-y-6">
+                <div class="terminal-panel p-8">
+
+                    <!-- Control Panel -->
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-8">
+                        <!-- Product Select -->
+                        <div class="md:col-span-4 space-y-2">
+                            <label class="data-label">PRODUCT</label>
+                            <select id="inspProductSelect" class="terminal-input w-full">
+                                <option value="" disabled selected>Select Product...</option>
+                            </select>
+                        </div>
+
+                        <!-- File Upload -->
+                        <div class="md:col-span-5 space-y-2">
+                            <label class="data-label">SAMPLE IMAGE</label>
+                            <div class="upload-zone p-4 relative">
+                                <input id="inspFiles" type="file" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                                <div class="flex items-center justify-between pointer-events-none">
+                                    <span id="inspFileName" class="font-mono text-sm text-text-secondary truncate">Drag file or click to browse...</span>
+                                    <svg class="w-5 h-5 text-text-dim flex-shrink-0 ml-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Execute Button -->
+                        <div class="md:col-span-3 flex items-end">
+                            <button id="btnInspect" class="btn-primary w-full">
+                                EXECUTE
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Results Area -->
+                    <div id="inspResultArea" class="hidden space-y-6">
+
+                        <!-- Judgment Summary -->
+                        <div id="inspSummaryCard" class="judgment-card">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-3 mb-3">
+                                        <span id="inspVersionBadge" class="status-badge border-text-dim text-text-dim"></span>
+                                        <h2 id="inspLabel" class="font-technical text-5xl font-bold tracking-tight"></h2>
+                                    </div>
+                                    <p id="inspSummaryLine" class="text-lg text-text-secondary font-medium"></p>
+                                </div>
+                                <div id="inspActionBox" class="terminal-panel p-6 min-w-[280px]">
+                                    <p class="data-label mb-2">NEXT ACTION</p>
+                                    <p id="inspActionGuide" class="font-technical text-base font-semibold text-amber-bright"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tech-divider"></div>
+
+                        <!-- Analysis Grid -->
+                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                            <!-- Visualization Panel -->
+                            <div class="lg:col-span-7 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="font-technical text-sm font-bold text-text-secondary uppercase tracking-wider">ANALYSIS VIEW</h3>
+                                    <div class="viz-toggle">
+                                        <button onclick="setViz('overlay')" id="viz-overlay" class="viz-button active">OVERLAY</button>
+                                        <button onclick="setViz('heatmap')" id="viz-heatmap" class="viz-button">HEATMAP</button>
+                                    </div>
+                                </div>
+
+                                <div class="image-viewer aspect-video">
+                                    <img id="inspMainImg" class="w-full h-full object-contain" src="" alt="Analysis View">
+                                </div>
+                            </div>
+
+                            <!-- Metrics Panel -->
+                            <div class="lg:col-span-5 space-y-6">
+
+                                <!-- Color Shift Chart -->
+                                <div class="space-y-3">
+                                    <h3 class="font-technical text-sm font-bold text-text-secondary uppercase tracking-wider">COLOR SHIFT (ΔL*a*b*)</h3>
+                                    <div class="terminal-panel p-6 h-[220px]">
+                                        <canvas id="colorChart"></canvas>
+                                    </div>
+                                </div>
+
+                                <!-- V2 Diagnostics -->
+                                <div class="v2-panel p-6 space-y-4">
+                                    <div class="flex items-center gap-2 mb-4">
+                                        <div class="w-2 h-2 rounded-full bg-cyan-data pulse"></div>
+                                        <h3 class="font-mono text-xs font-bold text-cyan-data uppercase">V2 REFERENCE (NON-DECISIVE)</h3>
+                                    </div>
+
+                                    <div class="data-grid grid-cols-2">
+                                        <div class="data-cell">
+                                            <p class="data-label">Expected Inks</p>
+                                            <p id="v2-ink-count" class="data-value text-lg">-</p>
+                                        </div>
+                                        <div class="data-cell">
+                                            <p class="data-label">Suggested K</p>
+                                            <p id="v2-suggested-k" class="data-value text-lg">-</p>
+                                        </div>
+                                        <div class="data-cell">
+                                            <p class="data-label">Confidence</p>
+                                            <p id="v2-confidence" class="data-value text-lg">-</p>
+                                        </div>
+                                        <div class="data-cell">
+                                            <p class="data-label">Warnings</p>
+                                            <p id="v2-warnings" class="font-mono text-xs text-yellow-warning leading-tight">-</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Technical Details Accordion -->
+                        <div class="mt-8">
+                            <button onclick="toggleDetails()" class="btn-secondary w-full md:w-auto px-6 py-3 font-mono text-xs">
+                                <span id="detailsArrow">►</span> TECHNICAL DIAGNOSTICS & BASELINE
+                            </button>
+                            <div id="inspDetails" class="hidden mt-4 terminal-panel p-6 font-mono text-xs text-text-dim overflow-x-auto whitespace-pre"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: REGISTRATION -->
+            <div id="view-registration" class="tab-content space-y-6">
+
+                <!-- Warning Banner -->
+                <div class="alert-box">
+                    <svg class="w-6 h-6 text-yellow-warning flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <div>
+                        <p class="font-technical font-semibold text-yellow-warning">REGISTRATION MODE</p>
+                        <p class="text-sm text-text-secondary mt-1">This screen is for STD registration/validation only. Not for production inspection.</p>
+                    </div>
+                </div>
+
+                <div class="terminal-panel p-8">
+
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-8">
+                        <h2 class="font-technical text-2xl font-bold text-white uppercase">STD MODEL REGISTRATION</h2>
+                        <span id="regStatus" class="status-badge border-text-dim text-text-dim">IDLE</span>
+                    </div>
+
+                    <!-- Product Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="space-y-2">
+                            <label class="data-label">PRODUCT NAME</label>
+                            <input id="regSku" class="terminal-input w-full" placeholder="e.g., CLEAR_BLUE_V1">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="data-label">INK COUNT</label>
+                            <select id="regInkCount" class="terminal-input w-full">
+                                <option value="1">1 Ink</option>
+                                <option value="2">2 Inks</option>
+                                <option value="3">3 Inks</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Sample Uploads -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="terminal-panel p-6 hover:border-amber-primary transition-colors">
+                            <p class="data-label mb-4">LOW ILLUMINATION</p>
+                            <input id="regLow" type="file" multiple class="text-xs text-text-secondary file:mr-3 file:py-2 file:px-4 file:bg-surface-elevated file:text-text-secondary file:border-0 file:border file:border-border-bright file:font-mono file:text-xs hover:file:border-amber-primary file:transition">
+                        </div>
+                        <div class="terminal-panel p-6 hover:border-amber-primary transition-colors">
+                            <p class="data-label mb-4">MID ILLUMINATION</p>
+                            <input id="regMid" type="file" multiple class="text-xs text-text-secondary file:mr-3 file:py-2 file:px-4 file:bg-surface-elevated file:text-text-secondary file:border-0 file:border file:border-border-bright file:font-mono file:text-xs hover:file:border-amber-primary file:transition">
+                        </div>
+                        <div class="terminal-panel p-6 hover:border-amber-primary transition-colors">
+                            <p class="data-label mb-4">HIGH ILLUMINATION</p>
+                            <input id="regHigh" type="file" multiple class="text-xs text-text-secondary file:mr-3 file:py-2 file:px-4 file:bg-surface-elevated file:text-text-secondary file:border-0 file:border file:border-border-bright file:font-mono file:text-xs hover:file:border-amber-primary file:transition">
+                        </div>
+                    </div>
+
+                    <!-- Execute Registration -->
+                    <button id="btnRegister" class="btn-primary w-full py-6">
+                        REGISTER & VALIDATE STD MODEL
+                    </button>
+
+                    <!-- Registration Results -->
+                    <div id="regResultArea" class="hidden mt-8 terminal-panel p-8">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div class="md:col-span-2 space-y-3">
+                                <h4 class="font-technical text-sm font-bold text-text-secondary uppercase tracking-wider">VALIDATION SUMMARY</h4>
+                                <pre id="regSummaryText" class="font-mono text-xs text-cyan-data leading-relaxed"></pre>
+                            </div>
+                            <div class="terminal-panel p-6 text-center">
+                                <p class="data-label mb-3">ACTIVATION STATUS</p>
+                                <p id="regStatusLabel" class="font-technical text-lg font-bold mb-6"></p>
+                                <button id="regBtnGoActivate" onclick="switchTab('activation')" class="hidden btn-secondary w-full font-technical">
+                                    GO TO ACTIVATE →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TAB 3: ACTIVATION -->
+            <div id="view-activation" class="tab-content space-y-6">
+                <div class="terminal-panel p-8">
+
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-8">
+                        <h2 class="font-technical text-2xl font-bold text-white uppercase">STD ACTIVATION (APPROVER)</h2>
+                        <span id="actStatus" class="status-badge border-green-ok text-green-ok">READY</span>
+                    </div>
+
+                    <!-- Product Selection -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                        <div class="md:col-span-3 space-y-2">
+                            <label class="data-label">SELECT PRODUCT TO ACTIVATE</label>
+                            <select id="actProductSelect" class="terminal-input w-full">
+                                <option value="" disabled selected>Select Product...</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button id="btnLoadCandidates" class="btn-secondary w-full py-4 font-technical">
+                                LOAD CANDIDATES
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Activation Work Area -->
+                    <div id="actWorkArea" class="hidden space-y-8">
+
+                        <!-- Version Comparison -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                            <!-- Current Active -->
+                            <div class="terminal-panel p-6">
+                                <h3 class="font-technical text-sm font-bold text-text-secondary uppercase tracking-wider mb-6">CURRENT ACTIVE</h3>
+                                <div id="activeInfoBox" class="font-mono text-sm text-text-dim space-y-2 italic">
+                                    No active version found
+                                </div>
+                            </div>
+
+                            <!-- New Candidate -->
+                            <div class="v2-panel p-6">
+                                <h3 class="font-technical text-sm font-bold text-cyan-data uppercase tracking-wider mb-6">NEW CANDIDATE</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="data-label mb-2 block">LOW</label>
+                                        <select id="actLow" class="terminal-input w-full text-xs"></select>
+                                    </div>
+                                    <div>
+                                        <label class="data-label mb-2 block">MID</label>
+                                        <select id="actMid" class="terminal-input w-full text-xs"></select>
+                                    </div>
+                                    <div>
+                                        <label class="data-label mb-2 block">HIGH</label>
+                                        <select id="actHigh" class="terminal-input w-full text-xs"></select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tech-divider"></div>
+
+                        <!-- V2 Approver Alert -->
+                        <div id="v2ApproverAlert" class="hidden v2-panel p-6">
+                            <div class="flex items-center gap-2 mb-6">
+                                <div class="w-2 h-2 rounded-full bg-cyan-data pulse"></div>
+                                <h3 class="font-mono text-xs font-bold text-cyan-data uppercase">V2 DIAGNOSTIC SIGNALS (NON-DECISIVE)</h3>
+                            </div>
+                            <div id="v2AlertList" class="data-grid grid-cols-1 md:grid-cols-2">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+
+                        <!-- Activation Confirmation -->
+                        <div class="terminal-panel p-12 text-center border-2 border-green-ok">
+                            <p class="text-text-secondary mb-4 leading-relaxed">
+                                Confirm selected version as new production standard.<br>
+                                <span class="text-xs text-green-ok/70 font-mono">Pattern baseline will be updated immediately upon activation.</span>
+                            </p>
+                            <button id="btnActivate" class="btn-primary px-16 py-5 glow-green">
+                                ACTIVATE STANDARD
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Hidden Fields -->
+    <input type="hidden" id="regInk" value="INK_DEFAULT">
+
+    <!-- Scripts -->
+    <script src="/static/js/v7/state.js"></script>
+    <script src="/static/js/v7/utils.js"></script>
+    <script src="/static/js/v7/api.js"></script>
+    <script src="/static/js/v7/viewer.js"></script>
+    <script src="/static/js/v7/visuals.js"></script>
+    <script src="/static/js/v7/ink_visuals.js"></script>
+    <script src="/static/js/v7/diagnostics_visuals.js"></script>
+    <script src="/static/js/v7/products.js"></script>
+    <script src="/static/js/v7/inspection.js"></script>
+    <script src="/static/js/v7/registration.js"></script>
+    <script src="/static/js/v7/std_admin.js"></script>
+    <script src="/static/js/v7/result_tabs.js"></script>
+    <script src="/static/js/v7/test.js"></script>
+    <script src="/static/js/v7/main.js"></script>
+    <script>
+        // Tab Switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById(`view-${tab}`).classList.add('active');
+        }
+
+        // Details Toggle
+        function toggleDetails() {
+            const el = document.getElementById('inspDetails');
+            const arrow = document.getElementById('detailsArrow');
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                arrow.textContent = '▼';
+            } else {
+                el.classList.add('hidden');
+                arrow.textContent = '►';
+            }
+        }
+
+        // File Upload Handler
+        const fileInput = document.getElementById('inspFiles');
+        if (fileInput) {
+            fileInput.addEventListener('change', function(e) {
+                const nameEl = document.getElementById('inspFileName');
+                if (nameEl && e.target.files[0]) {
+                    nameEl.textContent = e.target.files[0].name;
+                }
+            });
+
+            // Drag and drop
+            const uploadZone = fileInput.parentElement;
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragover');
+            });
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragover');
+            });
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    document.getElementById('inspFileName').textContent = e.dataTransfer.files[0].name;
+                }
+            });
+        }
+
+        // Visualization Switcher
+        function setViz(type) {
+            const img = document.getElementById('inspMainImg');
+            const btnOverlay = document.getElementById('viz-overlay');
+            const btnHeatmap = document.getElementById('viz-heatmap');
+
+            if (!window.currentArtifacts || !img) return;
+
+            btnOverlay.classList.remove('active');
+            btnHeatmap.classList.remove('active');
+
+            if (type === 'overlay') {
+                img.src = window.currentArtifacts.overlay || "";
+                btnOverlay.classList.add('active');
+            } else {
+                img.src = window.currentArtifacts.heatmap || window.currentArtifacts.overlay || "";
+                btnHeatmap.classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>

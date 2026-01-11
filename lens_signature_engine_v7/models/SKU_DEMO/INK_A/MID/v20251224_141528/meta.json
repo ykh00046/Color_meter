@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_DEMO",
+  "ink": "INK_A",
+  "mode": "MID",
+  "version": "v20251224_141528",
+  "std_images": [
+    "C:\\X\\Color_total\\Color_meter\\data\\samples\\INK2\\B1.png"
+  ],
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:02053b9950f758c58b319fb33bdb1a22501d3ecc1c221ce531da47f154079247"
+  },
+  "created_by": "demo",
+  "created_at": "2025-12-24T14:15:28.517708",
+  "notes": ""
+}

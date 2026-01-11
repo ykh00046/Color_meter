@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "sku": "g",
+  "ink": "INK_DEFAULT",
+  "mode": "HIGH",
+  "version": "v20251226_000635",
+  "std_images": [
+    "C:\\X\\Color_total\\Color_meter\\lens_signature_engine_v7\\results\\web\\reg_20251226_000634\\G3.png"
+  ],
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:4e6585d12097b54a193cfa009754fc321697c860d4d79e9369ed9e18a5ea6e20"
+  },
+  "created_by": "SYSTEM",
+  "created_at": "2025-12-26T00:06:36.011951",
+  "notes": ""
+}

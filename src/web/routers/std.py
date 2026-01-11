@@ -234,35 +234,46 @@ def get_std_detail(std_id: int, std_service: STDService = Depends(get_std_servic
         # Extract analysis result
         analysis_result = std_sample.analysis_result
 
-        # Build response (simplified for MVP)
-        # Full STDDetailResponse requires zone_colors, boundaries, radial_profile
-        # For now, return minimal response
-        # TODO: Implement full profile extraction from analysis_result
-
+        # Build response using stored analysis_result
         from src.schemas.std_schemas import STDProfileData, ZoneBoundaryData, ZoneColorData
 
-        # Placeholder: extract from analysis_result
         zone_results = analysis_result.get("zone_results", [])
+        if not zone_results:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="STD analysis_result missing zone_results"
+            )
 
-        # Mock zone colors (TODO: extract from analysis_result)
         zone_colors = {}
         for zr in zone_results:
-            zone_name = zr.get("zone_name", "A")
-            # These values should come from analysis_result
-            zone_colors[zone_name] = ZoneColorData(L=85.0, a=0.0, b=0.0)
+            zone_name = zr.get("zone_name") or "A"
+            lab = zr.get("measured_lab") or zr.get("target_lab")
+            if not lab:
+                continue
+            zone_colors[zone_name] = ZoneColorData(L=float(lab[0]), a=float(lab[1]), b=float(lab[2]))
 
-        # Mock boundaries (TODO: extract from analysis_result)
-        zone_boundaries = ZoneBoundaryData(inner_to_A=120.0, A_to_B=240.0, B_to_C=360.0, C_outer=500.0)
+        if not zone_colors:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="STD analysis_result missing zone color data"
+            )
 
-        # Mock radial profiles (TODO: extract from analysis_result)
-        radial_profile_L = [85.0] * 500
-        radial_profile_a = [0.0] * 500
-        radial_profile_b = [0.0] * 500
+        radial_profile = analysis_result.get("radial_profile") or {}
+        radial_profile_L = radial_profile.get("L")
+        radial_profile_a = radial_profile.get("a")
+        radial_profile_b = radial_profile.get("b")
+        if not (radial_profile_L and radial_profile_a and radial_profile_b):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="STD analysis_result missing radial_profile data",
+            )
 
-        # Get image dimensions (default if not available)
-        image_width = 1920  # Default
-        image_height = 1080  # Default
-        # TODO: Extract from analysis_result if available
+        image_width = analysis_result.get("image_width")
+        image_height = analysis_result.get("image_height")
+        if not image_width or not image_height:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="STD analysis_result missing image dimensions"
+            )
+
+        zone_boundaries = ZoneBoundaryData(inner_to_A=None, A_to_B=None, B_to_C=None, C_outer=None)
 
         profile_data = STDProfileData(
             sku_code=std_model.sku_code,
@@ -274,6 +285,8 @@ def get_std_detail(std_id: int, std_service: STDService = Depends(get_std_servic
             radial_profile_b=radial_profile_b,
             image_width=image_width,
             image_height=image_height,
+            lens_detected=bool(analysis_result.get("lens_detected", True)),
+            lens_detection_score=analysis_result.get("lens_detection_score"),
         )
 
         response = STDDetailResponse(

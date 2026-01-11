@@ -917,6 +917,8 @@ def compute_zone_results_2d(
     thresholds: Dict[str, float],
     lens_mask: np.ndarray,
     ink_mask: np.ndarray,
+    min_ink_ratio: float,
+    min_ink_pixels: int,
 ) -> Tuple[str, float, List[Dict[str, Any]], List[str]]:
     """
     Zone별 결과 계산 (mean_all, mean_ink, pixel_count, ΔE)
@@ -932,7 +934,17 @@ def compute_zone_results_2d(
 
     for zn, zmask in zone_masks.items():
         # Calculate result for a single zone
-        res = _calculate_single_zone_result(zn, zmask, lab, target_labs[zn], thresholds[zn], lens_mask, ink_mask)
+        res = _calculate_single_zone_result(
+            zn,
+            zmask,
+            lab,
+            target_labs[zn],
+            thresholds[zn],
+            lens_mask,
+            ink_mask,
+            min_ink_ratio,
+            min_ink_pixels,
+        )
 
         results.append(res)
 
@@ -940,6 +952,8 @@ def compute_zone_results_2d(
         if res["delta_e"] is not None:
             delta_e_list.append(res["delta_e"])
 
+        if not res["is_ok"] and not res.get("ink_sufficient", True):
+            continue
         if not res["is_ok"]:
             if res["measured_lab"] is None:
                 ng_reasons.append(f"Zone {zn}: no pixels")
@@ -963,6 +977,8 @@ def _calculate_single_zone_result(
     threshold: float,
     lens_mask: np.ndarray,
     ink_mask: np.ndarray,
+    min_ink_ratio: float,
+    min_ink_pixels: int,
 ) -> Dict[str, Any]:
     """Calculate statistics and comparison for a single zone."""
     z = (zone_mask > 0) & (lens_mask > 0)
@@ -993,17 +1009,16 @@ def _calculate_single_zone_result(
     thr = float(threshold)
 
     # ΔE 계산: ink_ratio에 따라 선택
-    MIN_INK_RATIO = 0.05
-    if mean_ink is not None and n_ink > 0 and ink_ratio >= MIN_INK_RATIO:
+    ink_sufficient = n_ink >= min_ink_pixels and ink_ratio >= min_ink_ratio
+    if mean_ink is not None and n_ink > 0 and ink_sufficient:
         used = np.array(mean_ink, np.float32)
         de = delta_e_cie76(used, tgt)
         used_basis = "mean_ink"
         measured_lab = mean_ink
-    elif mean_all is not None:
-        used = np.array(mean_all, np.float32)
-        de = delta_e_cie76(used, tgt)
-        used_basis = "mean_all"
-        measured_lab = mean_all
+    elif n_all > 0:
+        de = None
+        used_basis = "insufficient_ink"
+        measured_lab = None
     else:
         de = None
         used_basis = "none"
@@ -1047,6 +1062,7 @@ def _calculate_single_zone_result(
         "pixel_count": n_all,
         "pixel_count_ink": n_ink,
         "ink_pixel_ratio": float(ink_ratio),
+        "ink_sufficient": bool(ink_sufficient),
         "measured_lab_all": mean_all,
         "measured_lab_ink": mean_ink,
         "delta_e_basis": used_basis,
@@ -1066,11 +1082,73 @@ def _calculate_single_zone_result(
 # ================================
 
 
+def _buffer_mask(mask: np.ndarray, sku_config: dict) -> np.ndarray:
+    params = sku_config.get("params", {})
+    mask_policy = params.get("mask_policy", {})
+    buffer_iter = int(mask_policy.get("std_mask_buffer_iter", 1))
+    if buffer_iter <= 0:
+        return mask
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    return cv2.dilate(mask, kernel, iterations=buffer_iter)
+
+
+def _warp_std_ink_mask_to_test(
+    ref_image: Optional[np.ndarray],
+    ref_lens: Optional[Any],
+    test_image: Optional[np.ndarray],
+    test_lens: Optional[Any],
+    sku_config: dict,
+    ink_mask_config: InkMaskConfig,
+) -> Optional[np.ndarray]:
+    if ref_image is None or ref_lens is None or test_image is None or test_lens is None:
+        return None
+
+    ref_h, ref_w = ref_image.shape[:2]
+    ref_cx = float(ref_lens.center_x)
+    ref_cy = float(ref_lens.center_y)
+    ref_radius = float(ref_lens.radius)
+    ref_lens_mask = circle_mask((ref_h, ref_w), ref_cx, ref_cy, ref_radius)
+    ref_ink_mask = build_ink_mask(ref_image, ref_lens_mask, ink_mask_config)
+    ref_ink_mask = _buffer_mask(ref_ink_mask, sku_config)
+    ref_ink_mask = cv2.bitwise_and(ref_ink_mask, ref_ink_mask, mask=ref_lens_mask)
+
+    test_h, test_w = test_image.shape[:2]
+    test_cx = float(test_lens.center_x)
+    test_cy = float(test_lens.center_y)
+    test_radius = float(test_lens.radius)
+
+    shared_radius = min(ref_radius, test_radius)
+    r_bins = int(max(64, min(256, shared_radius)))
+    theta_bins = 360
+
+    polar = cv2.warpPolar(
+        ref_ink_mask,
+        (r_bins, theta_bins),
+        (ref_cx, ref_cy),
+        ref_radius,
+        cv2.WARP_POLAR_LINEAR + cv2.WARP_FILL_OUTLIERS,
+    )
+
+    warped = cv2.warpPolar(
+        polar,
+        (test_w, test_h),
+        (test_cx, test_cy),
+        test_radius,
+        cv2.WARP_POLAR_LINEAR + cv2.WARP_INVERSE_MAP,
+    )
+
+    return (warped > 0).astype(np.uint8)
+
+
 def _setup_masks_and_boundaries(
     img_bgr: np.ndarray,
     lens_detection: LensDetection,
     sku_config: dict,
     ink_mask_config: Optional[InkMaskConfig],
+    std_ref_image: Optional[np.ndarray] = None,
+    std_ref_lens: Optional[Any] = None,
+    mask_source: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, float, float, float, float, float]:
     """
     초기화, 마스크 생성, 프린트 경계 설정
@@ -1091,7 +1169,29 @@ def _setup_masks_and_boundaries(
 
     # 2. Ink mask
     print("[2D ZONE ANALYSIS] Building ink mask...")
-    ink_mask = build_ink_mask(img_bgr, lens_mask, ink_mask_config)
+    if mask_source is None:
+        if std_ref_image is not None and std_ref_lens is not None:
+            mask_source = "std_warped"
+        else:
+            mask_source = "sample"
+
+    if mask_source == "std_warped":
+        ink_mask = _warp_std_ink_mask_to_test(
+            ref_image=std_ref_image,
+            ref_lens=std_ref_lens,
+            test_image=img_bgr,
+            test_lens=lens_detection,
+            sku_config=sku_config,
+            ink_mask_config=ink_mask_config,
+        )
+        if ink_mask is None:
+            mask_source = "sample_fallback"
+            ink_mask = build_ink_mask(img_bgr, lens_mask, ink_mask_config)
+    else:
+        ink_mask = build_ink_mask(img_bgr, lens_mask, ink_mask_config)
+        if mask_source == "std":
+            ink_mask = _buffer_mask(ink_mask, sku_config)
+    ink_mask = cv2.bitwise_and(ink_mask, ink_mask, mask=lens_mask)
 
     # 3. Print boundaries - SKU config 우선, 자동 추정은 fallback
     print("[2D ZONE ANALYSIS] Getting print boundaries from SKU config...")
@@ -1194,6 +1294,8 @@ def _compute_zone_results_wrapper(
     zone_specs: List,
     target_labs: Dict[str, List[float]],
     thresholds: Dict[str, float],
+    min_ink_ratio: float,
+    min_ink_pixels: int,
 ) -> Tuple[str, float, List, List[Dict], List[str], Dict[str, np.ndarray], Dict]:
     """
     Zone masks 생성, Zone 결과 계산, ZoneResult 변환, Sector statistics 계산
@@ -1208,7 +1310,14 @@ def _compute_zone_results_wrapper(
     # Zone 결과 계산
     print("[2D ZONE ANALYSIS] Computing zone results...")
     judgment, overall_de, zone_results_raw, ng_reasons = compute_zone_results_2d(
-        img_bgr, zone_masks, target_labs, thresholds, lens_mask, ink_mask
+        img_bgr,
+        zone_masks,
+        target_labs,
+        thresholds,
+        lens_mask,
+        ink_mask,
+        min_ink_ratio,
+        min_ink_pixels,
     )
 
     # ZoneResult 변환
@@ -1299,6 +1408,8 @@ def _check_retake_conditions(
     print_band_area: int,
     used_fallback_B: bool,
     confidence: float,
+    min_ink_ratio: float,
+    min_ink_pixels: int,
 ) -> List[Dict]:
     """
     RETAKE 조건을 체크하여 retake_reasons 리스트 반환
@@ -1340,6 +1451,21 @@ def _check_retake_conditions(
         )
 
     # R3_BoundaryUncertain: B zone fallback + 낮은 confidence
+    insufficient_zones = [zr.get("zone_name") for zr in zone_results_raw if not zr.get("ink_sufficient", True)]
+    if insufficient_zones:
+        zones_label = ", ".join([z for z in insufficient_zones if z])
+        retake_reasons.append(
+            {
+                "code": "R5_InkInsufficient",
+                "reason": (
+                    "ink pixels below threshold "
+                    f"(min_ratio={min_ink_ratio:.2%}, min_pixels={min_ink_pixels}, zones={zones_label})"
+                ),
+                "actions": ["Check illumination and exposure", "Verify ink coverage in ROI", "Re-shoot image"],
+                "lever": "capture",
+            }
+        )
+
     if used_fallback_B and confidence < 0.8:
         retake_reasons.append(
             {
@@ -1495,6 +1621,8 @@ def _determine_judgment_with_retake(
     confidence: float,
     lens_conf: float,
     print_band_area: int,
+    min_ink_ratio: float,
+    min_ink_pixels: int,
 ) -> Tuple[str, List[Dict], Dict, List[str], List[str], List[str], bool, bool]:
     """
     RETAKE 조건 체크, 판정 결정, decision_trace 생성
@@ -1514,6 +1642,8 @@ def _determine_judgment_with_retake(
         print_band_area=print_band_area,
         used_fallback_B=used_fallback_B,
         confidence=confidence,
+        min_ink_ratio=min_ink_ratio,
+        min_ink_pixels=min_ink_pixels,
     )
 
     # 판정 순서: RETAKE > NG > OK_WITH_WARNING > OK
@@ -2067,7 +2197,12 @@ def analyze_lens_zones_2d(
     lens_detection: LensDetection,
     sku_config: Dict[str, Any],
     ink_mask_config: Optional[InkMaskConfig] = None,
+    std_ref_image: Optional[np.ndarray] = None,
+    std_ref_lens: Optional[Any] = None,
+    mask_source: Optional[str] = None,
     save_debug: bool = False,
+    save_debug_on: Optional[List[str]] = None,
+    debug_low_confidence: float = 0.75,
     debug_prefix: str = "debug_2d",
 ) -> Tuple[InspectionResult, Dict[str, Any]]:
     """
@@ -2087,10 +2222,23 @@ def analyze_lens_zones_2d(
     print("[2D ZONE ANALYSIS] Starting...")
 
     h, w = img_bgr.shape[:2]
+    params = sku_config.get("params", {})
+    mask_policy = params.get("mask_policy", {})
+    min_ink_ratio = float(mask_policy.get("min_ink_ratio_2d", 0.05))
+    min_ink_pixels = int(mask_policy.get("min_ink_pixels_2d", 500))
+    if mask_source is None:
+        mask_source = mask_policy.get("zone_2d_mask_source")
+    debug_low_confidence = float(params.get("debug_low_confidence_threshold", debug_low_confidence))
 
     # 1. Setup masks and boundaries
     lens_mask, ink_mask, cx, cy, r_lens, print_inner, print_outer = _setup_masks_and_boundaries(
-        img_bgr, lens_detection, sku_config, ink_mask_config
+        img_bgr,
+        lens_detection,
+        sku_config,
+        ink_mask_config,
+        std_ref_image=std_ref_image,
+        std_ref_lens=std_ref_lens,
+        mask_source=mask_source,
     )
 
     # 2. Detect transitions and zones
@@ -2101,7 +2249,20 @@ def analyze_lens_zones_2d(
     # 3. Compute zone results
     judgment, overall_de, zone_results, zone_results_raw, ng_reasons, zone_masks, sector_stats = (
         _compute_zone_results_wrapper(
-            img_bgr, h, w, cx, cy, print_inner, print_outer, lens_mask, ink_mask, zone_specs, target_labs, thresholds
+            img_bgr,
+            h,
+            w,
+            cx,
+            cy,
+            print_inner,
+            print_outer,
+            lens_mask,
+            ink_mask,
+            zone_specs,
+            target_labs,
+            thresholds,
+            min_ink_ratio,
+            min_ink_pixels,
         )
     )
 
@@ -2121,7 +2282,15 @@ def analyze_lens_zones_2d(
         zones_all_ok,
         used_fallback_B,
     ) = _determine_judgment_with_retake(
-        judgment, ng_reasons, zone_results_raw, zone_specs, confidence, lens_conf, print_band_area
+        judgment,
+        ng_reasons,
+        zone_results_raw,
+        zone_specs,
+        confidence,
+        lens_conf,
+        print_band_area,
+        min_ink_ratio,
+        min_ink_pixels,
     )
 
     # 6. Generate analysis summaries
@@ -2179,7 +2348,16 @@ def analyze_lens_zones_2d(
     )
 
     # 9. Save debug images (optional)
-    if save_debug:
+    should_save_debug = save_debug
+    if not should_save_debug and save_debug_on:
+        if "retake" in save_debug_on and judgment == "RETAKE":
+            should_save_debug = True
+        if "ng" in save_debug_on and judgment == "NG":
+            should_save_debug = True
+        if "low_confidence" in save_debug_on and confidence < debug_low_confidence:
+            should_save_debug = True
+
+    if should_save_debug:
         try:
             _save_debug_images(img_bgr, zone_masks, ink_mask, lens_mask, debug_prefix, ink_analysis)
         except Exception as e:

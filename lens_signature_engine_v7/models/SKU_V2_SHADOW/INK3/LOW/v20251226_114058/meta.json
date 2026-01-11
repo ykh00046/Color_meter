@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_V2_SHADOW",
+  "ink": "INK3",
+  "mode": "LOW",
+  "version": "v20251226_114058",
+  "std_images": [
+    "C:\\X\\Color_total\\Color_meter\\data\\samples\\INK3\\G1.png"
+  ],
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:ebc3fe88eb0f8e1601d7d7d17020b9b1a0b2372cbdc8acaa6fe7baf6cd63962e"
+  },
+  "created_by": "",
+  "created_at": "2025-12-26T11:40:58.237613",
+  "notes": ""
+}

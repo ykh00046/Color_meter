@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_TEMP",
+  "ink": "INK3",
+  "mode": "LOW",
+  "version": "v20251225_093251",
+  "std_images": [
+    "C:\\X\\Color_total\\Color_meter\\data\\samples\\INK3\\F1.png",
+    "C:\\X\\Color_total\\Color_meter\\data\\samples\\INK3\\G1.png"
+  ],
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:8e71419725777744042e90408c06224d9c2a98572f3561626d19cba9c0e49bc7"
+  },
+  "created_by": "",
+  "created_at": "2025-12-25T09:32:51.353227",
+  "notes": ""
+}

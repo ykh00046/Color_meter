@@ -31,6 +31,7 @@ STD(Reference)와 Sample 비교 결과를 UI에서 읽는 방법과 출력 항�
   - 음수: 청색 방향(Blue shift)
   - 양수: 황색 방향(Yellow shift)
 - `overall shift`는 설명용 지표이며 판정/점수 계산에는 사용하지 않는다.
+- `stable` 기준: |Delta L| < 1.0 AND |Delta a| < 1.0 AND |Delta b| < 1.0
 
 ## Ink 기반 결과
 ### ink_mapping

@@ -16,9 +16,9 @@ CFG = ROOT / "configs" / "default.json"
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(ROOT.parent))
+from lens_signature_engine_v7.core.insight.summary import build_v3_summary
+from lens_signature_engine_v7.core.insight.trend import build_v3_trend
 from lens_signature_engine_v7.core.types import Decision, GateResult
-from lens_signature_engine_v7.core.v3.summary import build_v3_summary
-from lens_signature_engine_v7.core.v3.trend import build_v3_trend
 from src.web.app import app
 
 
@@ -94,8 +94,12 @@ def _register_std_temp(sku: str, ink: str, mode: str, image_path: Path) -> str:
     return saved_dir.name
 
 
-def _register_validate(client: TestClient, sku: str, ink: str, image_path: Path) -> Dict:
+def _register_validate(
+    client: TestClient, sku: str, ink: str, image_path: Path, expected_ink_count: Optional[int] = None
+) -> Dict:
     data = {"sku": sku, "ink": ink}
+    if expected_ink_count is not None:
+        data["expected_ink_count"] = str(expected_ink_count)
     files = [
         ("low_files", (image_path.name, image_path.read_bytes(), "image/png")),
         ("mid_files", (image_path.name, image_path.read_bytes(), "image/png")),
@@ -206,8 +210,12 @@ def main() -> int:
         files=files,
         headers={"X-User-Role": "operator"},
     )
-    label = resp.json()["result"]["results"][0]["decision"]["label"]
-    reasons = resp.json()["result"]["results"][0]["decision"]["reasons"]
+    resp_data = resp.json()
+    if "result" not in resp_data:
+        print(f"[DEBUG] Response keys: {list(resp_data.keys())}")
+        print(f"[DEBUG] Full response: {json.dumps(resp_data, indent=2)}")
+    label = resp_data["result"]["results"][0]["decision"]["label"]
+    reasons = resp_data["result"]["results"][0]["decision"]["reasons"]
     ok_step = label == "RETAKE" and "MODEL_NOT_FOUND" in reasons
     _print("inspect without ACTIVE -> RETAKE(MODEL_NOT_FOUND)", ok_step)
     report["steps"].append(
@@ -472,7 +480,7 @@ def main() -> int:
     ok &= ok_step
 
     # 7) approval pack includes v2 flags and does not block activate
-    reg = _register_validate(client, pack_sku, pack_ink, sample)
+    reg = _register_validate(client, pack_sku, pack_ink, sample, expected_ink_count=3)
     pack_path = reg.get("approval_pack", "")
     register_info = reg.get("register", {})
     pack_versions = {}
@@ -556,6 +564,19 @@ def main() -> int:
     )
     ok &= ok_step
 
+    # 8.1.1) ops judgment attached (shadow only)
+    ops = dec.get("ops") or {}
+    ok_step = ops.get("schema_version") == "ops_judgment.v1"
+    _print("ops judgment attached", ok_step)
+    report["steps"].append(
+        {
+            "name": "ops_judgment_attached",
+            "ok": ok_step,
+            "ops": ops,
+        }
+    )
+    ok &= ok_step
+
     # 8.2) uncertain 케이스
     v2_uncertain = {
         "expected_ink_count": 3,
@@ -569,7 +590,7 @@ def main() -> int:
         },
         "warnings": ["INK_CLUSTER_MATCH_UNCERTAIN"],
     }
-    v3 = build_v3_summary(_fake_decision(v2_uncertain), json.loads(CFG.read_text(encoding="utf-8")), None)
+    v3 = build_v3_summary(v2_uncertain, _fake_decision(v2_uncertain), json.loads(CFG.read_text(encoding="utf-8")))
     ok_step = (
         bool(v3)
         and v3.get("key_signals", [None])[0] == "매칭 불확실: 변화 신호는 참고용입니다."

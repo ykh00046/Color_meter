@@ -319,6 +319,31 @@ class STDService:
             Dictionary representation
         """
         # Extract key fields from InspectionResult
+        radial_profile = None
+        profile = getattr(result, "radial_profile", None)
+        if profile is not None:
+            try:
+                radial_profile = {
+                    "r_normalized": profile.r_normalized.tolist(),
+                    "L": profile.L.tolist(),
+                    "a": profile.a.tolist(),
+                    "b": profile.b.tolist(),
+                    "std_L": profile.std_L.tolist(),
+                    "std_a": profile.std_a.tolist(),
+                    "std_b": profile.std_b.tolist(),
+                    "pixel_count": profile.pixel_count.tolist(),
+                }
+            except Exception:
+                radial_profile = None
+
+        image_width = None
+        image_height = None
+        if getattr(result, "image", None) is not None:
+            image_height, image_width = result.image.shape[:2]
+
+        lens_detection = getattr(result, "lens_detection", None)
+        lens_detected = lens_detection is not None
+        lens_detection_score = getattr(lens_detection, "confidence", None) if lens_detected else None
         return {
             "sku": result.sku,
             "timestamp": result.timestamp.isoformat() if result.timestamp else None,
@@ -357,4 +382,9 @@ class STDService:
             "confidence_breakdown": result.confidence_breakdown,
             "risk_factors": result.risk_factors,
             "ink_analysis": result.ink_analysis,
+            "radial_profile": radial_profile,
+            "image_width": image_width,
+            "image_height": image_height,
+            "lens_detected": lens_detected,
+            "lens_detection_score": lens_detection_score,
         }

@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_TEMP_1767176405",
+  "ink": "INK1",
+  "mode": "LOW",
+  "version": "v20251231_192005",
+  "std_images": [
+    "data\\samples\\INK1\\A1.png"
+  ],
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:a96b92d18b67bf92d5700ba0cc44e59939e015d67298134d941bf4b4295dc9b5"
+  },
+  "created_by": "",
+  "created_at": "2025-12-31T19:20:06.056060",
+  "notes": ""
+}

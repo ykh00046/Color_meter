@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Patch] - 2026-01-06 - Ink Trajectory Diagnostics & UI Dashboard
+
+### Added
+- Trajectory-aware ink matching (off-track/on-track) with aligned LOW/MID/HIGH clusters stored in ink baselines.
+- Operator-facing trajectory dashboard (position slider + off-track gauge) and ink component status chips.
+
+### Changed
+- Ink matching warnings prioritize off-track limits when available.
+- Ink component chips now derive colors from Lab values with OpenCV scale normalization.
+
+### Fixed
+- Subprocess stdout decoding in `src/web/routers/v7.py` now uses UTF-8 with replacement to prevent cp949 crashes.
+
+---
+
 ## [Major] - 2025-12-17 - STD-Based QC System: Technical Enhancements & Database Models
 
 ### Added

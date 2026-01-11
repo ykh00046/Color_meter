@@ -1,0 +1,26 @@
+{
+  "sku": "SKU_DEMO",
+  "last_mode": "HIGH",
+  "history": [
+    {
+      "ts": 1766553377,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766555992,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766556585,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766556585,
+      "mode": "MID"
+    },
+    {
+      "ts": 1766556585,
+      "mode": "HIGH"
+    }
+  ]
+}

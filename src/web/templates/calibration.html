@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>색 정확도 교정 | Color Meter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'bg-dark': '#0a0f1e',
+                        'bg-card': '#111827',
+                        'primary': '#8b5cf6',
+                        'primary-hover': '#7c3aed',
+                        'text-primary': '#f1f5f9',
+                        'text-secondary': '#94a3b8',
+                        'border-color': 'rgba(148, 163, 184, 0.2)',
+                        'green-success': '#10b981',
+                        'yellow-warning': '#f59e0b',
+                        'red-error': '#ef4444'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0a0f1e 0%, #1a1f35 100%);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-text-primary">
+    <!-- Header -->
+    <header class="border-b border-border-color">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <a href="/" class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center font-bold text-white">
+                        CM
+                    </div>
+                    <div>
+                        <div class="font-semibold text-lg">색 정확도 교정</div>
+                        <div class="text-xs text-text-secondary">Color Calibration</div>
+                    </div>
+                </a>
+                <a href="/" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition">
+                    ← 돌아가기
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Instructions -->
+        <div class="mb-8 p-6 bg-bg-card border border-border-color rounded-lg">
+            <h2 class="text-xl font-bold mb-3">📸 ColorChecker 촬영 안내</h2>
+            <div class="text-sm text-text-secondary space-y-2">
+                <p>1. <strong>ColorChecker Classic 24패치</strong>를 측정 환경에 배치하세요.</p>
+                <p>2. 렌즈 측정과 <strong>동일한 조명/카메라 설정</strong>으로 촬영하세요.</p>
+                <p>3. ColorChecker 전체가 화면에 들어오도록 촬영하세요.</p>
+                <p>4. 그림자나 반사광이 없는지 확인하세요.</p>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="p-8 bg-bg-card border-2 border-dashed border-border-color rounded-lg text-center">
+            <div class="mb-4">
+                <svg class="w-16 h-16 mx-auto text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">ColorChecker 이미지 업로드</h3>
+            <p class="text-sm text-text-secondary mb-4">JPG, PNG, BMP 형식 지원</p>
+            <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.bmp" class="hidden" />
+            <button onclick="document.getElementById('fileInput').click()"
+                    class="px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-semibold transition">
+                파일 선택
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingSection" class="hidden p-8 bg-bg-card border border-border-color rounded-lg text-center">
+            <div class="animate-spin w-12 h-12 mx-auto border-4 border-primary border-t-transparent rounded-full mb-4"></div>
+            <p class="text-text-secondary">분석 중...</p>
+        </div>
+
+        <!-- Results Section (Hidden initially) -->
+        <div id="resultsSection" class="hidden mt-8">
+            <div class="p-6 bg-bg-card border border-border-color rounded-lg">
+                <h3 class="text-lg font-bold mb-4">분석 결과</h3>
+                <p class="text-text-secondary text-sm">
+                    ⚠️ <strong>기초 구현 단계</strong>: 패치 자동 검출 및 상세 분석은 추후 구현 예정입니다.
+                </p>
+                <p class="text-text-secondary text-sm mt-2">
+                    현재는 이미지 업로드 및 기본 구조만 테스트 가능합니다.
+                </p>
+            </div>
+        </div>
+
+        <!-- Reference Info -->
+        <div class="mt-8 p-6 bg-bg-card border border-border-color rounded-lg">
+            <h3 class="text-lg font-bold mb-3">📐 ColorChecker 표준값 (D65, 2°)</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-text-secondary mb-2"><strong>Chromatic Patches (1-18):</strong></p>
+                    <p class="text-xs text-text-secondary">Dark Skin, Light Skin, Blue Sky, Foliage, Blue Flower, Bluish Green...</p>
+                </div>
+                <div>
+                    <p class="text-text-secondary mb-2"><strong>Grayscale Patches (19-24):</strong></p>
+                    <p class="text-xs text-text-secondary">White (L*=96.5), Neutral 8, 6.5, 5, 3.5, Black (L*=20.5)</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadSection = document.getElementById('uploadSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const resultsSection = document.getElementById('resultsSection');
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Show loading
+            uploadSection.classList.add('hidden');
+            loadingSection.classList.remove('hidden');
+
+            // Simulate analysis (기초 구현)
+            setTimeout(() => {
+                loadingSection.classList.add('hidden');
+                resultsSection.classList.remove('hidden');
+
+                // TODO: 실제 API 호출 추가
+                // fetch('/api/v7/analyze_calibration', {...})
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

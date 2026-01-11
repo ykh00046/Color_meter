@@ -1,0 +1,200 @@
+{
+  "schema_version": "1.0",
+  "sku": "fff",
+  "ink": "INK_DEFAULT",
+  "active": {
+    "LOW": "fff/INK_DEFAULT/LOW/v20260107_024207",
+    "MID": "fff/INK_DEFAULT/MID/v20260107_024208",
+    "HIGH": "fff/INK_DEFAULT/HIGH/v20260107_024209"
+  },
+  "active_versions": {
+    "LOW": "v20260107_024207",
+    "MID": "v20260107_024208",
+    "HIGH": "v20260107_024209"
+  },
+  "created_at": "2026-01-07T02:42:14.200521",
+  "cfg_hash": "sha256:bb9216d837ca6806ba27cdea36afe9f1aa6aed56ca88e7779d69ae31186498e1",
+  "config_snapshot_hash": "sha256:bb9216d837ca6806ba27cdea36afe9f1aa6aed56ca88e7779d69ae31186498e1",
+  "config_snapshot": {
+    "polar": {
+      "R": 260,
+      "T": 720
+    },
+    "gate": {
+      "center_off_max": 0.12,
+      "blur_min": 40.0,
+      "illum_max": 0.1,
+      "diagnostic_on_fail": true
+    },
+    "signature": {
+      "r_start": 0.1,
+      "r_end": 0.95,
+      "corr_min": 0.903963154554367,
+      "de_mean_max": 14.86761474609375,
+      "de_p95_max": 26.51967544555664,
+      "use_band_model": true,
+      "band_k": 2.5,
+      "fail_ratio_max": 0.08,
+      "use_weighted_segments": true,
+      "segments": [
+        {
+          "name": "inner",
+          "start": 0.0,
+          "end": 0.33,
+          "weight": 1.2
+        },
+        {
+          "name": "mid",
+          "start": 0.33,
+          "end": 0.66,
+          "weight": 1.0
+        },
+        {
+          "name": "outer",
+          "start": 0.66,
+          "end": 1.0,
+          "weight": 1.4
+        }
+      ],
+      "segment_fail_ratio_max": 0.18,
+      "use_segment_k": true,
+      "segment_k": {
+        "inner": 2.8,
+        "mid": 2.5,
+        "outer": 2.8
+      }
+    },
+    "anomaly": {
+      "r_start": 0.15,
+      "r_end": 0.95,
+      "angular_unif_max": 0.18,
+      "center_frac": 0.28,
+      "center_blob_max": 1,
+      "center_blob_min_area": 25,
+      "enable_heatmap": true,
+      "heatmap_downsample_T": 180,
+      "heatmap_downsample_R": 130
+    },
+    "registration": {
+      "order_check_enabled": false,
+      "order_metric": "L_mean",
+      "order_direction": "asc",
+      "sep_threshold": 1.0,
+      "max_within_std": null
+    },
+    "mode_stability": {
+      "enabled": true,
+      "window": 10,
+      "emit_shift_flag": true
+    },
+    "pattern_baseline": {
+      "require": true,
+      "use_relative": true,
+      "margins": {
+        "blob_count": 1,
+        "blob_area_ratio": 0.2,
+        "uniformity": 0.03,
+        "coverage_eps": 0.01,
+        "sharpness_eps": 0.03
+      }
+    },
+    "diagnostics": {
+      "delta_L_threshold": 19.818951416015626,
+      "delta_a_threshold": 0.8,
+      "delta_b_threshold": 1.1091796875,
+      "coverage_l_delta": 5.0,
+      "coverage_delta_pp_threshold": 12.57571644042232,
+      "edge_sharpness_delta_threshold": 7.815903890132904
+    },
+    "v2_ink": {
+      "enabled": true,
+      "auto_k_enabled": true,
+      "auto_k_expand_max": 4,
+      "auto_k_conf_abs_min": 0.1,
+      "auto_k_conf_abs_span": 0.25,
+      "auto_k_conf_gap_span": 0.1,
+      "auto_k_mismatch_conf_thr": 0.7,
+      "auto_k_low_conf_thr": 0.4,
+      "dark_top_p": 0.25,
+      "chroma_top_p": 0.35,
+      "min_samples": 8000,
+      "min_samples_warn": 2000,
+      "l_weight": 0.3,
+      "kmeans_attempts": 10,
+      "rng_seed": 123,
+      "min_area_ratio_warn": 0.03,
+      "separation_d0": 3.0,
+      "separation_k": 1.0,
+      "match_max_deltaE": 6.0,
+      "match_spread_warn": 3.0,
+      "roi_r_start": 0.15,
+      "roi_r_end": 0.95
+    },
+    "white_balance": {
+      "enabled": true,
+      "optical_zone_ratio": 0.3,
+      "p_low": 50.0,
+      "p_high": 99.0
+    }
+  },
+  "config_snapshot_auto_tune": {
+    "schema_version": "auto_tune.v1",
+    "status": "APPLIED",
+    "generated_at": "2026-01-07T02:42:14.199946",
+    "expected_ink_count": 3,
+    "signature": {
+      "p95_max": 22.099729537963867,
+      "mean_max": 12.389678955078125,
+      "corr_min": 0.9224113821983337
+    },
+    "color_shift_abs_max": {
+      "delta_L": 16.515792846679688,
+      "delta_a": 0.30467987060546875,
+      "delta_b": 0.92431640625
+    },
+    "pattern": {
+      "coverage_delta_pp_abs_max": 10.479763700351935,
+      "edge_sharpness_delta_abs_max": 6.51325324177742
+    },
+    "ink": {
+      "off_track_max": 0.0
+    },
+    "errors": []
+  },
+  "registration_summary": {
+    "order_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "order_values": {},
+    "order_ok": true,
+    "sep_threshold": 1.0,
+    "separation": {
+      "LOW_MID": 9.608182907104492,
+      "MID_HIGH": 6.799233913421631,
+      "LOW_HIGH": 7.744998455047607
+    },
+    "min_pairwise_separation": 6.799233913421631,
+    "separation_ok": true,
+    "within_mode_stability": {
+      "LOW": null,
+      "MID": null,
+      "HIGH": null
+    },
+    "within_mode_threshold": null,
+    "within_mode_ok": null,
+    "geom_consistency": {
+      "center_drift_px": 45.83449172973633,
+      "radius_drift_ratio": 0.4990842938423157,
+      "passed": null
+    },
+    "warnings": [
+      "WITHIN_MODE_THRESHOLD_DISABLED",
+      "GEOM_THRESHOLD_DISABLED"
+    ]
+  },
+  "warnings": [
+    "WITHIN_MODE_THRESHOLD_DISABLED",
+    "GEOM_THRESHOLD_DISABLED"
+  ],
+  "path": "active_snapshots\\fff_INK_DEFAULT_20260107_024214.json"
+}

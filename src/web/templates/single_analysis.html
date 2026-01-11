@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copy Specification Analysis - v7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151e32', 900: '#0f172a', 950: '#020617' },
+                        brand: { 500: '#3b82f6', 600: '#2563eb' },
+                        status: { ok: '#10b981', warn: '#f59e0b', ng: '#ef4444' }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --base-black: #0f172a;
+            --surface-dark: #151e32;
+            --surface-elevated: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #cbd5e1;
+            --text-dim: #94a3b8;
+            --green-ok: #10b981;
+            --yellow-warning: #f59e0b;
+            --red-error: #ef4444;
+            --blue-brand: #3b82f6;
+        }
+
+        * {
+            font-family: 'Inter', -apple-system, sans-serif;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--base-black);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .terminal-panel {
+            background: linear-gradient(180deg, rgba(17, 27, 42, 0.95), rgba(10, 16, 26, 0.9));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            box-shadow: 0 24px 60px rgba(7, 11, 18, 0.6);
+            backdrop-filter: blur(10px);
+        }
+
+        .quality-ring-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+        }
+
+        .quality-ring {
+            transform: rotate(-90deg);
+        }
+
+        .quality-score-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .score-number {
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .score-label {
+            font-size: 18px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .metric-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .btn-primary {
+            background: var(--blue-brand);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .upload-zone {
+            background: rgba(12, 18, 28, 0.9);
+            border: 2px dashed rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-zone:hover {
+            border-color: rgba(68, 215, 208, 0.5);
+            background: rgba(17, 27, 42, 0.9);
+        }
+
+        .hidden { display: none; }
+
+        .warning-badge {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            display: inline-block;
+            margin: 4px;
+        }
+
+        .cluster-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cluster-color {
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .zone-canvas {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen p-6">
+        <!-- Header -->
+        <div class="max-w-7xl mx-auto mb-8">
+            <h1 class="text-3xl font-bold mb-2">📋 Copy Specification Analysis</h1>
+            <p class="text-text-dim">시판 렌즈 리버스 엔지니어링 - 복제를 위한 잉크 팔레트 및 특성 정보 추출</p>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="max-w-7xl mx-auto mb-8">
+            <div class="terminal-panel p-6">
+                <h2 class="text-xl font-semibold mb-4">이미지 업로드</h2>
+
+                <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                    <div id="uploadPlaceholder">
+                        <div class="text-4xl mb-4">📁</div>
+                        <div class="text-text-secondary mb-2">클릭하여 이미지 선택</div>
+                        <div class="text-text-dim text-sm">PNG, JPG 지원</div>
+                    </div>
+                    <div id="fileInfo" class="hidden">
+                        <div class="text-text-secondary mb-2">선택된 파일:</div>
+                        <div id="fileName" class="font-mono text-sm"></div>
+                    </div>
+                </div>
+
+                <!-- Analysis Options -->
+                <div class="mt-6 p-4 bg-surface-elevated rounded-lg border border-white/10">
+                    <h3 class="text-sm font-semibold mb-3 text-text-secondary">분석 옵션</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="expectedInkCount" class="block text-sm text-text-secondary mb-2">
+                                Expected Ink Count (k) <span class="text-yellow-warning">⚠️ 중요</span>
+                            </label>
+                            <select id="expectedInkCount" class="w-full bg-surface-dark text-text-primary border border-white/10 rounded px-3 py-2 text-sm">
+                                <option value="auto">자동 감지 (권장)</option>
+                                <option value="1">1 (단색)</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3 (RGB)</option>
+                                <option value="4">4 (CMYK)</option>
+                                <option value="5">5</option>
+                            </select>
+                            <p class="text-xs text-text-dim mt-1">렌즈의 잉크 색상 개수를 지정합니다. '자동 감지'는 개발 중입니다.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-text-secondary mb-2">분석 모드</label>
+                            <select id="analysisMode" class="w-full bg-surface-dark text-text-primary border border-white/10 rounded px-3 py-2 text-sm">
+                                <option value="all" selected>전체 분석 (권장)</option>
+                                <option value="gate,ink,radial">핵심만 (Gate + Ink + Radial)</option>
+                                <option value="gate">Gate만 (빠른 체크)</option>
+                            </select>
+                            <p class="text-xs text-text-dim mt-1">분석할 항목을 선택합니다.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex gap-4">
+                    <button id="analyzeBtn" class="btn-primary" onclick="runAnalysis()" disabled>
+                        분석 시작
+                    </button>
+                    <div id="analysisStatus" class="text-text-dim flex items-center hidden">
+                        <div class="animate-spin mr-2">⚙️</div>
+                        분석 중...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="max-w-7xl mx-auto hidden">
+
+            <!-- ========== OPERATOR SUMMARY (최상단 강조) ========== -->
+            <div id="operatorSummary" class="mb-6 p-6 rounded-lg border-2">
+                <!-- Decision Badge (크게) -->
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-4">
+                        <div id="operatorDecision" class="text-3xl font-bold px-6 py-3 rounded-lg">
+                            <!-- PASS / RECAPTURE / HOLD -->
+                        </div>
+                        <div id="operatorGrade" class="text-2xl font-mono">
+                            <!-- A / B / C / D / F -->
+                        </div>
+                    </div>
+                    <div id="operatorSeverity" class="text-sm font-semibold px-3 py-1 rounded">
+                        <!-- LOW / MEDIUM / HIGH -->
+                    </div>
+                </div>
+
+                <!-- Top 2 Reasons -->
+                <div id="operatorReasons" class="mb-4 space-y-2">
+                    <!-- Reason 1 -->
+                    <!-- Reason 2 -->
+                </div>
+
+                <!-- Action (가장 중요!) -->
+                <div id="operatorAction" class="p-4 bg-yellow-warning/20 border-l-4 border-yellow-warning rounded">
+                    <div class="text-sm font-semibold mb-1">📋 조치사항</div>
+                    <div id="operatorActionText" class="text-base font-bold">
+                        <!-- 렌즈 고정 후 초점 재조정하고 재촬영하세요. -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== ENGINEER KPI (접을 수 있는 패널) ========== -->
+            <details class="mb-6" open>
+                <summary class="cursor-pointer font-semibold text-lg mb-3 p-4 bg-white/5 rounded hover:bg-white/10">
+                    🔧 Engineer KPI (핵심 지표 10개)
+                </summary>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- QC Metrics -->
+                    <div class="p-4 bg-white/5 rounded">
+                        <div class="text-sm font-semibold mb-2 text-blue-primary">QC 품질</div>
+                        <div id="kpiQC" class="space-y-1 text-xs font-mono">
+                            <!-- sharpness, center_offset_mm, illumination_asymmetry -->
+                        </div>
+                    </div>
+
+                    <!-- Ink Metrics -->
+                    <div class="p-4 bg-white/5 rounded">
+                        <div class="text-sm font-semibold mb-2 text-green-success">잉크 분석</div>
+                        <div id="kpiInk" class="space-y-1 text-xs font-mono">
+                            <!-- detected_count, clustering_confidence, ink_area_ratios -->
+                        </div>
+                    </div>
+
+                    <!-- Pattern Metrics -->
+                    <div class="p-4 bg-white/5 rounded">
+                        <div class="text-sm font-semibold mb-2 text-purple-500">패턴 균일성</div>
+                        <div id="kpiPattern" class="space-y-1 text-xs font-mono">
+                            <!-- angular_uniformity, zone_uniformity, radial_uniformity, radial_slope, ring_contrast -->
+                        </div>
+                    </div>
+
+                    <!-- Defect Metrics -->
+                    <div class="p-4 bg-white/5 rounded">
+                        <div class="text-sm font-semibold mb-2 text-red-error">결함 검출</div>
+                        <div id="kpiDefect" class="space-y-1 text-xs font-mono">
+                            <!-- blob_count, blob_total_area -->
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <!-- Summary Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+
+                <!-- Measurement QC -->
+                <div class="terminal-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">측정 신뢰도 (QC)</h3>
+                    <p class="text-text-dim text-sm mb-4">분석 유효성 체크 (복제 품질 아님)</p>
+
+                    <!-- FAIL Reasons (크게 표시) -->
+                    <div id="qcFailReasons" class="hidden mb-4 p-4 bg-red-error/20 border-2 border-red-error rounded-lg">
+                        <div class="text-red-error font-bold text-lg mb-2">❌ 측정 실패</div>
+                        <div id="qcFailReasonsList" class="space-y-2">
+                            <!-- FAIL reasons will be inserted here -->
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Gate Check</span>
+                            <span id="qcGateStatus" class="font-semibold">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Center Offset</span>
+                            <span id="qcCenterOffset" class="font-mono text-sm">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Sharpness</span>
+                            <span id="qcSharpness" class="font-mono text-sm">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Illumination</span>
+                            <span id="qcIllumination" class="font-mono text-sm">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Guidance (상세 가이드) -->
+                    <div id="qcGuidance" class="mt-4 pt-4 border-t border-white/10 hidden">
+                        <div class="text-sm font-semibold mb-2 text-yellow-warning">💡 재촬영 방법</div>
+                        <div id="qcGuidanceContent" class="space-y-2 text-xs text-text-secondary">
+                            <!-- Guidance items will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Copy Summary -->
+                <div class="terminal-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">복제 정보 요약</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">검출된 잉크 수</span>
+                            <span id="copySummaryInkCount" class="font-semibold text-blue-brand">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">클러스터링 신뢰도</span>
+                            <span id="copySummaryConfidence" class="font-mono text-sm">-</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">방사형 패턴</span>
+                            <span id="copySummaryRadialPattern" class="text-sm">-</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/10">
+                        <button id="exportBtn" class="btn-primary w-full" onclick="exportCopySpec()">
+                            📥 Copy Spec 다운로드
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Image Preview -->
+                <div class="terminal-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">이미지</h3>
+                    <div class="flex gap-2 mb-2">
+                        <button class="text-sm px-3 py-1 rounded bg-blue-brand text-white" onclick="showImage('original')">Original</button>
+                        <button class="text-sm px-3 py-1 rounded bg-slate-700 text-text-secondary" onclick="showImage('overlay')">Overlay</button>
+                    </div>
+                    <img id="previewImage" src="" alt="Preview" class="w-full rounded-lg border border-white/10">
+                </div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="mb-6 flex justify-end">
+                <button class="btn-primary flex items-center gap-2" onclick="exportCopySpec()">
+                    <span>📥</span>
+                    <span>Copy Spec JSON 다운로드</span>
+                </button>
+            </div>
+
+            <!-- 🎨 Ink Palette (핵심 복제 정보) -->
+            <div class="terminal-panel p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold">🎨 Ink Palette (Core Copy Info)</h2>
+                        <p class="text-text-dim text-sm mt-1">복제를 위한 핵심 잉크 색상 정보</p>
+                    </div>
+                    <span class="px-3 py-1 bg-blue-brand/20 text-blue-brand rounded-full text-sm font-semibold">Priority 1</span>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="metric-card">
+                        <div class="metric-label">검출된 잉크 수 (k)</div>
+                        <div id="inkClusterCount" class="text-2xl font-bold text-blue-brand">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">클러스터링 신뢰도</div>
+                        <div id="inkConfidence" class="text-xl font-mono">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">정렬 방식</div>
+                        <div id="inkSortPolicy" class="text-sm font-mono text-text-secondary">-</div>
+                    </div>
+                </div>
+                <div id="inkClustersGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Cluster cards will be inserted here -->
+                </div>
+            </div>
+
+            <!-- 📐 Radial Profile (분포 패턴) -->
+            <div class="terminal-panel p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold">📐 Radial Profile (Distribution Pattern)</h2>
+                        <p class="text-text-dim text-sm mt-1">중심에서 외곽으로의 색상 분포 패턴</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-4 gap-4 mb-4">
+                    <div class="metric-card">
+                        <div class="metric-label">Inner L*</div>
+                        <div id="radialInner" class="text-xl font-mono">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Outer L*</div>
+                        <div id="radialOuter" class="text-xl font-mono">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Uniformity</div>
+                        <div id="radialUniformity" class="text-xl font-mono">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">패턴 타입</div>
+                        <div id="radialPatternType" class="text-sm text-text-secondary">-</div>
+                    </div>
+                </div>
+                <canvas id="radialProfileChart" height="100"></canvas>
+            </div>
+
+            <!-- 🔍 Pattern Quality (질감/도트) -->
+            <div class="terminal-panel p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">🔍 패턴 품질 (Texture/Dots)</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="metric-card">
+                        <div class="metric-label">Angular Uniformity</div>
+                        <div id="patternAngular" class="metric-value text-lg">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Center Blobs</div>
+                        <div id="patternBlobs" class="metric-value text-lg">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Contrast</div>
+                        <div id="patternContrast" class="metric-value text-lg">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Edge Density</div>
+                        <div id="patternEdge" class="metric-value text-lg">-</div>
+                    </div>
+                </div>
+
+                <!-- Pattern Visualizations -->
+                <div id="patternImages" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                    <div>
+                        <div class="text-sm text-text-secondary mb-2">Overlay (Zone Boundaries)</div>
+                        <img id="patternOverlayImg" src="" alt="Pattern Overlay" class="w-full rounded-lg border border-white/10">
+                    </div>
+                    <div id="patternHeatmapContainer" class="hidden">
+                        <div class="text-sm text-text-secondary mb-2">Heatmap (Anomaly Detection)</div>
+                        <img id="patternHeatmapImg" src="" alt="Pattern Heatmap" class="w-full rounded-lg border border-white/10">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 Color Distribution (참고용) -->
+            <div class="terminal-panel p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">📊 색상 분포 (Lab) - 참고용</h3>
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="metric-card">
+                        <div class="metric-label">L* (밝기)</div>
+                        <div id="colorL" class="text-text-secondary font-mono text-sm">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">a* (Red-Green)</div>
+                        <div id="colorA" class="text-text-secondary font-mono text-sm">-</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">b* (Blue-Yellow)</div>
+                        <div id="colorB" class="text-text-secondary font-mono text-sm">-</div>
+                    </div>
+                </div>
+                <canvas id="colorHistogramChart" height="80"></canvas>
+            </div>
+
+            <!-- 🧭 Zone Analysis (Advanced) -->
+            <div class="terminal-panel p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold">🧭 영역별 분석 (Zone) - Advanced</h3>
+                        <p class="text-text-dim text-sm mt-1">각도별 색상 편차 감지 (방향성 불균형 체크)</p>
+                    </div>
+                    <span class="px-2 py-1 bg-slate-700 text-text-dim rounded text-xs">Optional</span>
+                </div>
+                <div class="mb-4">
+                    <span class="text-text-dim">Zone Uniformity: </span>
+                    <span id="zoneUniformity" class="font-semibold text-text-secondary">-</span>
+                </div>
+                <canvas id="zoneCanvas" class="zone-canvas" width="400" height="400"></canvas>
+            </div>
+
+            <!-- Warnings -->
+            <div id="warningsSection" class="terminal-panel p-6 hidden">
+                <h3 class="text-lg font-semibold mb-4">⚠️ 경고</h3>
+                <div id="warningsList" class="space-y-2">
+                    <!-- Warning badges will be inserted here -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/v7/state.js"></script>
+    <script src="/static/js/v7/utils.js"></script>
+    <script src="/static/js/v7/api.js"></script>
+    <script src="/static/js/v7/single_analysis.js"></script>
+
+    <script>
+        let selectedFile = null;
+        let currentArtifacts = {};
+        let currentAnalysisResult = null;  // Store for export
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            document.getElementById('uploadPlaceholder').classList.add('hidden');
+            document.getElementById('fileInfo').classList.remove('hidden');
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('analyzeBtn').disabled = false;
+        }
+
+        async function runAnalysis() {
+            if (!selectedFile) return;
+
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            const statusEl = document.getElementById('analysisStatus');
+
+            analyzeBtn.disabled = true;
+            statusEl.classList.remove('hidden');
+
+            try {
+                // Get user options
+                const inkCountSelect = document.getElementById('expectedInkCount');
+                const modeSelect = document.getElementById('analysisMode');
+                const inkCount = inkCountSelect.value;
+                const analysisMode = modeSelect.value;
+
+                const formData = new FormData();
+                formData.append('files', selectedFile);
+                formData.append('analysis_modes', analysisMode);
+
+                // Add expected_ink_count if not auto
+                if (inkCount !== 'auto') {
+                    formData.append('expected_ink_count', inkCount);
+                }
+
+                const response = await v7.api.apiCall('/api/v7/analyze_single', 'POST', formData, 'operator', false);
+
+                if (response && response.results && response.results.length > 0) {
+                    const result = response.results[0];
+                    currentAnalysisResult = result;  // Store for export
+                    v7.singleAnalysis.renderResults(result);
+                    document.getElementById('resultsSection').classList.remove('hidden');
+                } else {
+                    alert('분석 결과를 받지 못했습니다.');
+                }
+
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                alert('분석 실패: ' + error.message);
+            } finally {
+                analyzeBtn.disabled = false;
+                statusEl.classList.add('hidden');
+            }
+        }
+
+        function showImage(type) {
+            const img = document.getElementById('previewImage');
+            if (currentArtifacts[type]) {
+                img.src = currentArtifacts[type];
+            }
+        }
+
+        // Store artifacts globally
+        window.setArtifacts = function(artifacts) {
+            currentArtifacts = artifacts;
+            if (artifacts.original) {
+                document.getElementById('previewImage').src = artifacts.original;
+            }
+        };
+
+        // Export Copy Spec to JSON
+        function exportCopySpec() {
+            if (!currentAnalysisResult) {
+                alert('분석 결과가 없습니다. 먼저 이미지를 분석해주세요.');
+                return;
+            }
+
+            const analysis = currentAnalysisResult.analysis;
+            const metadata = currentAnalysisResult.metadata || {};
+
+            // Build copy specification JSON
+            const copySpec = {
+                metadata: {
+                    source_file: selectedFile ? selectedFile.name : 'unknown',
+                    analysis_timestamp: new Date().toISOString(),
+                    engine_version: 'v7',
+                    purpose: 'Copy Specification for Lens Replication'
+                },
+
+                // QC Information (measurement validity)
+                qc: {
+                    gate_passed: analysis.gate?.passed || false,
+                    center_offset_mm: analysis.gate?.scores?.center_offset_mm || null,
+                    sharpness_score: analysis.gate?.scores?.sharpness_score || null,
+                    illumination_asymmetry: analysis.gate?.scores?.illumination_asymmetry || null
+                },
+
+                // Ink Palette (Priority 1 - Core Copy Info)
+                ink_palette: {
+                    detected_count: analysis.ink?.k || 0,
+                    clustering_confidence: analysis.ink?.confidence || 0,
+                    sort_policy: 'L_asc (dark to light)',
+                    clusters: (analysis.ink?.clusters || []).map(cluster => ({
+                        ink_id: cluster.id,
+                        lab_centroid_cie: cluster.centroid_lab_cie || cluster.centroid_lab,  // CIE L*a*b* (recommended)
+                        lab_centroid_cv8: cluster.centroid_lab_cv8,  // OpenCV 8-bit (legacy)
+                        rgb_hex: cluster.mean_hex,
+                        area_ratio: cluster.area_ratio,
+                        role: cluster.id === 0 ? 'ink' : 'gap/background'
+                    })),
+                    _note: 'lab_centroid_cie uses CIE scale (L:0-100, a/b:-128~+127). Use this for ΔE calculations.'
+                },
+
+                // Radial Profile (Distribution Pattern)
+                radial_profile: {
+                    summary: {
+                        inner_mean_L: analysis.radial?.summary?.inner_mean_L || null,
+                        outer_mean_L: analysis.radial?.summary?.outer_mean_L || null,
+                        uniformity: analysis.radial?.summary?.uniformity || null,
+                        pattern_type: (() => {
+                            const inner = analysis.radial?.summary?.inner_mean_L || 0;
+                            const outer = analysis.radial?.summary?.outer_mean_L || 0;
+                            const diff = Math.abs(inner - outer);
+                            if (diff < 2) return 'Uniform';
+                            return inner > outer ? 'Fade Out (Center Darker)' : 'Fade In (Edge Darker)';
+                        })(),
+                        _note: 'Summary values use CIE L*a*b* scale'
+                    },
+                    profiles_cie: {
+                        L_mean: analysis.radial?.profile_cie?.L_mean || analysis.radial?.profile?.L_mean || [],
+                        a_mean: analysis.radial?.profile_cie?.a_mean || analysis.radial?.profile?.a_mean || [],
+                        b_mean: analysis.radial?.profile_cie?.b_mean || analysis.radial?.profile?.b_mean || []
+                    },
+                    profiles_cv8: {
+                        L_mean: analysis.radial?.profile_cv8?.L_mean || [],
+                        a_mean: analysis.radial?.profile_cv8?.a_mean || [],
+                        b_mean: analysis.radial?.profile_cv8?.b_mean || []
+                    },
+                    _note: 'Use profiles_cie for proper color interpretation. CIE scale: L:0-100, a/b:-128~+127'
+                },
+
+                // Pattern Quality (Texture/Dots)
+                pattern: {
+                    angular_uniformity: analysis.pattern?.angular_uniformity || null,
+                    center_blobs: {
+                        blob_count: analysis.pattern?.center_blobs?.blob_count || 0,
+                        total_area: analysis.pattern?.center_blobs?.total_area || 0
+                    },
+                    contrast: analysis.pattern?.contrast || null,
+                    edge_density: analysis.pattern?.edge_density || null
+                },
+
+                // Color Distribution (Reference)
+                color_distribution: {
+                    L_cie: analysis.color?.L_cie || analysis.color?.L || {},
+                    a_cie: analysis.color?.a_cie || analysis.color?.a || {},
+                    b_cie: analysis.color?.b_cie || analysis.color?.b || {},
+                    L_cv8: analysis.color?.L_cv8 || {},
+                    a_cv8: analysis.color?.a_cv8 || {},
+                    b_cv8: analysis.color?.b_cv8 || {},
+                    _note: 'Use *_cie values for proper color interpretation. CIE scale: L:0-100, a/b:-128~+127'
+                },
+
+                // Zone Analysis (Advanced)
+                zones: {
+                    zone_uniformity: analysis.zones?.zone_uniformity || null,
+                    num_zones: analysis.zones?.num_zones || 8,
+                    zones: analysis.zones?.zones || []
+                },
+
+                // Warnings
+                warnings: analysis.warnings || []
+            };
+
+            // Create download
+            const jsonStr = JSON.stringify(copySpec, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const filename = selectedFile ?
+                selectedFile.name.replace(/\.[^/.]+$/, '') + '_copy_spec.json' :
+                'lens_copy_spec.json';
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log('Copy spec exported:', filename);
+        }
+    </script>
+</body>
+</html>
