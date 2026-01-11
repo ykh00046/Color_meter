@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from core.geometry.lens_geometry import LensGeometry
-from core.v2.color_masks import assign_cluster_labels_to_image, build_color_masks, filter_masks_by_role, lab_to_hex
+from core.measure.color_masks import assign_cluster_labels_to_image, build_color_masks, filter_masks_by_role, lab_to_hex
 
 
 @pytest.fixture

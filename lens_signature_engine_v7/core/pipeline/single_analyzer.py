@@ -17,10 +17,10 @@ from ..anomaly.blob_detector import detect_center_blobs
 from ..anomaly.pattern_baseline import extract_pattern_features
 from ..gate.gate_engine import run_gate
 from ..geometry.lens_geometry import detect_lens_circle
+from ..measure.preprocess import build_roi_mask
 from ..signature.radial_signature import build_radial_signature, to_polar
 from ..types import LensGeometry
 from ..utils import apply_white_balance, bgr_to_lab
-from ..v2.preprocess import build_roi_mask
 
 
 def _create_lens_mask(bgr: np.ndarray, geom: LensGeometry) -> np.ndarray:
@@ -334,7 +334,7 @@ def _analyze_ink_segmentation(
             "confidence": 0.85
         }
     """
-    from ..v2.ink_segmentation import kmeans_segment
+    from ..measure.ink_segmentation import kmeans_segment
 
     R = cfg.get("signature", {}).get("R", 100)
     T = cfg.get("signature", {}).get("T", 360)
