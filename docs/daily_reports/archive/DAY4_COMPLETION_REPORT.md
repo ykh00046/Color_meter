@@ -1,5 +1,10 @@
 ﻿# Day 4 Completion Report - Visualizer Implementation
 
+> **⚠️ 역사적 문서 보관용**
+> 본 문서는 초기 개발 과정의 역사적 기록입니다.
+> 이 문서에 언급된 CLI 도구 (`src/main.py`)는 2025-01-12에 제거되었습니다.
+> 현재 모든 기능은 웹 UI를 통해 제공됩니다.
+
 **Date:** 2025-12-11
 **Duration:** ~3 hours (as planned)
 **Status:** ✅ COMPLETE
