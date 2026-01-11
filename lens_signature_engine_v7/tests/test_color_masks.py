@@ -4,14 +4,8 @@ Unit tests for core/v2/color_masks.py
 Tests color mask generation, color ID stability, L* ordering, and edge cases.
 """
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "lens_signature_engine_v7"))
 
 from core.geometry.lens_geometry import LensGeometry
 from core.v2.color_masks import assign_cluster_labels_to_image, build_color_masks, filter_masks_by_role, lab_to_hex
