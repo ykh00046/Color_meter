@@ -70,8 +70,9 @@ def build_radial_signature_masked(
         mask_roi = mask_roi[..., 0]  # Handle if mask has channels
 
     R_prime = r1 - r0
-    mean_curve = np.zeros((R_prime, 3), dtype=np.float32)
-    p95_curve = np.zeros((R_prime, 3), dtype=np.float32)
+    # Initialize with NaN instead of 0 to distinguish empty bins
+    mean_curve = np.full((R_prime, 3), np.nan, dtype=np.float32)
+    p95_curve = np.full((R_prime, 3), np.nan, dtype=np.float32)
 
     # Vectorized approach or per-column?
     # Since mask can be arbitrary, per-column is safest for "radial" statistics.
@@ -90,11 +91,11 @@ def build_radial_signature_masked(
             mean_curve[r_idx] = pixels.mean(axis=0)
             p95_curve[r_idx] = np.percentile(pixels, 95, axis=0)
         else:
-            # If a radius has NO masked pixels (e.g. gap), hold previous value
-            if r_idx > 0:
+            # If a radius has NO masked pixels (e.g. gap), hold last valid value
+            if r_idx > 0 and not np.isnan(mean_curve[r_idx - 1, 0]):
                 mean_curve[r_idx] = mean_curve[r_idx - 1]
                 p95_curve[r_idx] = p95_curve[r_idx - 1]
-            # else remains 0 (will be forward-filled below)
+            # else remains NaN (will be forward-filled below if possible)
 
     # Second pass: Forward-fill from first valid column (if r_idx==0 was empty)
     if first_valid_r_idx is not None and first_valid_r_idx > 0:

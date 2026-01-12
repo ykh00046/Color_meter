@@ -316,8 +316,14 @@ def build_color_masks(
         )
 
     # 10. Build final metadata
+    detected_ink_count = sum(1 for c in colors_metadata if c["role"] == "ink")
+
     metadata = {
         "colors": colors_metadata,
+        "expected_ink_count": expected_k,  # Input: user-specified ink count
+        "segmentation_k": k_used,  # Parameter: k value used for k-means
+        "detected_ink_like_count": detected_ink_count,  # Result: role="ink" count
+        # Legacy keys for backward compatibility
         "k_expected": expected_k,
         "k_used": k_used,
         "segmentation_method": "kmeans",
@@ -425,13 +431,12 @@ def build_color_masks_with_retry(
     # Pass 1: Try with expected_k
     masks1, meta1 = build_color_masks(test_bgr, cfg, expected_k, geom)
 
-    # Calculate confidence
+    # Calculate confidence and extract detected ink count
     confidence1 = calculate_segmentation_confidence(meta1, expected_k)
-    detected_inks1 = sum(1 for c in meta1["colors"] if c["role"] == "ink")
+    detected_inks1 = meta1["detected_ink_like_count"]  # Use value from build_color_masks
 
-    # Add confidence and detected count to metadata
+    # Add confidence and pass info to metadata
     meta1["segmentation_confidence"] = confidence1
-    meta1["detected_inks"] = detected_inks1
     meta1["segmentation_pass"] = "pass1_only"
 
     # Check if retry needed
@@ -445,10 +450,9 @@ def build_color_masks_with_retry(
     # Pass 2: Retry with k = expected_k + 1
     masks2, meta2 = build_color_masks(test_bgr, cfg, expected_k + 1, geom)
     confidence2 = calculate_segmentation_confidence(meta2, expected_k)
-    detected_inks2 = sum(1 for c in meta2["colors"] if c["role"] == "ink")
+    detected_inks2 = meta2["detected_ink_like_count"]  # Use value from build_color_masks
 
     meta2["segmentation_confidence"] = confidence2
-    meta2["detected_inks"] = detected_inks2
     meta2["segmentation_pass"] = "pass2_retry"
 
     # Decide which result to use

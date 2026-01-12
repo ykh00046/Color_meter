@@ -1207,15 +1207,17 @@ def evaluate_per_color(
 
     # Extract segmentation metadata for debugging/warnings
     segmentation_info = {
+        "expected_ink_count": mask_metadata.get("expected_ink_count"),
+        "segmentation_k": mask_metadata.get("segmentation_k"),
+        "detected_ink_like_count": mask_metadata.get("detected_ink_like_count"),
         "segmentation_confidence": mask_metadata.get("segmentation_confidence"),
-        "detected_inks": mask_metadata.get("detected_inks"),
         "segmentation_pass": mask_metadata.get("segmentation_pass"),
         "retry_reason": mask_metadata.get("retry_reason"),
     }
 
     # Add warnings if ink count mismatch or retry occurred
     segmentation_warnings = []
-    detected_inks = mask_metadata.get("detected_inks", len(mask_metadata.get("colors", [])))
+    detected_inks = mask_metadata.get("detected_ink_like_count", 0)
 
     if detected_inks != expected_ink_count:
         segmentation_warnings.append(
