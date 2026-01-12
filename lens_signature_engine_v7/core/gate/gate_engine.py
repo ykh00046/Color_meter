@@ -114,6 +114,8 @@ def run_gate(
                 "_meta": {
                     "valid": False,
                     "pixel_to_mm": pixel_to_mm,
+                    "sharpness_roi": "edge",
+                    "edge_pixel_count": None,
                 },
                 "_guidance": {"error": "렌즈 검출 실패. 이미지를 확인하고 재촬영하세요."},
             },
@@ -159,6 +161,7 @@ def run_gate(
     # Select top 10% gradient pixels within annulus (pattern/edge regions)
     annulus_pixels = annulus_mask.sum()
     blur_valid = annulus_pixels >= min_roi_pixels
+    edge_pixel_count = 0
 
     if blur_valid:
         grad_in_annulus = gradient_mag[annulus_mask]
@@ -273,6 +276,8 @@ def run_gate(
             "roi_pixel_count": int(roi_pixel_count),
             "quad_pixel_counts": quad_pixel_counts,
             "geom_scale": "image_space",  # Confirms geom.r and bgr use same coordinate system
+            "sharpness_roi": "edge",  # Annulus (0.45R~0.95R) + top 10% gradient pixels
+            "edge_pixel_count": int(edge_pixel_count) if blur_valid and blur is not None else None,
         },
         # Action guidance
         "_guidance": _get_action_guidance(reasons, blur, blur_min, center_off_ratio, illum, center_off_mm),

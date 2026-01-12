@@ -30,19 +30,29 @@ def _create_lens_mask(bgr: np.ndarray, geom: LensGeometry) -> np.ndarray:
     return mask
 
 
-def _calculate_radial_uniformity(radial_mean: np.ndarray) -> float:
+def _calculate_radial_uniformity(radial_mean: np.ndarray) -> float | None:
     """
     Calculate radial uniformity score (0-1, higher is better)
 
     Measures how uniform the radial profile is from center to edge.
     Uses coefficient of variation of L* channel.
+
+    Returns:
+        float: 0-1 uniformity score, or None if calculation not possible
     """
     L_profile = radial_mean[:, 0]
-    mean_L = float(np.mean(L_profile))
-    std_L = float(np.std(L_profile))
 
-    if mean_L == 0:
-        return 0.0
+    # Filter out invalid values (0 or NaN from empty bins)
+    valid_L = L_profile[~np.isnan(L_profile) & (L_profile > 0)]
+
+    if len(valid_L) < 2:
+        return None  # Not enough valid data
+
+    mean_L = float(np.mean(valid_L))
+    std_L = float(np.std(valid_L))
+
+    if mean_L < 1.0:  # Too dark for reliable measurement
+        return None
 
     # Coefficient of variation (lower is more uniform)
     cv = std_L / mean_L
@@ -107,23 +117,32 @@ def _calculate_radial_slope(radial_mean_cie: np.ndarray) -> float:
     return round(float(slope), 2)
 
 
-def _calculate_zone_uniformity(zones: List[Dict]) -> float:
+def _calculate_zone_uniformity(zones: List[Dict]) -> float | None:
     """
     Calculate zone uniformity score (0-1, higher is better)
 
     Measures how similar different zones are in color.
+
+    Returns:
+        float: 0-1 uniformity score, or None if calculation not possible
     """
     if not zones or len(zones) < 2:
-        return 1.0
+        return None
 
     # Extract L values from all zones
     L_values = [z["mean_lab"][0] for z in zones]
 
-    mean_L = float(np.mean(L_values))
-    std_L = float(np.std(L_values))
+    # Filter out invalid values (0 or NaN from empty bins)
+    valid_L = [v for v in L_values if v > 0 and not np.isnan(v)]
 
-    if mean_L == 0:
-        return 0.0
+    if len(valid_L) < 2:
+        return None
+
+    mean_L = float(np.mean(valid_L))
+    std_L = float(np.std(valid_L))
+
+    if mean_L < 1.0:  # Too dark for reliable measurement
+        return None
 
     # Coefficient of variation
     cv = std_L / mean_L
@@ -733,8 +752,10 @@ def _generate_warnings(results: Dict[str, Any]) -> List[str]:
 
     # Radial warnings
     radial = results.get("radial", {})
-    uniformity = radial.get("summary", {}).get("uniformity", 1.0)
-    if uniformity < 0.6:
+    uniformity = radial.get("summary", {}).get("uniformity")
+    if uniformity is None:
+        warnings.append("RADIAL_UNIFORMITY_NOT_AVAILABLE (insufficient valid data)")
+    elif uniformity < 0.6:
         warnings.append(f"Low radial uniformity ({uniformity:.2f})")
 
     # Pattern warnings
@@ -745,8 +766,10 @@ def _generate_warnings(results: Dict[str, Any]) -> List[str]:
 
     # Zone warnings
     zones = results.get("zones", {})
-    zone_unif = zones.get("zone_uniformity", 1.0)
-    if zone_unif < 0.7:
+    zone_unif = zones.get("zone_uniformity")
+    if zone_unif is None:
+        warnings.append("ZONE_UNIFORMITY_NOT_AVAILABLE (insufficient valid data)")
+    elif zone_unif < 0.7:
         warnings.append(f"Low zone uniformity ({zone_unif:.2f})")
 
     return warnings

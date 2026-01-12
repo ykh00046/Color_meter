@@ -268,15 +268,32 @@ def build_color_masks(
     # 7. Sort clusters by L* (dark to light) for stable color_id assignment
     cluster_meta_sorted = sorted(cluster_meta_unsorted, key=lambda x: x["L"])
 
-    # 8. Assign roles: "ink" vs "gap"
-    # If expected_k=1 and k_used=2, assign darkest as "ink", other as "gap"
-    # Otherwise, mark all as "ink"
-    if expected_k == 1 and k_used == 2:
-        cluster_meta_sorted[0]["role"] = "ink"  # Darkest
-        cluster_meta_sorted[1]["role"] = "gap"
-    else:
+    # 8. Assign roles: "ink" vs "gap"/"background"
+    # Strategy:
+    #   - k_used == expected_k: all are "ink"
+    #   - k_used > expected_k: assume lightest is background/gap,
+    #     darkest expected_k are "ink", rest are "gap"
+    if k_used == expected_k:
+        # Exact match: all clusters are ink
         for cm in cluster_meta_sorted:
             cm["role"] = "ink"
+    elif k_used == expected_k + 1:
+        # One extra cluster: lightest is likely background
+        for i, cm in enumerate(cluster_meta_sorted):
+            if i < expected_k:
+                cm["role"] = "ink"  # Darkest expected_k
+            else:
+                cm["role"] = "background"  # Lightest
+    else:
+        # k_used > expected_k + 1: over-segmentation
+        # Lightest is background, darkest expected_k are ink, rest are gap
+        for i, cm in enumerate(cluster_meta_sorted):
+            if i < expected_k:
+                cm["role"] = "ink"  # Darkest expected_k
+            elif i == len(cluster_meta_sorted) - 1:
+                cm["role"] = "background"  # Lightest
+            else:
+                cm["role"] = "gap"  # Middle clusters (noise/over-segmentation)
 
     # 9. Build color masks with stable IDs
     color_masks = {}
