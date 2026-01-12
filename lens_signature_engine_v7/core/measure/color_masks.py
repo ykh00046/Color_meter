@@ -21,8 +21,9 @@ import numpy as np
 from ..geometry.lens_geometry import LensGeometry, detect_lens_circle
 from ..signature.radial_signature import to_polar
 from ..utils import bgr_to_lab
+from .ink_metrics import build_cluster_stats, calculate_inkness_score, silhouette_ab_proxy
 from .ink_segmentation import kmeans_segment
-from .preprocess import build_roi_mask, sample_ink_candidates
+from .preprocess import build_roi_mask, build_sampling_mask, sample_ink_candidates
 
 
 def lab_to_hex(lab: np.ndarray) -> str:
@@ -186,10 +187,13 @@ def build_color_masks(
     )
 
     rng_seed = v2_cfg.get("rng_seed", None)
-    samples, sample_indices, sample_meta, sample_warnings = sample_ink_candidates(
-        lab_map, roi_mask, cfg, rng_seed=rng_seed
-    )
+
+    # Use build_sampling_mask for better background exclusion
+    sampling_mask, sample_meta, sample_warnings = build_sampling_mask(lab_map, roi_mask, cfg, rng_seed=rng_seed)
     warnings.extend(sample_warnings)
+
+    # Extract samples from sampling mask
+    samples = lab_map[sampling_mask]
 
     if samples.size == 0 or samples.shape[0] < expected_k:
         # Insufficient samples, return empty masks
@@ -236,17 +240,20 @@ def build_color_masks(
         }
         return empty_masks, empty_metadata
 
-    # 4. Convert centers from feature space [a, b, L*weight] back to Lab
+    # 4. Build cluster stats for inkness scoring
+    cluster_stats = build_cluster_stats(samples, labels_samples, k_used)
+
+    # 5. Convert centers from feature space [a, b, L*weight] back to Lab
     # centers shape: (k, 3) where columns are [a, b, L*l_weight]
     centers_lab = np.zeros_like(centers)
     centers_lab[:, 1] = centers[:, 0]  # a
     centers_lab[:, 2] = centers[:, 1]  # b
     centers_lab[:, 0] = centers[:, 2] / l_weight  # L = (L*weight) / weight
 
-    # 5. Assign all pixels in lab_map to nearest cluster
+    # 6. Assign all pixels in lab_map to nearest cluster
     label_map = assign_cluster_labels_to_image(lab_map, centers, l_weight=l_weight)  # (T, R)
 
-    # 6. Build cluster metadata (before sorting)
+    # 7. Build cluster metadata (before sorting)
     cluster_meta_unsorted = []
     for cluster_idx in range(k_used):
         cluster_mask = label_map == cluster_idx
@@ -255,6 +262,9 @@ def build_color_masks(
         # Lab centroid for this cluster (from centers)
         lab_centroid = centers_lab[cluster_idx]
 
+        # Get stats for this cluster
+        stats = cluster_stats["clusters"][cluster_idx]
+
         cluster_meta_unsorted.append(
             {
                 "original_idx": cluster_idx,
@@ -262,38 +272,43 @@ def build_color_masks(
                 "L": float(lab_centroid[0]),
                 "area_ratio": area_ratio,
                 "hex_ref": lab_to_hex(lab_centroid),
+                "compactness": stats["compactness"],
+                "alpha_like": stats["alpha_like"],
             }
         )
 
     # 7. Sort clusters by L* (dark to light) for stable color_id assignment
     cluster_meta_sorted = sorted(cluster_meta_unsorted, key=lambda x: x["L"])
 
-    # 8. Assign roles: "ink" vs "gap"/"background"
-    # Strategy:
-    #   - k_used == expected_k: all are "ink"
-    #   - k_used > expected_k: assume lightest is background/gap,
-    #     darkest expected_k are "ink", rest are "gap"
-    if k_used == expected_k:
-        # Exact match: all clusters are ink
-        for cm in cluster_meta_sorted:
+    # 8. Assign roles using inkness_score (Phase 2 improvement)
+    # Strategy: Calculate inkness_score for each cluster and threshold
+    inkness_threshold = float(v2_cfg.get("inkness_threshold", 0.55))
+
+    for cm in cluster_meta_sorted:
+        # Calculate inkness score
+        # spatial_prior = 0.5 (neutral) - can be enhanced with radial distribution later
+        inkness = calculate_inkness_score(
+            mean_lab=cm["lab_centroid"],
+            compactness=cm["compactness"],
+            alpha_like=cm["alpha_like"],
+            spatial_prior=0.5,  # Neutral for now
+        )
+
+        cm["inkness_score"] = inkness
+
+        # Assign role based on inkness score
+        if inkness >= inkness_threshold:
             cm["role"] = "ink"
-    elif k_used == expected_k + 1:
-        # One extra cluster: lightest is likely background
-        for i, cm in enumerate(cluster_meta_sorted):
-            if i < expected_k:
-                cm["role"] = "ink"  # Darkest expected_k
-            else:
-                cm["role"] = "background"  # Lightest
-    else:
-        # k_used > expected_k + 1: over-segmentation
-        # Lightest is background, darkest expected_k are ink, rest are gap
-        for i, cm in enumerate(cluster_meta_sorted):
-            if i < expected_k:
-                cm["role"] = "ink"  # Darkest expected_k
-            elif i == len(cluster_meta_sorted) - 1:
-                cm["role"] = "background"  # Lightest
-            else:
-                cm["role"] = "gap"  # Middle clusters (noise/over-segmentation)
+        else:
+            # Distinguish gap vs background: lightest non-ink is background
+            cm["role"] = "gap"  # Will be refined below
+
+    # Refine: Mark lightest non-ink cluster as "background"
+    non_ink_clusters = [cm for cm in cluster_meta_sorted if cm["role"] != "ink"]
+    if non_ink_clusters:
+        # Lightest (highest L*) non-ink is background
+        lightest_non_ink = max(non_ink_clusters, key=lambda x: x["L"])
+        lightest_non_ink["role"] = "background"
 
     # 9. Build color masks with stable IDs
     color_masks = {}
@@ -312,6 +327,7 @@ def build_color_masks(
                 "hex_ref": cluster_meta["hex_ref"],
                 "area_ratio": cluster_meta["area_ratio"],
                 "role": cluster_meta["role"],
+                "inkness_score": cluster_meta.get("inkness_score"),  # Phase 2
             }
         )
 
