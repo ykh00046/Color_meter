@@ -5,7 +5,11 @@ Unit tests for assignment_map.py
 import numpy as np
 import pytest
 
-from core.measure.assignment_map import build_assignment_map, get_cluster_spatial_stats, validate_assignment_map
+from core.measure.matching.assignment_map import (
+    build_assignment_map,
+    get_cluster_spatial_stats,
+    validate_assignment_map,
+)
 
 
 class TestBuildAssignmentMap:

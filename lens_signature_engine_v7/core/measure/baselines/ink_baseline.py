@@ -5,14 +5,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from ..geometry.lens_geometry import detect_lens_circle
-from ..signature.radial_signature import to_polar
-from ..utils import bgr_to_lab
-from .color_masks import assign_cluster_labels_to_image
-from .ink_match import align_to_reference, match_clusters_ab
-from .ink_metrics import build_cluster_stats, ensure_cie_lab
-from .ink_segmentation import kmeans_segment
-from .preprocess import build_roi_mask, sample_ink_candidates
+from ...geometry.lens_geometry import detect_lens_circle
+from ...signature.radial_signature import to_polar
+from ...utils import bgr_to_lab
+from ..matching.ink_match import align_to_reference, match_clusters_ab
+from ..metrics.ink_metrics import build_cluster_stats, ensure_cie_lab
+from ..segmentation.color_masks import assign_cluster_labels_to_image
+from ..segmentation.ink_segmentation import kmeans_segment
+from ..segmentation.preprocess import build_roi_mask, sample_ink_candidates
 
 
 def _segment_image(
@@ -81,7 +81,7 @@ def _segment_image(
     roi_labels = state_id_map[roi_mask]
 
     # IMPORTANT: Convert to CIE Lab for metrics calculation (alpha_like, inkness, etc.)
-    from ..utils import lab_cv8_to_cie
+    from ...utils import lab_cv8_to_cie
 
     roi_labs_cie = lab_cv8_to_cie(roi_labs.reshape(-1, 1, 3)).reshape(-1, 3)
 
@@ -97,7 +97,7 @@ def _segment_image(
             c["mean_lab"] = ensure_cie_lab(np.array(c["mean_lab"], dtype=np.float32)).tolist()
 
     # Spatial metrics (radial curve / prior / inkness)
-    from .ink_metrics import calculate_inkness_score, calculate_radial_presence_curve, calculate_spatial_prior
+    from ..metrics.ink_metrics import calculate_inkness_score, calculate_radial_presence_curve, calculate_spatial_prior
 
     r_roi = polar_r_map[roi_mask]
     for i, cluster in enumerate(clusters):
@@ -210,7 +210,7 @@ def build_ink_baseline(
             return [round(float(v), 3) for v in avg]
 
         # Calculate weighted mean_hex and mean_rgb from centroid
-        from .ink_metrics import _lab_to_rgb, _rgb_to_hex
+        from ..metrics.ink_metrics import _lab_to_rgb, _rgb_to_hex
 
         centroid_rgb = _lab_to_rgb(centroid)
         centroid_hex = _rgb_to_hex(centroid_rgb)

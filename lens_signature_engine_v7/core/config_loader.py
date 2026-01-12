@@ -27,6 +27,12 @@ def _unknown_keys(base: Dict[str, Any], override: Dict[str, Any], prefix: str = 
     return unknown
 
 
+def load_cfg(base_path: str) -> Tuple[Dict[str, Any], List[str], List[str]]:
+    base_path = str(base_path)
+    base = json.loads(Path(base_path).read_text(encoding="utf-8"))
+    return base, [base_path], []
+
+
 def load_cfg_with_sku(
     base_path: str,
     sku: str | None = None,

@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from .ink_metrics import deltaE as deltaE_metric
-from .ink_metrics import ensure_cie_lab
+from ..metrics.ink_metrics import deltaE as deltaE_metric
+from ..metrics.ink_metrics import ensure_cie_lab
 
 
 def _resolve_baseline(baseline: Any) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:

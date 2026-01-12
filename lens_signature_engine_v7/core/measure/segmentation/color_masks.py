@@ -18,10 +18,16 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from ..geometry.lens_geometry import LensGeometry, detect_lens_circle
-from ..signature.radial_signature import to_polar
-from ..utils import bgr_to_lab
-from .ink_metrics import build_cluster_stats, calculate_inkness_score, silhouette_ab_proxy
+from ...geometry.lens_geometry import LensGeometry, detect_lens_circle
+from ...signature.radial_signature import to_polar
+from ...utils import bgr_to_lab
+from ..metrics.ink_metrics import (
+    build_cluster_stats,
+    calculate_inkness_score,
+    calculate_radial_presence_curve,
+    calculate_spatial_prior,
+    silhouette_ab_proxy,
+)
 from .ink_segmentation import kmeans_segment
 from .preprocess import build_roi_mask, build_sampling_mask, sample_ink_candidates
 
@@ -241,7 +247,15 @@ def build_color_masks(
         return empty_masks, empty_metadata
 
     # 4. Build cluster stats for inkness scoring
-    cluster_stats = build_cluster_stats(samples, labels_samples, k_used)
+    separation_d0 = float(v2_cfg.get("separation_d0", 3.0))
+    separation_k = float(v2_cfg.get("separation_k", 1.0))
+    cluster_stats = build_cluster_stats(
+        samples,
+        labels_samples,
+        k_used,
+        separation_d0=separation_d0,
+        separation_k=separation_k,
+    )
 
     # 5. Convert centers from feature space [a, b, L*weight] back to Lab
     # centers shape: (k, 3) where columns are [a, b, L*l_weight]
@@ -252,6 +266,13 @@ def build_color_masks(
 
     # 6. Assign all pixels in lab_map to nearest cluster
     label_map = assign_cluster_labels_to_image(lab_map, centers, l_weight=l_weight)  # (T, R)
+
+    # Build normalized radial map (T, R) for spatial prior
+    radial_bins = int(v2_cfg.get("radial_bins", 10))
+    radial_bins = max(radial_bins, 1)
+    r_vals = (np.arange(polar_R, dtype=np.float32) + 0.5) / max(polar_R, 1)
+    polar_r_map = np.tile(r_vals[None, :], (polar_T, 1))
+    labels_flat = label_map.reshape(-1)
 
     # 7. Build cluster metadata (before sorting)
     cluster_meta_unsorted = []
@@ -265,6 +286,14 @@ def build_color_masks(
         # Get stats for this cluster
         stats = cluster_stats["clusters"][cluster_idx]
 
+        radial_presence_curve = calculate_radial_presence_curve(
+            labels_flat,
+            cluster_idx,
+            polar_r_map,
+            r_bins=radial_bins,
+        )
+        spatial_prior = calculate_spatial_prior(radial_presence_curve)
+
         cluster_meta_unsorted.append(
             {
                 "original_idx": cluster_idx,
@@ -274,41 +303,118 @@ def build_color_masks(
                 "hex_ref": lab_to_hex(lab_centroid),
                 "compactness": stats["compactness"],
                 "alpha_like": stats["alpha_like"],
+                "radial_presence_curve": radial_presence_curve,
+                "spatial_prior": spatial_prior,
             }
         )
+
+    auto_estimation = None
+    if bool(v2_cfg.get("auto_k_enabled", True)):
+        expanded = False
+        candidate_set = {
+            max(1, k_used - 1),
+            k_used,
+            max(1, k_used + 1),
+        }
+
+        min_area = float(cluster_stats["quality"].get("min_area_ratio", 0.0))
+        min_area_warn = float(v2_cfg.get("min_area_ratio_warn", 0.03))
+        min_delta = float(cluster_stats["quality"].get("min_deltaE_between_clusters", 0.0))
+
+        if "INK_SEPARATION_LOW_CONFIDENCE" in warnings or min_area < min_area_warn or min_delta < separation_d0:
+            expanded = True
+            max_k = int(v2_cfg.get("auto_k_expand_max", 4))
+            candidate_set.update(range(1, max(1, max_k) + 1))
+
+        k_candidates = sorted(candidate_set)
+        scores: Dict[int, float | None] = {}
+        for k_cand in k_candidates:
+            cand_labels, _ = kmeans_segment(
+                samples,
+                int(k_cand),
+                l_weight=l_weight,
+                attempts=kmeans_attempts,
+                rng_seed=rng_seed,
+            )
+            if cand_labels.size == 0:
+                scores[int(k_cand)] = None
+                continue
+            scores[int(k_cand)] = silhouette_ab_proxy(samples, cand_labels, int(k_cand))
+
+        valid = [(k_i, s) for k_i, s in scores.items() if s is not None]
+        valid.sort(key=lambda x: x[1], reverse=True)
+        best_k = int(valid[0][0]) if valid else None
+        best_score = float(valid[0][1]) if valid else 0.0
+        second_score = float(valid[1][1]) if len(valid) > 1 else 0.0
+
+        abs_min = float(v2_cfg.get("auto_k_conf_abs_min", 0.10))
+        abs_span = float(v2_cfg.get("auto_k_conf_abs_span", 0.25))
+        gap_span = float(v2_cfg.get("auto_k_conf_gap_span", 0.10))
+        mismatch_thr = float(v2_cfg.get("auto_k_mismatch_conf_thr", 0.70))
+        low_conf_thr = float(v2_cfg.get("auto_k_low_conf_thr", 0.40))
+
+        conf_abs = (best_score - abs_min) / max(abs_span, 1e-6)
+        conf_abs = float(np.clip(conf_abs, 0.0, 1.0))
+        conf_gap = (best_score - second_score) / max(gap_span, 1e-6)
+        conf_gap = float(np.clip(conf_gap, 0.0, 1.0))
+        confidence = float(0.6 * conf_abs + 0.4 * conf_gap)
+
+        forced_to_expected = bool(best_k is not None and best_k != k_used)
+
+        auto_estimation = {
+            "k_candidates": [int(x) for x in k_candidates],
+            "metric": "silhouette_ab_proxy",
+            "scores": {str(k_i): scores[k_i] for k_i in k_candidates},
+            "suggested_k": int(k_used),
+            "auto_k_best": best_k,
+            "confidence": confidence,
+            "forced_to_expected": forced_to_expected,
+            "notes": [
+                f"expanded_search_used:{str(expanded).lower()}",
+                f"forced_to_expected:{str(forced_to_expected).lower()}",
+            ],
+        }
+
+        if confidence < low_conf_thr:
+            warnings.append("AUTO_K_LOW_CONFIDENCE")
+        if best_k is not None and best_k != expected_k and confidence >= mismatch_thr:
+            if not (expected_k == 1 and k_used == 2):
+                warnings.append("INK_COUNT_MISMATCH_SUSPECTED")
 
     # 7. Sort clusters by L* (dark to light) for stable color_id assignment
     cluster_meta_sorted = sorted(cluster_meta_unsorted, key=lambda x: x["L"])
 
-    # 8. Assign roles using inkness_score (Phase 2 improvement)
-    # Strategy: Calculate inkness_score for each cluster and threshold
+    # 8. Assign roles (legacy-first, inkness optional)
+    role_policy = str(v2_cfg.get("role_policy", "legacy")).lower()
     inkness_threshold = float(v2_cfg.get("inkness_threshold", 0.55))
+    enable_background_role = bool(v2_cfg.get("enable_background_role", False))
 
     for cm in cluster_meta_sorted:
-        # Calculate inkness score
-        # spatial_prior = 0.5 (neutral) - can be enhanced with radial distribution later
         inkness = calculate_inkness_score(
             mean_lab=cm["lab_centroid"],
             compactness=cm["compactness"],
             alpha_like=cm["alpha_like"],
-            spatial_prior=0.5,  # Neutral for now
+            spatial_prior=cm["spatial_prior"],
         )
-
         cm["inkness_score"] = inkness
+        cm["role"] = "ink"
 
-        # Assign role based on inkness score
-        if inkness >= inkness_threshold:
-            cm["role"] = "ink"
-        else:
-            # Distinguish gap vs background: lightest non-ink is background
-            cm["role"] = "gap"  # Will be refined below
+    if role_policy == "inkness":
+        for cm in cluster_meta_sorted:
+            cm["role"] = "ink" if cm["inkness_score"] >= inkness_threshold else "gap"
 
-    # Refine: Mark lightest non-ink cluster as "background"
-    non_ink_clusters = [cm for cm in cluster_meta_sorted if cm["role"] != "ink"]
-    if non_ink_clusters:
-        # Lightest (highest L*) non-ink is background
-        lightest_non_ink = max(non_ink_clusters, key=lambda x: x["L"])
-        lightest_non_ink["role"] = "background"
+        if enable_background_role:
+            non_ink_clusters = [cm for cm in cluster_meta_sorted if cm["role"] != "ink"]
+            if non_ink_clusters:
+                lightest_non_ink = max(non_ink_clusters, key=lambda x: x["L"])
+                lightest_non_ink["role"] = "background"
+    else:
+        # legacy policy: expected_k==1 -> darkest ink, others gap; expected_k>1 -> all ink
+        if expected_k == 1 and cluster_meta_sorted:
+            darkest = cluster_meta_sorted[0]
+            darkest["role"] = "ink"
+            for cm in cluster_meta_sorted[1:]:
+                cm["role"] = "gap"
 
     # 9. Build color masks with stable IDs
     color_masks = {}
@@ -328,6 +434,8 @@ def build_color_masks(
                 "area_ratio": cluster_meta["area_ratio"],
                 "role": cluster_meta["role"],
                 "inkness_score": cluster_meta.get("inkness_score"),  # Phase 2
+                "radial_presence_curve": cluster_meta["radial_presence_curve"],
+                "spatial_prior": cluster_meta["spatial_prior"],
             }
         )
 
@@ -348,12 +456,31 @@ def build_color_masks(
         "warnings": warnings,
         "roi_meta": roi_meta,
         "sample_meta": sample_meta,
+        "radial_bins": radial_bins,
         "geom": {
             "cx": float(geom.cx),
             "cy": float(geom.cy),
             "r": float(geom.r),
         },
     }
+    if warnings:
+        warn_map = {
+            "INK_SAMPLING_EMPTY": "sampling",
+            "INK_SEPARATION_LOW_CONFIDENCE": "sampling",
+            "COLOR_SEGMENTATION_FAILED": "segmentation",
+            "INK_CLUSTER_TOO_SMALL": "segmentation",
+            "INK_CLUSTER_OVERLAP_HIGH": "segmentation",
+            "AUTO_K_LOW_CONFIDENCE": "auto_k",
+            "INK_COUNT_MISMATCH_SUSPECTED": "auto_k",
+        }
+        warnings_by_category = {"sampling": [], "segmentation": [], "auto_k": []}
+        for w in warnings:
+            category = warn_map.get(w)
+            if category:
+                warnings_by_category[category].append(w)
+        metadata["warnings_by_category"] = warnings_by_category
+    if auto_estimation is not None:
+        metadata["auto_estimation"] = auto_estimation
 
     return color_masks, metadata
 

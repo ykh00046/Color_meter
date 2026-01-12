@@ -308,7 +308,7 @@ def build_decision(
     # - threshold_policy가 확장되면(get_threshold_policy 등) 그걸 자동 사용
     # ----------------------------
     try:
-        from ..measure import threshold_policy as tp  # Correct relative import for core.measure
+        from ..measure.metrics import threshold_policy as tp  # Correct relative import for core.measure
 
         inkness_thr = tp.get_adaptive_threshold(gate_scores=gate_scores)
         classify_inkness_fn: Callable[[float, Dict[str, Any]], str] = tp.classify_inkness
@@ -335,9 +335,15 @@ def build_decision(
             "adjustment": 0.0,
             "quality_level": "good",
         }
-        classify_inkness_fn = lambda s, t: (
-            "ink" if s >= t["ink_threshold"] else ("review" if s >= t["review_lower"] else "gap")
-        )
+
+        def classify_inkness_fn(s, t):
+            if s >= t["ink_threshold"]:
+                return "ink"
+            elif s >= t["review_lower"]:
+                return "review"
+            else:
+                return "gap"
+
         deltae_gates = _fallback_deltae_gates(deltae_method, gate_scores)
         retake_recommended = False
 

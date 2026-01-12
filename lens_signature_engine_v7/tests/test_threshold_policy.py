@@ -4,7 +4,7 @@ Unit tests for threshold_policy.py
 
 import pytest
 
-from core.measure.threshold_policy import (
+from core.measure.metrics.threshold_policy import (
     _calculate_blur_penalty,
     _calculate_illumination_penalty,
     _calculate_offset_penalty,

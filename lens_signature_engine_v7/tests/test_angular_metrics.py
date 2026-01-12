@@ -5,7 +5,7 @@ Unit tests for angular_metrics.py
 import numpy as np
 import pytest
 
-from core.measure.angular_metrics import (
+from core.measure.metrics.angular_metrics import (
     _calculate_runs,
     build_angular_features,
     calculate_angular_continuity,

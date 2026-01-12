@@ -4,9 +4,16 @@ Centralizes profile analysis logic for reuse across CLI and Web UI.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-from src.analysis.profile_analyzer import ProfileAnalyzer
+# Add root to sys.path to allow importing lens_signature_engine_v7
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from lens_signature_engine_v7.core.signature.profile_analysis import analyze_profile
 from src.core.radial_profiler import RadialProfile
 
 logger = logging.getLogger(__name__)
@@ -15,12 +22,11 @@ logger = logging.getLogger(__name__)
 class AnalysisService:
     """
     Service for analyzing radial profiles.
-    Wraps the low-level ProfileAnalyzer and provides a simplified interface for consumers.
+    Wraps the low-level analyze_profile function and provides a simplified interface for consumers.
     """
 
     def __init__(self):
-        # Default configuration for ProfileAnalyzer
-        self.analyzer = ProfileAnalyzer()
+        pass
 
     def analyze_radial_profile(
         self, profile: RadialProfile, lens_radius: float, zones_config: Optional[Dict[str, Any]] = None
@@ -39,9 +45,8 @@ class AnalysisService:
             A dictionary containing the analysis results, serializable to JSON.
         """
         try:
-            # Perform comprehensive analysis using ProfileAnalyzer
-            # Using default window=5, threshold=0.5 for now, or could be passed via args
-            result = self.analyzer.analyze_profile(
+            # Perform comprehensive analysis using v7 engine function
+            result = analyze_profile(
                 r_norm=profile.r_normalized,
                 l_data=profile.L,
                 a_data=profile.a,

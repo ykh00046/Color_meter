@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from ..measure import threshold_policy as tp
+from ..measure.metrics import threshold_policy as tp
 
 SCHEMA_VERSION = "v3_summary.v1"
 GENERATOR = "v3_summary_engine@v1.0.0"

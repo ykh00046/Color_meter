@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from .ink_metrics import ensure_cie_lab
+from ..metrics.ink_metrics import ensure_cie_lab
 
 
 def build_roi_mask(

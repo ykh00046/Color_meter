@@ -70,3 +70,27 @@ class Decision:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class RingSectorCell:
+    """
+    Ring x Sector Cell Data
+
+    Basic unit for 2D angular uniformity analysis.
+    Represents the intersection area of one Ring and one Sector.
+    """
+
+    ring_index: int
+    sector_index: int
+    r_start: float
+    r_end: float
+    angle_start: float
+    angle_end: float
+    mean_L: float
+    mean_a: float
+    mean_b: float
+    std_L: float
+    std_a: float
+    std_b: float
+    pixel_count: int

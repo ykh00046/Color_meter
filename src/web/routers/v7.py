@@ -38,11 +38,11 @@ from core.config_loader import load_cfg_with_sku
 from core.gate.gate_engine import run_gate
 from core.geometry.lens_geometry import detect_lens_circle
 from core.insight.trend import build_v3_trend
-from core.measure.ink_baseline import build_ink_baseline
-from core.measure.ink_match import compute_cluster_deltas
-from core.measure.preprocess import build_roi_mask, build_sampling_mask
-from core.measure.v2_diagnostics import build_v2_diagnostics
-from core.measure.v2_flags import build_v2_flags
+from core.measure.baselines.ink_baseline import build_ink_baseline
+from core.measure.diagnostics.v2_diagnostics import build_v2_diagnostics
+from core.measure.diagnostics.v2_flags import build_v2_flags
+from core.measure.matching.ink_match import compute_cluster_deltas
+from core.measure.segmentation.preprocess import build_roi_mask, build_sampling_mask
 from core.model_registry import compute_cfg_hash
 from core.pipeline import analyzer as analyzer_mod
 from core.pipeline.analyzer import _registration_summary, evaluate_multi, evaluate_registration_multi
@@ -519,7 +519,7 @@ def _write_active_snapshot(entry: Dict, active: Dict[str, str]) -> Optional[Path
         snapshot["snapshot_error"] = str(exc)
         logger.warning("Failed to build active snapshot: %s", exc)
 
-    snap_name = f"{entry.get('sku','')}_{entry.get('ink','')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    snap_name = f"{entry.get('sku', '')}_{entry.get('ink', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     snap_path = snapshots_dir / snap_name
     snapshot["path"] = str((snapshots_dir / snap_name).relative_to(V7_MODELS))
     snap_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -584,7 +584,7 @@ def _write_pattern_baseline(entry: Dict, active: Dict[str, str]) -> Optional[Pat
 
     baselines_dir = V7_MODELS / "pattern_baselines" / entry.get("sku", "") / entry.get("ink", "")
     baselines_dir.mkdir(parents=True, exist_ok=True)
-    base_name = f"PB_{entry.get('sku','')}_{entry.get('ink','')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    base_name = f"PB_{entry.get('sku', '')}_{entry.get('ink', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     baseline_path = baselines_dir / base_name
     baseline["path"] = str(baseline_path.relative_to(V7_MODELS).as_posix())
     baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -603,7 +603,7 @@ def _write_ink_baseline(entry: Dict, active: Dict[str, str]) -> Optional[Path]:
 
     baselines_dir = V7_MODELS / "ink_baselines" / entry.get("sku", "") / entry.get("ink", "")
     baselines_dir.mkdir(parents=True, exist_ok=True)
-    base_name = f"IB_{entry.get('sku','')}_{entry.get('ink','')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    base_name = f"IB_{entry.get('sku', '')}_{entry.get('ink', '')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     baseline_path = baselines_dir / base_name
     baseline_doc = {
         "schema_version": "ink_baseline.v1",
@@ -1760,6 +1760,9 @@ async def inspect(
         use_cfg_snapshot = True
     out_path = run_dir / "inspection.json"
 
+    # Map UI mode 'pattern' to engine mode 'signature'
+    engine_mode = "signature" if mode == "pattern" else mode
+
     _run_script(
         script,
         [
@@ -1775,7 +1778,7 @@ async def inspect(
             str(cfg_path),
             *(["--cfg_snapshot"] if use_cfg_snapshot else []),
             "--mode",
-            mode,
+            engine_mode,
             "--out",
             str(out_path),
             *(["--expected_ink_count", str(expected_ink_count)] if expected_ink_count is not None else []),

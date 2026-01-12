@@ -14,7 +14,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.measure.color_masks import build_color_masks
+from core.measure.segmentation.color_masks import build_color_masks
 from core.signature.fit import fit_std_per_color
 
 

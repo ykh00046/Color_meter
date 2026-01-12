@@ -275,9 +275,21 @@ class SectorSegmenter:
             return None
 
         try:
-            from src.analysis.uniformity_analyzer import UniformityAnalyzer, UniformityConfig
+            # Use ported UniformityAnalyzer from v7 engine
+            import sys
+            from pathlib import Path
+
+            ROOT_DIR = Path(__file__).resolve().parents[2]
+            if str(ROOT_DIR) not in sys.path:
+                sys.path.append(str(ROOT_DIR))
+
+            from lens_signature_engine_v7.core.measure.metrics.uniformity import UniformityAnalyzer, UniformityConfig
 
             uniformity_analyzer = UniformityAnalyzer(UniformityConfig())
+
+            # v7 analyzer expects v7 RingSectorCell types
+            # We need to ensure cells are compatible or convert them
+            # For now, assuming attribute compatibility (duck typing)
             uniformity_report = uniformity_analyzer.analyze(cells)
 
             uniformity_data = {
@@ -299,7 +311,7 @@ class SectorSegmenter:
 
             return uniformity_data
         except ImportError:
-            logger.warning("UniformityAnalyzer not available")
+            logger.warning("UniformityAnalyzer not available in v7 engine")
             return None
         except Exception as e:
             logger.warning(f"Uniformity analysis failed: {e}")

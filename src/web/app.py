@@ -1114,7 +1114,7 @@ async def inspect_v2(
     Dashboard용 endpoint - pipeline.process() 통짜 호출 방식.
     기존 판정 로직을 100% 재사용하고, 추가로 ProfileAnalyzer로 그래프 데이터만 생성.
     """
-    from src.analysis.profile_analyzer import ProfileAnalyzer
+    from src.services.analysis_service import AnalysisService
     from src.utils.security import validate_file_extension, validate_file_size
 
     # 1. File Validation
@@ -1247,19 +1247,21 @@ async def inspect_v2(
         }
 
         # 4. ProfileAnalyzer로 그래프 데이터 생성
-        analyzer = ProfileAnalyzer()
+        # Refactored to use AnalysisService which wraps v7 engine
+        analysis_service = AnalysisService()
         rp = inspection_result.radial_profile
 
         if rp is None:
             raise ValueError("Radial profile not available in inspection result")
 
-        analysis_result = analyzer.analyze_profile(
-            r_norm=rp.r_normalized,
-            l_data=rp.L,
-            a_data=rp.a,
-            b_data=rp.b,
-            smoothing_window=smoothing_window,
-            gradient_threshold=gradient_threshold,
+        # zones_config는 현재 사용하지 않지만 인터페이스 호환성을 위해 None 전달 가능
+        # analyze_radial_profile 내부에서 v7 analyze_profile 호출
+        # smoothing_window, gradient_threshold는 현재 서비스 메서드에서 하드코딩 되어 있으나,
+        # 필요하다면 AnalysisService를 확장하여 인자로 받도록 수정 가능.
+        # 여기서는 기본값 사용.
+        analysis_result = analysis_service.analyze_radial_profile(
+            profile=rp,
+            lens_radius=float(inspection_result.lens_detection.radius),
         )
 
         # 5. lens_info 추가 (overlay용)

@@ -21,10 +21,10 @@ from ..gate.gate_engine import run_gate
 from ..geometry.lens_geometry import detect_lens_circle
 from ..insight.summary import build_v3_summary
 from ..insight.trend import build_v3_trend
-from ..measure.color_masks import build_color_masks, build_color_masks_with_retry
-from ..measure.ink_match import compute_cluster_deltas
-from ..measure.v2_diagnostics import build_v2_diagnostics
-from ..measure.v2_flags import build_v2_flags
+from ..measure.diagnostics.v2_diagnostics import build_v2_diagnostics
+from ..measure.diagnostics.v2_flags import build_v2_flags
+from ..measure.matching.ink_match import compute_cluster_deltas
+from ..measure.segmentation.color_masks import build_color_masks, build_color_masks_with_retry
 from ..model_registry import load_ink_baseline
 from ..reason_codes import reason_codes, reason_messages, split_reason
 from ..signature.radial_signature import build_radial_signature, build_radial_signature_masked, to_polar

@@ -279,6 +279,8 @@ def build_cluster_stats(
     k: int,
     *,
     deltaE_method: str = "76",
+    separation_d0: float = 3.0,
+    separation_k: float = 1.0,
 ) -> Dict[str, Any]:
     means = _mean_lab(lab_samples, labels, k)
     ratios = _area_ratios(labels, k)
@@ -307,6 +309,7 @@ def build_cluster_stats(
             }
         )
     sep = separation_ab(means, ratios)
+    sep_margin = (sep["min_deltaE"] - float(separation_d0)) / max(float(separation_k), 1e-6)
 
     # NEW: Calculate pairwise ΔE matrix for recipe estimation
     pairwise_deltaE = calculate_pairwise_deltaE(means, method=deltaE_method)
@@ -319,6 +322,7 @@ def build_cluster_stats(
             "min_deltaE_between_clusters": sep["min_deltaE"],
             "mean_deltaE_between_clusters": sep["mean_deltaE"],
             "deltaE_method": str(deltaE_method),
+            "separation_margin": float(sep_margin),
         },
         "pairwise_deltaE": pairwise_deltaE,
     }

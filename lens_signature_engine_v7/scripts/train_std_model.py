@@ -11,7 +11,7 @@ import cv2
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.geometry.lens_geometry import detect_lens_circle
-from core.measure.color_masks import build_color_masks
+from core.measure.segmentation.color_masks import build_color_masks
 from core.signature.fit import fit_std, fit_std_multi, fit_std_per_color
 from core.signature.model_io import save_model
 from core.utils import apply_white_balance

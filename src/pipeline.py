@@ -6,13 +6,14 @@ Inspection Pipeline Module
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator, InspectionResult
 from src.core.image_loader import ImageConfig, ImageLoader
-from src.core.lens_detector import DetectorConfig, LensDetectionError, LensDetector
+from src.core.lens_detector import DetectorConfig, LensDetection, LensDetectionError, LensDetector
 from src.core.quality_metrics import compute_quality_metrics
 from src.core.radial_profiler import ProfilerConfig, RadialProfiler
 from src.core.zone_segmenter import SegmenterConfig, ZoneSegmentationError, ZoneSegmenter
@@ -98,6 +99,71 @@ class InspectionPipeline:
 
         logger.info("InspectionPipeline initialized")
 
+    def _env_flag(self, name: str) -> bool:
+        value = os.getenv(name, "").strip().lower()
+        return value in {"1", "true", "yes", "y"}
+
+    def _attach_lens_roi(self, detection: LensDetection, image_shape) -> LensDetection:
+        h, w = image_shape[:2]
+        roi_x = int(detection.center_x - detection.radius * 1.1)
+        roi_y = int(detection.center_y - detection.radius * 1.1)
+        roi_w = int(detection.radius * 2.2)
+        roi_h = int(detection.radius * 2.2)
+
+        roi_x_start = max(0, roi_x)
+        roi_y_start = max(0, roi_y)
+        roi_x_end = min(w, roi_x + roi_w)
+        roi_y_end = min(h, roi_y + roi_h)
+
+        detection.roi = (roi_x_start, roi_y_start, roi_x_end - roi_x_start, roi_y_end - roi_y_start)
+        return detection
+
+    def _detect_lens_v7(self, image, params: Dict[str, Any]) -> Optional[LensDetection]:
+        try:
+            from lens_signature_engine_v7.core.geometry.lens_geometry import detect_lens_circle
+        except Exception as exc:
+            logger.warning("V7 geometry import failed: %s", exc)
+            return None
+
+        cfg = params.get("v7_geometry", {}) if isinstance(params, dict) else {}
+        try:
+            geom = detect_lens_circle(image, cfg=cfg)
+        except Exception as exc:
+            logger.warning("V7 geometry detection failed: %s", exc)
+            return None
+
+        if geom is None or geom.r <= 0 or geom.confidence <= 0:
+            logger.warning("V7 geometry returned low confidence; falling back to legacy detector")
+            return None
+
+        detection = LensDetection(
+            center_x=float(geom.cx),
+            center_y=float(geom.cy),
+            radius=float(geom.r),
+            confidence=float(geom.confidence),
+            method=f"v7:{geom.source}",
+        )
+        return self._attach_lens_roi(detection, image.shape)
+
+    def _load_v7_cfg(self, sku: str) -> Optional[Dict[str, Any]]:
+        v7_root = Path(__file__).resolve().parents[1] / "lens_signature_engine_v7"
+        cfg_path = v7_root / "configs" / "default.json"
+        if not cfg_path.exists():
+            return None
+
+        try:
+            from lens_signature_engine_v7.core.config_loader import load_cfg_with_sku
+        except Exception as exc:
+            logger.warning("V7 config loader import failed: %s", exc)
+            return None
+
+        try:
+            cfg, _, _ = load_cfg_with_sku(str(cfg_path), sku)
+            return cfg
+        except Exception as exc:
+            logger.warning("V7 config load failed: %s", exc)
+            return None
+
     def process(
         self,
         image_path: str,
@@ -122,6 +188,7 @@ class InspectionPipeline:
         """
         start_time = datetime.now()
         image_path = Path(image_path)
+        params = self.sku_config.get("params", {})
 
         logger.info(f"Processing image: {image_path}, SKU: {sku}")
 
@@ -184,7 +251,15 @@ class InspectionPipeline:
 
             # 2. 렌즈 검출 (상세 에러 메시지)
             logger.debug("Step 2: Detecting lens")
-            lens_detection = self.lens_detector.detect(processed_image)
+            use_v7_geometry = params.get("use_v7_geometry")
+            if use_v7_geometry is None:
+                use_v7_geometry = self._env_flag("LENS_USE_V7_GEOMETRY")
+
+            lens_detection = None
+            if use_v7_geometry:
+                lens_detection = self._detect_lens_v7(processed_image, params)
+            if lens_detection is None:
+                lens_detection = self.lens_detector.detect(processed_image)
 
             if lens_detection is None:
                 img_h, img_w = processed_image.shape[:2]
@@ -211,7 +286,6 @@ class InspectionPipeline:
                 suggestions.append("→ Verify image quality or adjust detector parameters")
 
             # 3. 극좌표 변환 및 프로파일 추출
-            params = self.sku_config.get("params", {})
             num_samples = params.get("num_samples")
             if isinstance(num_samples, (int, float)) and num_samples > 0:
                 self.radial_profiler.config.theta_samples = int(num_samples)
@@ -264,6 +338,7 @@ class InspectionPipeline:
                 inspection_result.image = image
                 inspection_result.radial_profile = radial_profile
                 inspection_result.metrics = quality_metrics
+
                 inspection_result.diagnostics = diagnostics if diagnostics else None
                 inspection_result.warnings = warnings if warnings else None
                 inspection_result.suggestions = suggestions if suggestions else None
@@ -292,7 +367,6 @@ class InspectionPipeline:
                 return inspection_result
 
             # 인쇄 영역 범위 추정 (SKU config 기반)
-            params = self.sku_config.get("params", {})
             optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
             center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
             r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)  # center exclusion takes priority
@@ -356,6 +430,39 @@ class InspectionPipeline:
             inspection_result.radial_profile = radial_profile
             inspection_result.metrics = quality_metrics
 
+            use_v7_ink = params.get("use_v7_ink_analysis")
+            if use_v7_ink is None:
+                use_v7_ink = self._env_flag("LENS_USE_V7_INK")
+
+            if use_v7_ink:
+                v7_cfg = self._load_v7_cfg(sku)
+                if v7_cfg:
+                    expected_ink = params.get("expected_ink_count") or v7_cfg.get("expected_ink_count")
+                    if expected_ink is not None:
+                        try:
+                            from lens_signature_engine_v7.core.measure.diagnostics.v2_diagnostics import (
+                                build_v2_diagnostics,
+                            )
+
+                            v2_diag = build_v2_diagnostics(
+                                processed_image,
+                                v7_cfg,
+                                expected_ink_count=int(expected_ink),
+                                expected_ink_count_registry=None,
+                                expected_ink_count_input=int(expected_ink),
+                            )
+                            if v2_diag:
+                                inspection_result.ink_analysis = {
+                                    "schema_version": "ink_analysis.v7",
+                                    "engine": "v7",
+                                    "expected_ink_count": int(expected_ink),
+                                    "v2_diagnostics": v2_diag,
+                                }
+                            else:
+                                warnings.append("V7 ink analysis returned empty diagnostics")
+                        except Exception as exc:
+                            warnings.append(f"V7 ink analysis failed: {exc}")
+
             # PHASE7 Priority 5: 진단 정보, 경고, 제안 추가
             inspection_result.diagnostics = diagnostics if diagnostics else None
             inspection_result.warnings = warnings if warnings else None
@@ -404,7 +511,6 @@ class InspectionPipeline:
                 logger.info("Attempting recovery with default 3-zone segmentation")
                 try:
                     # Recovery에도 r_inner, r_outer 적용
-                    params = self.sku_config.get("params", {})
                     optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
                     center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
                     r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
