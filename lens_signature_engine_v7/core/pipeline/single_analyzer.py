@@ -331,6 +331,68 @@ def _analyze_radial_profile(test_bgr: np.ndarray, geom: LensGeometry, cfg: Dict[
     }
 
 
+def _convert_color_masks_to_legacy_format(metadata: Dict[str, Any], total_pixels: int) -> Dict[str, Any]:
+    """
+    Convert build_color_masks() metadata to single_analyzer legacy format.
+
+    Args:
+        metadata: Metadata from build_color_masks_with_retry()
+        total_pixels: Total ROI pixels for area_ratio calculation
+
+    Returns:
+        Legacy format dict compatible with existing single_analyzer consumers
+    """
+    from ..utils import lab_cv8_to_cie
+
+    # Convert colors to clusters
+    cluster_list = []
+    for color_info in metadata.get("colors", []):
+        # color_info has: {color_id, lab_centroid, hex_ref, area_ratio, role}
+        # lab_centroid is in OpenCV scale [0-255, 0-255, 0-255]
+
+        lab_cv8 = color_info["lab_centroid"]  # Already OpenCV scale from build_color_masks
+
+        # Convert to CIE scale for consistency
+        lab_cie = lab_cv8_to_cie(np.array([lab_cv8], dtype=np.float32))[0].tolist()
+
+        # Extract cluster ID from color_id (e.g., "color_0" -> 0)
+        cluster_id = int(color_info["color_id"].split("_")[1])
+
+        cluster_list.append(
+            {
+                "id": cluster_id,
+                "centroid_lab": [round(lab_cie[0], 2), round(lab_cie[1], 2), round(lab_cie[2], 2)],
+                "centroid_lab_cv8": [round(lab_cv8[0], 2), round(lab_cv8[1], 2), round(lab_cv8[2], 2)],
+                "centroid_lab_cie": [round(lab_cie[0], 2), round(lab_cie[1], 2), round(lab_cie[2], 2)],
+                "pixel_count": int(color_info["area_ratio"] * total_pixels),
+                "area_ratio": round(float(color_info["area_ratio"]), 3),
+                "mean_hex": color_info["hex_ref"],
+                "role": color_info.get("role", "ink"),  # Include role for debugging
+            }
+        )
+
+    # Sort by L* (darker to lighter) for consistency
+    cluster_list.sort(key=lambda x: x["centroid_lab"][0])
+
+    # Re-assign IDs after sorting
+    for i, cluster in enumerate(cluster_list):
+        cluster["id"] = i
+
+    return {
+        "k": metadata.get("segmentation_k", metadata.get("k_used", len(cluster_list))),
+        "clusters": cluster_list,
+        "clustering_confidence": round(float(metadata.get("segmentation_confidence", 0.7)), 3),
+        "_meta": {
+            "expected_ink_count": metadata.get("expected_ink_count"),
+            "detected_ink_like_count": metadata.get("detected_ink_like_count"),
+            "segmentation_pass": metadata.get("segmentation_pass"),
+            "retry_reason": metadata.get("retry_reason"),
+            "total_pixels": total_pixels,
+            "warnings": metadata.get("warnings", []),
+        },
+    }
+
+
 def _analyze_ink_segmentation(
     test_bgr: np.ndarray, geom: LensGeometry, cfg: Dict[str, Any], expected_k: int = 3
 ) -> Dict[str, Any]:
@@ -353,125 +415,39 @@ def _analyze_ink_segmentation(
             "confidence": 0.85
         }
     """
-    from ..measure.ink_segmentation import kmeans_segment
+    # Use unified color_masks engine (with 2-pass retry and role classification)
+    from ..measure.color_masks import build_color_masks_with_retry
 
-    R = cfg.get("signature", {}).get("R", 100)
-    T = cfg.get("signature", {}).get("T", 360)
-    r_start = cfg.get("signature", {}).get("r_start", 0.3)
-    r_end = cfg.get("signature", {}).get("r_end", 0.9)
-
-    # Build polar
-    polar = to_polar(test_bgr, geom, R=R, T=T)
-    polar_lab = bgr_to_lab(polar).astype(np.float32)
-
-    # Build ROI mask
-    roi_mask, roi_meta = build_roi_mask(
-        polar_lab.shape[0],
-        polar_lab.shape[1],
-        r_start,
-        r_end,
-        center_excluded_frac=cfg.get("anomaly", {}).get("center_frac", 0.2),
-    )
-
-    # Extract samples from ROI
-    valid_mask = roi_mask > 0
-    lab_samples = polar_lab[valid_mask]  # Shape: (N, 3)
-
-    if lab_samples.shape[0] < expected_k:
-        # Not enough samples for clustering
-        return {"k": 0, "clusters": [], "confidence": 0.0, "error": "Not enough samples for clustering"}
-
-    # D. l_weight를 cfg에서 읽기 (하드코딩 제거)
-    v2_ink_cfg = cfg.get("v2_ink", {}) or {}
-    l_weight = float(v2_ink_cfg.get("l_weight", 0.3))
-
-    # Segment ink using k-means
     try:
-        labels, centers = kmeans_segment(lab_samples, k=expected_k, l_weight=l_weight)
+        # Run color segmentation with retry logic
+        color_masks, metadata = build_color_masks_with_retry(
+            test_bgr,
+            cfg,
+            expected_k=expected_k,
+            geom=geom,
+            confidence_threshold=0.7,
+            enable_retry=True,
+        )
 
-        if labels.size == 0 or centers.size == 0:
-            raise ValueError("K-means returned empty results")
+        # Calculate total ROI pixels for area_ratio conversion
+        R = cfg.get("polar", {}).get("R", 260)
+        T = cfg.get("polar", {}).get("T", 720)
+        total_pixels = R * T  # Approximate - actual ROI may be smaller
+
+        # Convert to legacy format
+        result = _convert_color_masks_to_legacy_format(metadata, total_pixels)
+
+        return result
 
     except Exception as e:
         # Fallback if segmentation fails
-        return {"k": 0, "clusters": [], "confidence": 0.0, "error": f"Segmentation failed: {str(e)}"}
-
-    # Calculate total pixels
-    total_pixels = int(np.sum(roi_mask > 0))
-
-    # Process clusters from k-means results
-    cluster_list = []
-    for i in range(expected_k):
-        # Count pixels in this cluster
-        cluster_mask = labels == i
-        count = int(np.sum(cluster_mask))
-
-        # Get centroid from centers
-        # Note: centers are in [a, b, L*l_weight] format from _build_features
-        # We need to reconstruct Lab from that
-        center = centers[i]
-        a_val = float(center[0])
-        b_val = float(center[1])
-        # D. l_weight로 복원 (cfg 변경 시에도 안전)
-        L_val = float(center[2] / l_weight) if l_weight > 0 else float(center[2])
-
-        centroid_cv8 = [L_val, a_val, b_val]
-
-        # Convert to CIE scale
-        from ..utils import lab_cv8_to_cie
-
-        centroid_cie = lab_cv8_to_cie(np.array([centroid_cv8], dtype=np.float32))[0].tolist()
-
-        # Convert Lab to hex (use CIE for proper color conversion)
-        hex_color = _lab_cie_to_hex(centroid_cie)
-
-        cluster_list.append(
-            {
-                "id": i,
-                "centroid_lab": [
-                    round(centroid_cie[0], 2),  # Use CIE as default for new code
-                    round(centroid_cie[1], 2),
-                    round(centroid_cie[2], 2),
-                ],
-                "centroid_lab_cv8": [round(centroid_cv8[0], 2), round(centroid_cv8[1], 2), round(centroid_cv8[2], 2)],
-                "centroid_lab_cie": [round(centroid_cie[0], 2), round(centroid_cie[1], 2), round(centroid_cie[2], 2)],
-                "pixel_count": count,
-                "area_ratio": round(float(count / total_pixels if total_pixels > 0 else 0), 3),
-                "mean_hex": hex_color,
-            }
-        )
-
-    # Sort clusters by L* value (darker to lighter) for consistent ordering
-    cluster_list.sort(key=lambda x: x["centroid_lab"][0])
-
-    # Re-assign IDs after sorting
-    for i, cluster in enumerate(cluster_list):
-        cluster["id"] = i
-
-    # Calculate clustering confidence using silhouette score
-    # Silhouette score: -1 (worst) to 1 (best), 0 = overlapping clusters
-    try:
-        from sklearn.metrics import silhouette_score
-
-        silhouette = silhouette_score(lab_samples, labels, metric="euclidean")
-        # Normalize to 0-1 range: (-1 to 1) → (0 to 1)
-        clustering_confidence = (silhouette + 1.0) / 2.0
-    except Exception:
-        # Fallback to simple heuristic
-        clustering_confidence = 0.7
-
-    return {
-        "k": expected_k,
-        "clusters": cluster_list,
-        "clustering_confidence": round(float(clustering_confidence), 3),
-        "_meta": {
-            "silhouette_score": round(
-                float(silhouette if "silhouette" in locals() else 0.4), 3
-            ),  # Legacy compatibility
-            "total_pixels": total_pixels,
-            "roi_coverage": round(float(total_pixels / (polar_lab.shape[0] * polar_lab.shape[1])), 3),
-        },
-    }
+        return {
+            "k": 0,
+            "clusters": [],
+            "clustering_confidence": 0.0,
+            "error": f"Segmentation failed: {str(e)}",
+            "_meta": {"exception": str(e)},
+        }
 
 
 def _lab_to_hex(lab: List[float]) -> str:
