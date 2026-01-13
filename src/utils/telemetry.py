@@ -13,11 +13,7 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
-from src.core.angular_profiler import RingSectorCell
-from src.core.color_evaluator import InspectionResult
-from src.core.lens_detector import LensDetection
-from src.core.radial_profiler import RadialProfile
-from src.core.zone_segmenter import Zone
+from src.schemas.inspection import InspectionResult, Zone
 
 
 class TelemetryExporter:
@@ -50,10 +46,10 @@ class TelemetryExporter:
         self,
         inspection_result: InspectionResult,
         image: Optional[np.ndarray] = None,
-        radial_profile: Optional[RadialProfile] = None,
-        lens_detection: Optional[LensDetection] = None,
+        radial_profile: Optional[Any] = None,
+        lens_detection: Optional[Any] = None,
         zones: Optional[List[Zone]] = None,
-        ring_sector_cells: Optional[List[RingSectorCell]] = None,
+        ring_sector_cells: Optional[List[Any]] = None,
         uniformity_analysis: Optional[Dict[str, Any]] = None,
         boundary_detection: Optional[Dict[str, Any]] = None,
         background_mask_stats: Optional[Dict[str, Any]] = None,
@@ -151,7 +147,7 @@ class TelemetryExporter:
             "inspection_id": metadata.get("inspection_id", ""),
         }
 
-    def _export_lens_detection(self, lens: LensDetection) -> Dict[str, Any]:
+    def _export_lens_detection(self, lens: Any) -> Dict[str, Any]:
         """렌즈 검출 정보 (상세)"""
         return {
             "center_x": float(lens.center_x),
@@ -162,7 +158,7 @@ class TelemetryExporter:
             "roi": lens.roi.tolist() if isinstance(lens.roi, np.ndarray) else lens.roi,
         }
 
-    def _export_radial_profile(self, profile: RadialProfile) -> Dict[str, Any]:
+    def _export_radial_profile(self, profile: Any) -> Dict[str, Any]:
         """
         Radial Profile 원본 (AI 학습용 핵심!)
 
@@ -213,7 +209,7 @@ class TelemetryExporter:
             for zone in zones
         ]
 
-    def _export_ring_sector_cells(self, cells: List[RingSectorCell]) -> List[Dict[str, Any]]:
+    def _export_ring_sector_cells(self, cells: List[Any]) -> List[Dict[str, Any]]:
         """Ring×Sector 36개 셀"""
         return [
             {

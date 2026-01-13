@@ -18,9 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from src.core.color_evaluator import InspectionResult, ZoneResult
 from src.core.lens_detector import LensDetection
-from src.core.zone_segmenter import Zone
+from src.schemas.inspection import InspectionResult, Zone, ZoneResult
 from src.visualizer import InspectionVisualizer, VisualizerConfig
 
 

@@ -7,8 +7,8 @@ from datetime import datetime
 import numpy as np
 import pytest
 
-from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator, InspectionResult, ZoneResult
-from src.core.zone_segmenter import Zone
+from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator
+from src.schemas.inspection import InspectionResult, Zone, ZoneResult
 
 # ================================================================
 # Fixtures

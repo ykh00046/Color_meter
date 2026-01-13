@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.core.color_evaluator import InspectionResult, ZoneResult
 from src.models import InspectionHistory, JudgmentType
 from src.models.database import Base
+from src.schemas.inspection import InspectionResult, ZoneResult
 from src.web.routers.inspection import save_inspection_to_history
 
 

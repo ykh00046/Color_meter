@@ -21,7 +21,7 @@ def make_profile(a_values):
 
 def test_config_defaults():
     cfg = SegmenterConfig()
-    assert cfg.detection_method == "hybrid"
+    assert cfg.detection_method == "variable_width"
     assert cfg.min_zone_width == pytest.approx(0.03)
     assert cfg.smoothing_window == 11
     assert cfg.polyorder == 3

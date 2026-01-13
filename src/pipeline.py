@@ -6,25 +6,101 @@ Inspection Pipeline Module
 
 import json
 import logging
-import os
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.core.color_evaluator import ColorEvaluationError, ColorEvaluator, InspectionResult
-from src.core.image_loader import ImageConfig, ImageLoader
-from src.core.lens_detector import DetectorConfig, LensDetection, LensDetectionError, LensDetector
-from src.core.quality_metrics import compute_quality_metrics
-from src.core.radial_profiler import ProfilerConfig, RadialProfiler
-from src.core.zone_segmenter import SegmenterConfig, ZoneSegmentationError, ZoneSegmenter
+import cv2
+import numpy as np
+from scipy.signal import savgol_filter
+
+from src.schemas.inspection import InspectionResult, ZoneResult
+from src.utils.file_io import FileIO
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ImageConfig:
+    resolution_w: int = 1920
+    resolution_h: int = 1080
+    roi: Optional[tuple[int, int, int, int]] = None
+    denoise_enabled: bool = True
+    denoise_method: str = "bilateral"
+    denoise_kernel_size: int = 5
+    denoise_sigma_color: int = 75
+    denoise_sigma_space: int = 75
+    white_balance_enabled: bool = True
+    white_balance_method: str = "gray_world"
+    auto_roi_detection: bool = True
+    auto_roi_margin_ratio: float = 0.2
 
 
 class PipelineError(Exception):
     """파이프라인 실행 중 발생하는 예외"""
 
     pass
+
+
+class LensDetectionError(Exception):
+    pass
+
+
+@dataclass
+class LensDetection:
+    center_x: float
+    center_y: float
+    radius: float
+    confidence: float = 1.0
+    method: str = "unknown"
+    roi: Optional[tuple[int, int, int, int]] = None
+
+
+@dataclass
+class DetectorConfig:
+    method: str = "hybrid"
+    hough_dp: float = 1.2
+    hough_min_dist_ratio: float = 0.5
+    hough_param1: float = 50
+    hough_param2: float = 30
+    hough_min_radius_ratio: float = 0.3
+    hough_max_radius_ratio: float = 0.8
+    contour_threshold_method: str = "otsu"
+    contour_morph_kernel_size: int = 5
+    contour_min_area_ratio: float = 0.01
+    hybrid_merge_dist_threshold: float = 10.0
+    subpixel_refinement_enabled: bool = False
+    subpixel_window_size: int = 21
+    background_fallback_enabled: bool = True
+    background_color_distance_threshold: float = 30.0
+    background_min_area_ratio: float = 0.05
+
+
+@dataclass
+class RadialProfile:
+    r_normalized: np.ndarray
+    L: np.ndarray
+    a: np.ndarray
+    b: np.ndarray
+    std_L: np.ndarray
+    std_a: np.ndarray
+    std_b: np.ndarray
+    pixel_count: np.ndarray
+
+
+@dataclass
+class ProfilerConfig:
+    r_start_ratio: float = 0.0
+    r_end_ratio: float = 1.0
+    r_step_pixels: int = 1
+    theta_samples: int = 360
+    smoothing_enabled: bool = True
+    smoothing_method: str = "savgol"
+    savgol_window_length: int = 11
+    savgol_polyorder: int = 3
+    moving_average_window: int = 5
+    sample_percentile: Optional[float] = None
 
 
 class InspectionPipeline:
@@ -41,7 +117,7 @@ class InspectionPipeline:
         image_config: Optional[ImageConfig] = None,
         detector_config: Optional[DetectorConfig] = None,
         profiler_config: Optional[ProfilerConfig] = None,
-        segmenter_config: Optional[SegmenterConfig] = None,
+        segmenter_config: Optional[Any] = None,
         save_intermediates: bool = False,
     ):
         """
@@ -58,50 +134,781 @@ class InspectionPipeline:
         self.sku_config = sku_config
         self.save_intermediates = save_intermediates
 
-        # 각 모듈 초기화
-        self.image_loader = ImageLoader(image_config or ImageConfig())
-        self.lens_detector = LensDetector(detector_config or DetectorConfig())
-
-        # profiler 설정: SKU params.optical_clear_ratio -> r_start_ratio에 반영
-        profiler_cfg = profiler_config or ProfilerConfig()
-        params = sku_config.get("params", {})
-        optical_clear = params.get("optical_clear_ratio")
-        center_exclude = params.get("center_exclude_ratio")
-        if isinstance(optical_clear, (int, float)) and 0 <= optical_clear < 1:
-            profiler_cfg.r_start_ratio = float(optical_clear)
-        if isinstance(center_exclude, (int, float)) and 0 <= center_exclude < 1:
-            profiler_cfg.r_start_ratio = max(profiler_cfg.r_start_ratio, float(center_exclude))
-        if profiler_cfg.r_start_ratio > 0:
-            logger.info(
-                "Applying r_start_ratio=%.3f (optical_clear_ratio=%s, center_exclude_ratio=%s)",
-                profiler_cfg.r_start_ratio,
-                f"{optical_clear:.3f}" if isinstance(optical_clear, (int, float)) else "None",
-                f"{center_exclude:.3f}" if isinstance(center_exclude, (int, float)) else "None",
-            )
-        self.radial_profiler = RadialProfiler(profiler_cfg)
-        seg_cfg = segmenter_config or SegmenterConfig()
-        # Apply override params (used by recompute)
-        if isinstance(params.get("detection_method"), str):
-            seg_cfg.detection_method = params["detection_method"]
-        if isinstance(params.get("smoothing_window"), (int, float)):
-            seg_cfg.smoothing_window = int(params["smoothing_window"])
-        if isinstance(params.get("min_gradient"), (int, float)):
-            seg_cfg.min_gradient = float(params["min_gradient"])
-        if isinstance(params.get("min_delta_e"), (int, float)):
-            seg_cfg.min_delta_e = float(params["min_delta_e"])
-        if isinstance(params.get("uniform_split_priority"), bool):
-            seg_cfg.uniform_split_priority = params["uniform_split_priority"]
-        if isinstance(params.get("expected_zones"), (int, float)):
-            seg_cfg.expected_zones = int(params["expected_zones"])
-        # Note: expected_zones는 process() 메서드에서 params.expected_zones로 읽어서 segment()에 전달
-        self.zone_segmenter = ZoneSegmenter(seg_cfg)
-        self.color_evaluator = ColorEvaluator(sku_config)
+        self._image_config = image_config or ImageConfig()
+        self._detector_config = detector_config or DetectorConfig()
+        self._profiler_config = profiler_config or ProfilerConfig()
+        self._file_io = FileIO()
 
         logger.info("InspectionPipeline initialized")
 
-    def _env_flag(self, name: str) -> bool:
-        value = os.getenv(name, "").strip().lower()
-        return value in {"1", "true", "yes", "y"}
+    def _load_image(self, path: Path) -> Optional[np.ndarray]:
+        image = self._file_io.load_image(path)
+        if image is None:
+            logger.warning("Failed to load image from %s", path)
+        return image
+
+    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
+        if image is None:
+            return None
+        if image.size == 0:
+            return image
+
+        processed = image.copy()
+        cfg = self._image_config
+
+        current_roi = cfg.roi
+        if cfg.auto_roi_detection:
+            x, y, w, h = self._detect_roi_from_image(processed)
+            if w > 0 and h > 0:
+                current_roi = (x, y, w, h)
+
+        if current_roi:
+            x, y, w, h = current_roi
+            if x >= 0 and y >= 0 and x + w <= processed.shape[1] and y + h <= processed.shape[0]:
+                processed = processed[y : y + h, x : x + w]
+
+        if cfg.denoise_enabled:
+            processed = self._denoise_image(processed, cfg)
+
+        if cfg.white_balance_enabled:
+            processed = self._apply_white_balance(processed, cfg)
+
+        return processed
+
+    def _denoise_image(self, image: np.ndarray, cfg: ImageConfig) -> np.ndarray:
+        if image.size == 0:
+            return image
+        if cfg.denoise_method == "gaussian":
+            return cv2.GaussianBlur(image, (cfg.denoise_kernel_size, cfg.denoise_kernel_size), 0)
+        if cfg.denoise_method == "bilateral":
+            return cv2.bilateralFilter(image, cfg.denoise_kernel_size, cfg.denoise_sigma_color, cfg.denoise_sigma_space)
+        return image
+
+    def _apply_white_balance(self, image: np.ndarray, cfg: ImageConfig) -> np.ndarray:
+        if image.size == 0:
+            return image
+        if cfg.white_balance_method == "gray_world":
+            return self._gray_world_white_balance(image)
+        return image
+
+    def _gray_world_white_balance(self, image: np.ndarray) -> np.ndarray:
+        if image.size == 0:
+            return image
+        b, g, r = cv2.split(image)
+        avg_b, avg_g, avg_r = np.mean(b), np.mean(g), np.mean(r)
+
+        avg_b = 1.0 if avg_b == 0 else avg_b
+        avg_g = 1.0 if avg_g == 0 else avg_g
+        avg_r = 1.0 if avg_r == 0 else avg_r
+
+        avg_all = (avg_b + avg_g + avg_r) / 3.0
+
+        scale_b = avg_all / avg_b
+        scale_g = avg_all / avg_g
+        scale_r = avg_all / avg_r
+
+        b = cv2.convertScaleAbs(b * scale_b)
+        g = cv2.convertScaleAbs(g * scale_g)
+        r = cv2.convertScaleAbs(r * scale_r)
+        return cv2.merge([b, g, r])
+
+    def _detect_roi_from_image(self, image: np.ndarray) -> tuple[int, int, int, int]:
+        if image is None or image.size == 0:
+            return (0, 0, 0, 0)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=2)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            return (0, 0, image.shape[1], image.shape[0])
+
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+        margin_x = int(w * self._image_config.auto_roi_margin_ratio)
+        margin_y = int(h * self._image_config.auto_roi_margin_ratio)
+
+        x = max(0, x - margin_x)
+        y = max(0, y - margin_y)
+        w = min(image.shape[1] - x, w + 2 * margin_x)
+        h = min(image.shape[0] - y, h + 2 * margin_y)
+
+        return (x, y, w, h)
+
+    def _configure_profiler(self, params: Dict[str, Any]) -> None:
+        cfg = self._profiler_config
+        optical_clear = params.get("optical_clear_ratio")
+        center_exclude = params.get("center_exclude_ratio")
+        if isinstance(optical_clear, (int, float)) and 0 <= optical_clear < 1:
+            cfg.r_start_ratio = float(optical_clear)
+        if isinstance(center_exclude, (int, float)) and 0 <= center_exclude < 1:
+            cfg.r_start_ratio = max(cfg.r_start_ratio, float(center_exclude))
+        if cfg.r_start_ratio > 0:
+            logger.info(
+                "Applying r_start_ratio=%.3f (optical_clear_ratio=%s, center_exclude_ratio=%s)",
+                cfg.r_start_ratio,
+                f"{optical_clear:.3f}" if isinstance(optical_clear, (int, float)) else "None",
+                f"{center_exclude:.3f}" if isinstance(center_exclude, (int, float)) else "None",
+            )
+
+    def _build_radial_profile_v7(self, image: np.ndarray, detection: LensDetection) -> RadialProfile:
+        if image is None:
+            raise ValueError("Input image cannot be None.")
+        if detection is None:
+            raise ValueError("LensDetection object cannot be None.")
+
+        cfg = self._profiler_config
+        r_samples = int(detection.radius / cfg.r_step_pixels) if cfg.r_step_pixels > 0 else int(detection.radius)
+        if r_samples < 1:
+            r_samples = 1
+        theta_samples = int(cfg.theta_samples)
+
+        from lens_signature_engine_v7.core.signature.radial_signature import to_polar
+        from lens_signature_engine_v7.core.types import LensGeometry
+        from lens_signature_engine_v7.core.utils import bgr_to_lab_cie
+
+        geom = LensGeometry(
+            cx=float(detection.center_x),
+            cy=float(detection.center_y),
+            r=float(detection.radius),
+            confidence=float(detection.confidence),
+            source="pipeline",
+        )
+        polar_bgr = to_polar(image, geom, R=r_samples, T=theta_samples)
+        if polar_bgr.size == 0:
+            dummy_r = np.linspace(0, 1, 10)
+            zeros = np.zeros_like(dummy_r)
+            return RadialProfile(dummy_r, zeros, zeros, zeros, zeros, zeros, zeros, np.zeros_like(dummy_r, dtype=int))
+
+        lab = bgr_to_lab_cie(polar_bgr)
+        _, R, _ = lab.shape
+        r0 = int(R * cfg.r_start_ratio)
+        r1 = int(R * cfg.r_end_ratio)
+        r0 = max(0, min(R - 1, r0))
+        r1 = max(r0 + 1, min(R, r1))
+
+        lab_roi = lab[:, r0:r1, :]
+        if lab_roi.size == 0:
+            dummy_r = np.linspace(0, 1, 10)
+            zeros = np.zeros_like(dummy_r)
+            return RadialProfile(dummy_r, zeros, zeros, zeros, zeros, zeros, zeros, np.zeros_like(dummy_r, dtype=int))
+
+        L_plane = lab_roi[..., 0]
+        a_plane = lab_roi[..., 1]
+        b_plane = lab_roi[..., 2]
+
+        if cfg.sample_percentile is not None:
+            L_profile = np.percentile(L_plane, cfg.sample_percentile, axis=0)
+            a_profile = np.percentile(a_plane, cfg.sample_percentile, axis=0)
+            b_profile = np.percentile(b_plane, cfg.sample_percentile, axis=0)
+        else:
+            L_profile = L_plane.mean(axis=0)
+            a_profile = a_plane.mean(axis=0)
+            b_profile = b_plane.mean(axis=0)
+
+        std_L = L_plane.std(axis=0)
+        std_a = a_plane.std(axis=0)
+        std_b = b_plane.std(axis=0)
+
+        r_normalized = np.linspace(0.0, 1.0, R)[r0:r1]
+        pixel_count = np.full_like(L_profile, lab_roi.shape[0])
+
+        profile = RadialProfile(
+            r_normalized=r_normalized,
+            L=L_profile,
+            a=a_profile,
+            b=b_profile,
+            std_L=std_L,
+            std_a=std_a,
+            std_b=std_b,
+            pixel_count=pixel_count,
+        )
+
+        if cfg.smoothing_enabled:
+            profile = self._smooth_profile(profile, cfg)
+
+        return profile
+
+    def _smooth_profile(self, profile: RadialProfile, cfg: ProfilerConfig) -> RadialProfile:
+        L, a, b = profile.L, profile.a, profile.b
+        if cfg.smoothing_method == "savgol" and len(L) >= cfg.savgol_window_length:
+            L = savgol_filter(L, cfg.savgol_window_length, cfg.savgol_polyorder)
+            a = savgol_filter(a, cfg.savgol_window_length, cfg.savgol_polyorder)
+            b = savgol_filter(b, cfg.savgol_window_length, cfg.savgol_polyorder)
+        elif cfg.smoothing_method == "moving_average" and len(L) >= cfg.moving_average_window:
+            weights = np.ones(cfg.moving_average_window) / cfg.moving_average_window
+            L_valid = np.convolve(L, weights, mode="valid")
+            a_valid = np.convolve(a, weights, mode="valid")
+            b_valid = np.convolve(b, weights, mode="valid")
+            pad_len = (cfg.moving_average_window - 1) // 2
+            L = np.pad(L_valid, (pad_len, len(L) - len(L_valid) - pad_len), mode="edge")
+            a = np.pad(a_valid, (pad_len, len(a) - len(a_valid) - pad_len), mode="edge")
+            b = np.pad(b_valid, (pad_len, len(b) - len(b_valid) - pad_len), mode="edge")
+
+        return RadialProfile(
+            profile.r_normalized, L, a, b, profile.std_L, profile.std_a, profile.std_b, profile.pixel_count
+        )
+
+    def _compute_quality_metrics(
+        self,
+        image_bgr: np.ndarray,
+        lens_detection: Optional[Any] = None,
+        include_dot_stats: bool = True,
+    ) -> Dict[str, Any]:
+        if image_bgr is None or image_bgr.size == 0:
+            return {}
+
+        lens_mask = None
+        if lens_detection is not None:
+            lens_mask = self._circle_mask(
+                image_bgr.shape[:2],
+                float(lens_detection.center_x),
+                float(lens_detection.center_y),
+                float(lens_detection.radius),
+            )
+
+        metrics = {
+            "blur": {"score": self._compute_blur_score(image_bgr)},
+            "histogram": self._compute_histograms(image_bgr, lens_mask=lens_mask),
+        }
+
+        if include_dot_stats:
+            dot_stats = self._compute_dot_stats(image_bgr, lens_mask=lens_mask)
+            if dot_stats is not None:
+                metrics["dot_stats"] = dot_stats
+
+        return metrics
+
+    def _compute_blur_score(self, image_bgr: np.ndarray) -> float:
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+    def _compute_histograms(
+        self,
+        image_bgr: np.ndarray,
+        lens_mask: Optional[np.ndarray] = None,
+        bins: int = 32,
+    ) -> Dict[str, Any]:
+        lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
+        hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+
+        mask = lens_mask
+        if mask is not None and mask.dtype != np.uint8:
+            mask = mask.astype(np.uint8)
+
+        return {
+            "bins": bins,
+            "lab": {
+                "L": self._calc_hist(lab, 0, bins, (0, 256), mask),
+                "a": self._calc_hist(lab, 1, bins, (0, 256), mask),
+                "b": self._calc_hist(lab, 2, bins, (0, 256), mask),
+            },
+            "hsv": {
+                "H": self._calc_hist(hsv, 0, bins, (0, 180), mask),
+                "S": self._calc_hist(hsv, 1, bins, (0, 256), mask),
+                "V": self._calc_hist(hsv, 2, bins, (0, 256), mask),
+            },
+        }
+
+    def _calc_hist(
+        self,
+        image: np.ndarray,
+        channel: int,
+        bins: int,
+        value_range: tuple,
+        mask: Optional[np.ndarray],
+    ) -> list:
+        hist = cv2.calcHist([image], [channel], mask, [bins], value_range).astype(np.float32)
+        total = float(np.sum(hist))
+        if total > 0:
+            hist /= total
+        return hist.flatten().tolist()
+
+    def _compute_dot_stats(
+        self,
+        image_bgr: np.ndarray,
+        lens_mask: Optional[np.ndarray] = None,
+        min_area: int = 5,
+    ) -> Optional[Dict[str, Any]]:
+        if lens_mask is None:
+            return None
+
+        hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+        s_channel = hsv[:, :, 1]
+
+        mask = lens_mask
+        if mask.dtype != np.uint8:
+            mask = mask.astype(np.uint8)
+
+        s_vals = s_channel[mask > 0]
+        if s_vals.size == 0:
+            return None
+
+        _, s_thresh = cv2.threshold(s_vals, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        s_mask = (s_channel >= s_thresh).astype(np.uint8) * 255
+        s_mask = cv2.bitwise_and(s_mask, s_mask, mask=mask)
+
+        lens_pixels = int(np.sum(mask > 0))
+        if lens_pixels <= 0:
+            return None
+
+        ink_pixels = int(np.sum(s_mask > 0))
+        if ink_pixels <= 0:
+            return None
+
+        dot_coverage = ink_pixels / lens_pixels
+
+        contours, _ = cv2.findContours(s_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        areas = [cv2.contourArea(c) for c in contours]
+        areas = [a for a in areas if a >= min_area]
+
+        if not areas:
+            return {
+                "dot_count": 0,
+                "dot_coverage": float(dot_coverage),
+                "dot_area_mean": 0.0,
+                "dot_area_std": 0.0,
+                "dot_area_min": 0.0,
+                "dot_area_max": 0.0,
+            }
+
+        areas_arr = np.asarray(areas, dtype=np.float32)
+        return {
+            "dot_count": int(len(areas)),
+            "dot_coverage": float(dot_coverage),
+            "dot_area_mean": float(np.mean(areas_arr)),
+            "dot_area_std": float(np.std(areas_arr)),
+            "dot_area_min": float(np.min(areas_arr)),
+            "dot_area_max": float(np.max(areas_arr)),
+        }
+
+    def _circle_mask(
+        self,
+        shape: tuple,
+        center_x: float,
+        center_y: float,
+        radius: float,
+    ) -> np.ndarray:
+        h, w = shape
+        yy, xx = np.indices((h, w))
+        rr = np.sqrt((xx - center_x) ** 2 + (yy - center_y) ** 2)
+        mask = (rr <= radius).astype(np.uint8) * 255
+        return mask
+
+    def _evaluate_v7_decision(
+        self, image: np.ndarray, sku: str, ink: str, params: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        v7_cfg = self._load_v7_cfg(sku)
+        if not v7_cfg:
+            return None
+
+        try:
+            from lens_signature_engine_v7.core.model_registry import (
+                compute_cfg_hash,
+                load_expected_ink_count,
+                load_pattern_baseline,
+                load_std_models_auto,
+            )
+            from lens_signature_engine_v7.core.pipeline.analyzer import evaluate_multi, evaluate_per_color
+            from lens_signature_engine_v7.core.types import Decision, GateResult
+        except Exception as exc:
+            logger.warning("V7 analyzer import failed: %s", exc)
+            return None
+
+        models_root = Path(__file__).resolve().parents[1] / "lens_signature_engine_v7" / "models"
+        cfg_hash = compute_cfg_hash(v7_cfg)
+
+        models, color_mode, color_metadata, reasons = load_std_models_auto(
+            str(models_root), sku, ink, cfg_hash=cfg_hash
+        )
+        pattern_baseline, baseline_reasons = load_pattern_baseline(str(models_root), sku, ink)
+        expected_ink_count_registry = load_expected_ink_count(str(models_root), sku, ink)
+        expected_ink_count_input = params.get("expected_ink_count")
+        if expected_ink_count_input is None:
+            expected_ink_count_input = v7_cfg.get("expected_ink_count")
+
+        ok_log_context = {
+            "sku": sku,
+            "ink": ink,
+            "models_root": str(models_root),
+            "expected_ink_count_input": expected_ink_count_input,
+            "expected_ink_count_registry": expected_ink_count_registry,
+        }
+
+        if models is None:
+            label = "RETAKE"
+            reason_list = reasons or ["MODEL_NOT_FOUND"]
+            decision = Decision(
+                label=label,
+                reasons=reason_list,
+                reason_codes=reason_list,
+                reason_messages=reason_list,
+                gate=GateResult(passed=False, reasons=reason_list, scores={}),
+                signature=None,
+                anomaly=None,
+                phase="INSPECTION",
+            )
+            if reasons:
+                decision.debug = {"model_loading": {"reasons": reasons}}
+            return {
+                "decision": decision,
+                "v7_cfg": v7_cfg,
+                "pattern_baseline_reasons": baseline_reasons,
+                "expected_ink_count_input": expected_ink_count_input,
+            }
+
+        if color_mode == "per_color":
+            expected_inks = expected_ink_count_registry or expected_ink_count_input
+            if expected_inks is None and color_metadata:
+                expected_inks = len(color_metadata)
+            if expected_inks is None:
+                expected_inks = 1
+            decision, _ = evaluate_per_color(
+                image,
+                models,
+                color_metadata or {},
+                v7_cfg,
+                expected_ink_count=int(expected_inks),
+                pattern_baseline=pattern_baseline,
+                ok_log_context=ok_log_context,
+            )
+        else:
+            decision, _ = evaluate_multi(
+                image,
+                models,
+                v7_cfg,
+                pattern_baseline=pattern_baseline,
+                ok_log_context=ok_log_context,
+            )
+
+        if baseline_reasons and decision.debug is not None:
+            decision.debug.setdefault("baseline_reasons", baseline_reasons)
+
+        return {
+            "decision": decision,
+            "v7_cfg": v7_cfg,
+            "pattern_baseline_reasons": baseline_reasons,
+            "expected_ink_count_input": expected_ink_count_input,
+        }
+
+    def _map_v7_label(self, label: str, warnings: List[str]) -> str:
+        if label == "OK":
+            return "OK_WITH_WARNING" if warnings else "OK"
+        if label.startswith("OK"):
+            return "OK"
+        if label in {"RETAKE", "STD_RETAKE"}:
+            return "RETAKE"
+        return "NG"
+
+    def _build_v7_zone_results(
+        self,
+        decision: Any,
+        overall_delta_e: float,
+        warnings: List[str],
+        lens_pixel_count: Optional[int],
+        threshold_value: Optional[float],
+        segment_k: Optional[Dict[str, float]],
+    ) -> List[ZoneResult]:
+        v2_diag = getattr(decision, "diagnostics", {}).get("v2_diagnostics") if decision else None
+        is_ok = self._map_v7_label(decision.label, warnings) in {"OK", "OK_WITH_WARNING"}
+        zone_results: List[ZoneResult] = []
+
+        if isinstance(v2_diag, dict):
+            clusters = (v2_diag.get("segmentation") or {}).get("clusters") or []
+            for idx, cluster in enumerate(clusters, start=1):
+                lab = cluster.get("mean_lab")
+                if not isinstance(lab, list) or len(lab) != 3:
+                    continue
+                role = cluster.get("role") or "ink"
+                area_ratio = float(cluster.get("area_ratio") or 0.0)
+                if lens_pixel_count:
+                    pixel_count = int(area_ratio * lens_pixel_count)
+                else:
+                    pixel_count = 0
+                std_lab = None
+                if isinstance(v2_diag, dict):
+                    palette = (v2_diag.get("palette") or {}).get("colors") or []
+                    if idx - 1 < len(palette):
+                        pal = palette[idx - 1]
+                        pal_lab = pal.get("mean_lab_cie")
+                        if isinstance(pal_lab, list) and len(pal_lab) == 3:
+                            std_lab = (float(pal_lab[0]), float(pal_lab[1]), float(pal_lab[2]))
+
+                chroma_stats = None
+                if isinstance(std_lab, tuple):
+                    chroma = float(np.hypot(std_lab[1], std_lab[2]))
+                    chroma_stats = {
+                        "q25": chroma,
+                        "median": chroma,
+                        "q75": chroma,
+                        "iqr": 0.0,
+                    }
+
+                internal_uniformity = None
+                uniformity_grade = None
+                if isinstance(v2_diag, dict):
+                    quality = (v2_diag.get("segmentation") or {}).get("quality") or {}
+                    min_delta = quality.get("min_deltaE_between_clusters")
+                    if isinstance(min_delta, (int, float)):
+                        internal_uniformity = max(0.0, min(1.0, float(min_delta) / 10.0))
+                        if internal_uniformity >= 0.7:
+                            uniformity_grade = "Good"
+                        elif internal_uniformity >= 0.4:
+                            uniformity_grade = "Medium"
+                        else:
+                            uniformity_grade = "Poor"
+
+                delta_e = 0.0
+                if std_lab is not None:
+                    delta_e = float(
+                        np.linalg.norm(np.array(lab, dtype=np.float32) - np.array(std_lab, dtype=np.float32))
+                    )
+
+                if threshold_value is not None:
+                    threshold = float(threshold_value)
+                else:
+                    threshold = float(overall_delta_e)
+                if segment_k:
+                    radial_curve = cluster.get("radial_presence_curve")
+                    r_pos = None
+                    if isinstance(radial_curve, list) and radial_curve:
+                        weights = [float(v) for v in radial_curve]
+                        total = sum(weights)
+                        if total > 0:
+                            r_norm = sum(i * w for i, w in enumerate(weights)) / total / max(len(weights) - 1, 1)
+                            r_start = float(
+                                (decision.diagnostics.get("v2_diagnostics") or {}).get("roi", {}).get("r_start", 0.0)
+                            )
+                            r_end = float(
+                                (decision.diagnostics.get("v2_diagnostics") or {}).get("roi", {}).get("r_end", 1.0)
+                            )
+                            r_pos = r_start + (r_end - r_start) * r_norm
+                    if r_pos is None:
+                        r_pos = (idx - 0.5) / max(len(clusters), 1)
+                    if r_pos < 0.33 and "inner" in segment_k:
+                        threshold *= float(segment_k["inner"])
+                    elif r_pos < 0.66 and "mid" in segment_k:
+                        threshold *= float(segment_k["mid"])
+                    elif "outer" in segment_k:
+                        threshold *= float(segment_k["outer"])
+
+                zone_results.append(
+                    ZoneResult(
+                        zone_name=f"{role.upper()}_{idx}",
+                        measured_lab=(float(lab[0]), float(lab[1]), float(lab[2])),
+                        target_lab=std_lab or (float(lab[0]), float(lab[1]), float(lab[2])),
+                        delta_e=delta_e,
+                        threshold=threshold,
+                        is_ok=is_ok,
+                        pixel_count=pixel_count,
+                        diff={
+                            "area_ratio": area_ratio,
+                            "inkness_score": cluster.get("inkness_score"),
+                            "mean_rgb": cluster.get("mean_rgb"),
+                            "mean_hex": cluster.get("mean_hex"),
+                            "radial_presence_curve": cluster.get("radial_presence_curve"),
+                            "spatial_prior": cluster.get("spatial_prior"),
+                        },
+                        std_lab=std_lab,
+                        chroma_stats=chroma_stats,
+                        internal_uniformity=internal_uniformity,
+                        uniformity_grade=uniformity_grade,
+                    )
+                )
+
+        if zone_results:
+            return zone_results
+
+        measured_lab = (0.0, 0.0, 0.0)
+        if isinstance(v2_diag, dict):
+            direction = v2_diag.get("direction") or {}
+            lab = direction.get("roi_lab_mean") or direction.get("global_lab_mean")
+            if isinstance(lab, list) and len(lab) == 3:
+                measured_lab = (float(lab[0]), float(lab[1]), float(lab[2]))
+
+        fallback_threshold = float(threshold_value) if threshold_value is not None else float(overall_delta_e)
+        return [
+            ZoneResult(
+                zone_name="INK_1",
+                measured_lab=measured_lab,
+                target_lab=measured_lab,
+                delta_e=float(overall_delta_e),
+                threshold=fallback_threshold,
+                is_ok=is_ok,
+                pixel_count=lens_pixel_count or 0,
+            )
+        ]
+
+    def _build_inspection_result_from_v7(
+        self,
+        decision: Any,
+        sku: str,
+        warnings: List[str],
+        lens_detection: Optional[LensDetection] = None,
+        image_shape: Optional[tuple[int, int]] = None,
+        v7_cfg: Optional[Dict[str, Any]] = None,
+    ) -> InspectionResult:
+        sig = getattr(decision, "signature", None)
+        overall_delta_e = 0.0
+        if sig is not None:
+            overall_delta_e = float(getattr(sig, "delta_e_p95", None) or getattr(sig, "delta_e_mean", 0.0) or 0.0)
+        if overall_delta_e == 0.0:
+            diag = getattr(decision, "diagnostics", {}) or {}
+            radial = (diag.get("radial") or {}).get("summary") or {}
+            overall_delta_e = float(radial.get("delta_e_p95") or radial.get("delta_e_mean") or 0.0)
+
+        judgment = self._map_v7_label(decision.label, warnings)
+        reasons = list(getattr(decision, "reason_codes", None) or getattr(decision, "reasons", None) or [])
+        reason_messages = list(getattr(decision, "reason_messages", None) or getattr(decision, "reasons", None) or [])
+        ng_reasons = reasons if judgment in {"NG", "RETAKE"} else []
+
+        lens_pixel_count = None
+        if lens_detection is not None and image_shape is not None:
+            mask = self._circle_mask(
+                image_shape,
+                float(lens_detection.center_x),
+                float(lens_detection.center_y),
+                float(lens_detection.radius),
+            )
+            lens_pixel_count = int(np.sum(mask > 0))
+
+        risk_factors = None
+        if warnings:
+            risk_factors = [{"category": "v7_warning", "severity": "warn", "message": w} for w in warnings]
+        anom = getattr(decision, "anomaly", None)
+        if anom is not None:
+            risk_factors = risk_factors or []
+            risk_factors.append(
+                {
+                    "category": "v7_anomaly",
+                    "severity": "high" if not getattr(anom, "passed", True) else "info",
+                    "message": getattr(anom, "type", "") or "anomaly_detected",
+                }
+            )
+
+        retake_reasons = None
+        if judgment == "RETAKE" and reasons:
+            retake_reasons = [
+                {"code": r, "reason": r, "actions": ["Review v7 diagnostics."], "lever": "v7_reason"} for r in reasons
+            ]
+
+        debug = getattr(decision, "debug", {}) or {}
+        debug_meta = {}
+        if isinstance(debug, dict):
+            for key in ("test_geom", "baseline_reasons", "mode_scores"):
+                if key in debug:
+                    debug_meta[key] = debug[key]
+        debug_meta["phase"] = getattr(decision, "phase", None)
+        debug_meta["best_mode"] = getattr(decision, "best_mode", None)
+
+        threshold_value = None
+        segment_k = None
+        if isinstance(v7_cfg, dict):
+            threshold_value = v7_cfg.get("signature", {}).get("de_p95_max")
+            if threshold_value is not None:
+                threshold_value = float(threshold_value)
+            if threshold_value is None:
+                threshold_value = v7_cfg.get("signature", {}).get("de_mean_max")
+                if threshold_value is not None:
+                    threshold_value = float(threshold_value)
+            if isinstance(v7_cfg.get("signature", {}).get("segment_k"), dict):
+                segment_k = {k: float(v) for k, v in v7_cfg["signature"]["segment_k"].items()}
+                if threshold_value is not None and segment_k:
+                    max_k = max(segment_k.values())
+                    threshold_value = threshold_value * max_k
+
+        result = InspectionResult(
+            sku=sku,
+            timestamp=datetime.now(),
+            judgment=judgment,
+            overall_delta_e=float(overall_delta_e),
+            zone_results=self._build_v7_zone_results(
+                decision, overall_delta_e, warnings, lens_pixel_count, threshold_value, segment_k
+            ),
+            ng_reasons=ng_reasons,
+            confidence=1.0 if judgment in {"OK", "OK_WITH_WARNING"} else 0.5,
+            decision_trace={"v7_label": decision.label, "reasons": reasons, "debug": debug_meta},
+            analysis_summary=self._build_v7_analysis_summary(decision),
+            confidence_breakdown=self._build_v7_confidence_breakdown(decision),
+            diagnostics=reasons or None,
+            warnings=warnings or None,
+            suggestions=reason_messages or None,
+            risk_factors=risk_factors,
+            retake_reasons=retake_reasons,
+        )
+
+        v2_diag = getattr(decision, "diagnostics", {}).get("v2_diagnostics") if decision else None
+        if isinstance(v2_diag, dict):
+            result.ink_analysis = {
+                "schema_version": "ink_analysis.v7",
+                "engine": "v7",
+                "v2_diagnostics": v2_diag,
+            }
+
+        return result
+
+    def _build_v7_analysis_summary(self, decision: Any) -> Optional[Dict[str, Any]]:
+        if decision is None:
+            return None
+        diag = getattr(decision, "diagnostics", {}) or {}
+        radial = (diag.get("radial") or {}).get("summary") or {}
+        v2_diag = diag.get("v2_diagnostics") if isinstance(diag, dict) else None
+        seg_quality = None
+        gate_diag = diag.get("gate") if isinstance(diag, dict) else None
+        if isinstance(v2_diag, dict):
+            seg_quality = (v2_diag.get("segmentation") or {}).get("quality")
+        references = None
+        white_balance = None
+        if isinstance(diag, dict):
+            references = diag.get("references")
+            white_balance = diag.get("white_balance")
+            anomaly = diag.get("anomaly")
+            pattern_color = getattr(decision, "pattern_color", None)
+        diagnostics_summary = None
+        if isinstance(diag, dict):
+            diagnostics_summary = {
+                "v2_warnings": (
+                    (diag.get("v2_diagnostics") or {}).get("warnings") if diag.get("v2_diagnostics") else None
+                ),
+                "references": references,
+                "white_balance": white_balance,
+            }
+        return {
+            "radial": radial,
+            "gate": getattr(getattr(decision, "gate", None), "scores", None),
+            "signature": getattr(getattr(decision, "signature", None), "score_corr", None),
+            "segmentation_quality": seg_quality,
+            "gate_diagnostics": gate_diag,
+            "references": references,
+            "white_balance": white_balance,
+            "anomaly": anomaly,
+            "pattern_color": pattern_color,
+            "mode_scores": getattr(decision, "mode_scores", None),
+            "mode_shift": getattr(decision, "mode_shift", None),
+            "diagnostics_summary": diagnostics_summary,
+        }
+
+    def _build_v7_confidence_breakdown(self, decision: Any) -> Optional[Dict[str, Any]]:
+        if decision is None:
+            return None
+        gate = getattr(decision, "gate", None)
+        sig = getattr(decision, "signature", None)
+        v2_diag = getattr(decision, "diagnostics", {}).get("v2_diagnostics") if decision else None
+        seg_quality = None
+        if isinstance(v2_diag, dict):
+            seg_quality = (v2_diag.get("segmentation") or {}).get("quality")
+            sampling_meta = v2_diag.get("sampling") or {}
+        else:
+            sampling_meta = None
+        return {
+            "gate_passed": getattr(gate, "passed", None),
+            "signature_score": getattr(sig, "score_corr", None),
+            "label": getattr(decision, "label", None),
+            "segmentation_quality": seg_quality,
+            "sampling": sampling_meta,
+        }
 
     def _attach_lens_roi(self, detection: LensDetection, image_shape) -> LensDetection:
         h, w = image_shape[:2]
@@ -133,7 +940,7 @@ class InspectionPipeline:
             return None
 
         if geom is None or geom.r <= 0 or geom.confidence <= 0:
-            logger.warning("V7 geometry returned low confidence; falling back to legacy detector")
+            logger.warning("V7 geometry returned low confidence; falling back to secondary detector")
             return None
 
         detection = LensDetection(
@@ -144,6 +951,183 @@ class InspectionPipeline:
             method=f"v7:{geom.source}",
         )
         return self._attach_lens_roi(detection, image.shape)
+
+    def _detect_hough(self, gray_image: np.ndarray, cfg: DetectorConfig) -> Optional[LensDetection]:
+        min_radius = int(min(gray_image.shape) * cfg.hough_min_radius_ratio)
+        max_radius = int(max(gray_image.shape) * cfg.hough_max_radius_ratio)
+
+        circles = cv2.HoughCircles(
+            gray_image,
+            cv2.HOUGH_GRADIENT,
+            dp=cfg.hough_dp,
+            minDist=min_radius * cfg.hough_min_dist_ratio,
+            param1=cfg.hough_param1,
+            param2=cfg.hough_param2,
+            minRadius=min_radius,
+            maxRadius=max_radius,
+        )
+
+        if circles is not None:
+            cx, cy, r = circles[0][0]
+            return LensDetection(center_x=cx, center_y=cy, radius=r, confidence=0.9, method="hough")
+        return None
+
+    def _detect_contour(self, gray_image: np.ndarray, cfg: DetectorConfig) -> Optional[LensDetection]:
+        if cfg.contour_threshold_method == "otsu":
+            _, binary = cv2.threshold(gray_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        else:
+            _, binary = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (cfg.contour_morph_kernel_size, cfg.contour_morph_kernel_size)
+        )
+        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        min_area = gray_image.size * cfg.contour_min_area_ratio
+        valid_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+        if not valid_contours:
+            return None
+
+        largest = max(valid_contours, key=cv2.contourArea)
+        (x, y), radius = cv2.minEnclosingCircle(largest)
+
+        area_contour = cv2.contourArea(largest)
+        area_circle = np.pi * radius**2
+        confidence = area_contour / area_circle if area_circle > 0 else 0
+
+        return LensDetection(center_x=x, center_y=y, radius=radius, confidence=confidence, method="contour")
+
+    def _detect_hybrid(self, gray_image: np.ndarray, cfg: DetectorConfig) -> Optional[LensDetection]:
+        hough = self._detect_hough(gray_image, cfg)
+        contour = self._detect_contour(gray_image, cfg)
+
+        result = None
+        if hough and contour:
+            dist = np.sqrt((hough.center_x - contour.center_x) ** 2 + (hough.center_y - contour.center_y) ** 2)
+            if dist < cfg.hybrid_merge_dist_threshold:
+                result = LensDetection(
+                    center_x=(hough.center_x + contour.center_x) / 2,
+                    center_y=(hough.center_y + contour.center_y) / 2,
+                    radius=(hough.radius + contour.radius) / 2,
+                    confidence=1.0,
+                    method="hybrid",
+                )
+            else:
+                result = hough if hough.confidence > contour.confidence else contour
+        else:
+            result = hough or contour
+
+        if result:
+            result.method = "hybrid"
+        return result
+
+    def _detect_background_based(self, image: np.ndarray, cfg: DetectorConfig) -> Optional[LensDetection]:
+        if len(image.shape) == 2:
+            bgr_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            bgr_image = image
+
+        h, w = bgr_image.shape[:2]
+
+        bg_color = self._sample_background_color(bgr_image)
+        logger.debug("Background color sampled: %s", bg_color)
+
+        color_dist = np.linalg.norm(bgr_image.astype(np.float32) - bg_color, axis=2)
+
+        threshold = cfg.background_color_distance_threshold
+        _, foreground_mask = cv2.threshold(color_dist.astype(np.uint8), int(threshold), 255, cv2.THRESH_BINARY)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        foreground_mask = cv2.morphologyEx(foreground_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        foreground_mask = cv2.morphologyEx(foreground_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(foreground_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if not contours:
+            logger.warning("Background-based detection failed: No contours found")
+            return None
+
+        min_area = (h * w) * cfg.background_min_area_ratio
+        valid_contours = [c for c in contours if cv2.contourArea(c) > min_area]
+
+        if not valid_contours:
+            logger.warning("Background-based detection failed: No contours larger than %.0f pixels", min_area)
+            return None
+
+        largest_contour = max(valid_contours, key=cv2.contourArea)
+        (x, y), radius = cv2.minEnclosingCircle(largest_contour)
+
+        area_contour = cv2.contourArea(largest_contour)
+        area_circle = np.pi * radius**2
+        circularity = area_contour / area_circle if area_circle > 0 else 0
+
+        confidence = 0.3 + (circularity * 0.3)
+
+        logger.info(
+            "Background-based detection succeeded: center=(%.1f, %.1f), radius=%.1f, confidence=%.2f",
+            x,
+            y,
+            radius,
+            confidence,
+        )
+
+        return LensDetection(center_x=x, center_y=y, radius=radius, confidence=confidence, method="background")
+
+    def _sample_background_color(self, bgr_image: np.ndarray) -> np.ndarray:
+        h, w = bgr_image.shape[:2]
+        edge_width = 10
+
+        top_edge = bgr_image[0:edge_width, :]
+        bottom_edge = bgr_image[h - edge_width : h, :]
+        left_edge = bgr_image[:, 0:edge_width]
+        right_edge = bgr_image[:, w - edge_width : w]
+
+        edge_samples = np.vstack(
+            [top_edge.reshape(-1, 3), bottom_edge.reshape(-1, 3), left_edge.reshape(-1, 3), right_edge.reshape(-1, 3)]
+        )
+
+        return np.asarray(np.median(edge_samples, axis=0), dtype=np.float32)
+
+    def _refine_center(
+        self, gray_image: np.ndarray, cx: float, cy: float, radius: float, cfg: DetectorConfig
+    ) -> tuple[float, float]:
+        r_int = int(radius)
+        x_min = max(0, int(cx - r_int))
+        y_min = max(0, int(cy - r_int))
+        x_max = min(gray_image.shape[1], int(cx + r_int))
+        y_max = min(gray_image.shape[0], int(cy + r_int))
+
+        roi = gray_image[y_min:y_max, x_min:x_max]
+
+        if roi.size == 0:
+            logger.warning("ROI is empty, skipping refinement")
+            return cx, cy
+
+        edges_x = cv2.Sobel(roi, cv2.CV_64F, 1, 0, ksize=3)
+        edges_y = cv2.Sobel(roi, cv2.CV_64F, 0, 1, ksize=3)
+        edge_mag = np.sqrt(edges_x**2 + edges_y**2)
+
+        threshold = np.percentile(edge_mag, 90)
+        edge_mask = edge_mag > threshold
+
+        if edge_mask.sum() == 0:
+            logger.warning("No strong edges found, skipping refinement")
+            return cx, cy
+
+        y_coords, x_coords = np.where(edge_mask)
+        weights = edge_mag[edge_mask]
+
+        cx_refined = x_min + np.average(x_coords, weights=weights)
+        cy_refined = y_min + np.average(y_coords, weights=weights)
+
+        logger.debug("Center refined: (%.2f, %.2f) -> (%.2f, %.2f)", cx, cy, cx_refined, cy_refined)
+
+        return cx_refined, cy_refined
 
     def _load_v7_cfg(self, sku: str) -> Optional[Dict[str, Any]]:
         v7_root = Path(__file__).resolve().parents[1] / "lens_signature_engine_v7"
@@ -164,10 +1148,18 @@ class InspectionPipeline:
             logger.warning("V7 config load failed: %s", exc)
             return None
 
+    def _resolve_v7_sku(self, sku: str, ink: str) -> str:
+        if not sku:
+            return sku
+        if ink and ink.upper() == "INK3" and sku.upper() == "DEFAULT":
+            return "DEFAULT_INK3"
+        return sku
+
     def process(
         self,
         image_path: str,
         sku: str,
+        ink: str = "INK_DEFAULT",
         save_dir: Optional[Path] = None,
         run_1d_judgment: bool = True,
         include_dot_stats: bool = True,
@@ -189,8 +1181,12 @@ class InspectionPipeline:
         start_time = datetime.now()
         image_path = Path(image_path)
         params = self.sku_config.get("params", {})
+        sku_used = self._resolve_v7_sku(sku, ink)
 
-        logger.info(f"Processing image: {image_path}, SKU: {sku}")
+        if sku_used != sku:
+            logger.info("Processing image: %s, SKU: %s (v7 override: %s)", image_path, sku, sku_used)
+        else:
+            logger.info(f"Processing image: {image_path}, SKU: {sku}")
 
         # PHASE7 Priority 5: 진단 정보 수집
         diagnostics = []
@@ -205,7 +1201,7 @@ class InspectionPipeline:
 
             for attempt in range(max_retries):
                 try:
-                    image = self.image_loader.load_from_file(image_path)
+                    image = self._load_image(image_path)
 
                     # None 체크
                     if image is None:
@@ -215,7 +1211,7 @@ class InspectionPipeline:
                         else:
                             raise ValueError("Image loader returned None")
 
-                    processed_image = self.image_loader.preprocess(image)
+                    processed_image = self._preprocess_image(image)
 
                     # Preprocess 결과도 체크
                     if processed_image is None:
@@ -251,15 +1247,8 @@ class InspectionPipeline:
 
             # 2. 렌즈 검출 (상세 에러 메시지)
             logger.debug("Step 2: Detecting lens")
-            use_v7_geometry = params.get("use_v7_geometry")
-            if use_v7_geometry is None:
-                use_v7_geometry = self._env_flag("LENS_USE_V7_GEOMETRY")
-
             lens_detection = None
-            if use_v7_geometry:
-                lens_detection = self._detect_lens_v7(processed_image, params)
-            if lens_detection is None:
-                lens_detection = self.lens_detector.detect(processed_image)
+            lens_detection = self._detect_lens_v7(processed_image, params)
 
             if lens_detection is None:
                 img_h, img_w = processed_image.shape[:2]
@@ -286,24 +1275,25 @@ class InspectionPipeline:
                 suggestions.append("→ Verify image quality or adjust detector parameters")
 
             # 3. 극좌표 변환 및 프로파일 추출
+            self._configure_profiler(params)
             num_samples = params.get("num_samples")
             if isinstance(num_samples, (int, float)) and num_samples > 0:
-                self.radial_profiler.config.theta_samples = int(num_samples)
+                self._profiler_config.theta_samples = int(num_samples)
             num_points = params.get("num_points")
             if isinstance(num_points, (int, float)) and num_points > 0 and lens_detection.radius > 0:
                 r_step = max(1, int(lens_detection.radius / float(num_points)))
-                self.radial_profiler.config.r_step_pixels = r_step
+                self._profiler_config.r_step_pixels = r_step
             sample_percentile = params.get("sample_percentile")
             if isinstance(sample_percentile, (int, float)) and 0 <= sample_percentile <= 100:
-                self.radial_profiler.config.sample_percentile = float(sample_percentile)
+                self._profiler_config.sample_percentile = float(sample_percentile)
 
-            quality_metrics = compute_quality_metrics(
+            quality_metrics = self._compute_quality_metrics(
                 processed_image,
                 lens_detection,
                 include_dot_stats=include_dot_stats,
             )
             logger.debug("Step 3: Extracting radial profile")
-            radial_profile = self.radial_profiler.extract_profile(processed_image, lens_detection)
+            radial_profile = self._build_radial_profile_v7(processed_image, lens_detection)
 
             # 4. Zone 분할 (AI 피드백 반영: Ring과 동일한 좌표계 사용)
             logger.debug("Step 4: Segmenting zones")
@@ -316,7 +1306,7 @@ class InspectionPipeline:
             if not run_1d_judgment:
                 suggestions.append("Run 2D analysis for final judgment.")
                 inspection_result = InspectionResult(
-                    sku=sku,
+                    sku=sku_used,
                     timestamp=datetime.now(),
                     judgment="RETAKE",
                     overall_delta_e=0.0,
@@ -366,133 +1356,79 @@ class InspectionPipeline:
 
                 return inspection_result
 
-            # 인쇄 영역 범위 추정 (SKU config 기반)
-            optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
-            center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
-            r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)  # center exclusion takes priority
-            r_outer = 0.95  # 인쇄 영역 끝 (렌즈 외곽 약간 제외)
+            # Print area range (SKU config)
+            v7_payload = self._evaluate_v7_decision(processed_image, sku_used, ink, params)
+            if v7_payload:
+                decision = v7_payload["decision"]
+                v2_diag = getattr(decision, "diagnostics", {}).get("v2_diagnostics") or {}
+                v7_warnings = []
+                if isinstance(v2_diag, dict):
+                    v7_warnings = list(v2_diag.get("warnings") or [])
 
-            # AI 피드백 반영: 반경 기준 명확히 출력
-            logger.info(
-                f"[ZONE COORD] Zone segmentation using PRINT AREA basis:\n"
-                f"  - r_inner={r_inner:.3f} (print start, from optical_clear_ratio={optical_clear_ratio:.3f}, "
-                f"center_exclude_ratio={center_exclude_ratio:.3f})\n"
-                f"  - r_outer={r_outer:.3f} (print end)\n"
-                f"  - lens_radius={lens_detection.radius:.1f}px\n"
-                f"  - Normalization: r_norm = (r - {r_inner:.3f}) / ({r_outer:.3f} - {r_inner:.3f})"
-            )
+                inspection_result = self._build_inspection_result_from_v7(
+                    decision,
+                    sku_used,
+                    v7_warnings,
+                    lens_detection=lens_detection,
+                    image_shape=processed_image.shape[:2],
+                    v7_cfg=v7_payload.get("v7_cfg"),
+                )
+                if sku_used != sku:
+                    inspection_result.decision_trace = inspection_result.decision_trace or {}
+                    inspection_result.decision_trace["sku_override"] = {
+                        "input": sku,
+                        "used": sku_used,
+                        "ink": ink,
+                    }
+                inspection_result.lens_detection = lens_detection
+                inspection_result.zones = []
+                inspection_result.image = image
+                inspection_result.radial_profile = radial_profile
+                inspection_result.metrics = quality_metrics
 
-            zones = self.zone_segmenter.segment(
-                radial_profile, expected_zones=expected_zones, r_inner=r_inner, r_outer=r_outer
-            )
-
-            # 진단 정보: Zone 분할 성공
-            diagnostics.append(f"✓ Segmented into {len(zones)} zones: {[z.name for z in zones]}")
-
-            # 경고: expected_zones와 불일치
-            if expected_zones and len(zones) != expected_zones:
-                warnings.append(f"⚠ Expected {expected_zones} zones but got {len(zones)}")
-                suggestions.append("→ Adjust min_gradient or min_delta_e parameters")
-                suggestions.append(f"→ Or update expected_zones to {len(zones)} if this is correct")
-
-            # AI 피드백 반영: Zone별 실제 픽셀 반경 범위 출력
-            logger.info(f"[ZONE RESULT] Created {len(zones)} zones:")
-            for z in zones:
-                r_start_px = z.r_start * lens_detection.radius
-                r_end_px = z.r_end * lens_detection.radius
-
-                # AI 검증 요청: Zone이 Ring과 어느 정도 겹치는지 확인
-                ring_overlap = ""
-                if z.r_start >= 0.67:
-                    ring_overlap = "mainly Ring 2 (outer print)"
-                elif z.r_start >= 0.33:
-                    ring_overlap = "mainly Ring 1 (middle print)"
-                else:
-                    ring_overlap = "mainly Ring 0 (inner clear)"
-
+                processing_time = (datetime.now() - start_time).total_seconds() * 1000
                 logger.info(
-                    f"  Zone {z.name}: "
-                    f"r_norm=[{z.r_end:.3f}, {z.r_start:.3f}), "
-                    f"r_pixel=[{r_end_px:.1f}px, {r_start_px:.1f}px), "
-                    f"pixels={z.pixel_count}, "
-                    f"Lab=({z.mean_L:.1f}, {z.mean_a:.1f}, {z.mean_b:.1f}), "
-                    f"{ring_overlap}"
+                    "Processing complete (v7 decision): "
+                    f"time={processing_time:.1f}ms, "
+                    f"warnings={len(v7_warnings)}"
                 )
 
-            # 5. 색상 평가 및 판정
-            logger.debug("Step 5: Evaluating color quality")
-            inspection_result = self.color_evaluator.evaluate(zones, sku, self.sku_config)
+                if self.save_intermediates and save_dir:
+                    self._save_intermediates(
+                        save_dir,
+                        image_path.stem,
+                        {
+                            "processed_image": processed_image,
+                            "lens_detection": lens_detection,
+                            "radial_profile": radial_profile,
+                            "zones": [],
+                            "inspection_result": inspection_result,
+                            "processing_time_ms": processing_time,
+                        },
+                    )
 
-            # 시각화를 위한 데이터 추가
+                return inspection_result
+            inspection_result = InspectionResult(
+                sku=sku_used,
+                timestamp=datetime.now(),
+                judgment="RETAKE",
+                overall_delta_e=0.0,
+                zone_results=[],
+                ng_reasons=["V7_DECISION_UNAVAILABLE"],
+                confidence=0.0,
+                retake_reasons=[
+                    {
+                        "code": "v7_decision_unavailable",
+                        "reason": "V7 decision pipeline was unavailable.",
+                        "actions": ["Verify v7 config/models availability."],
+                        "lever": "v7_unavailable",
+                    }
+                ],
+            )
             inspection_result.lens_detection = lens_detection
-            inspection_result.zones = zones
-            inspection_result.image = image  # 원본 이미지 (전처리 전)
+            inspection_result.image = image
             inspection_result.radial_profile = radial_profile
             inspection_result.metrics = quality_metrics
-
-            use_v7_ink = params.get("use_v7_ink_analysis")
-            if use_v7_ink is None:
-                use_v7_ink = self._env_flag("LENS_USE_V7_INK")
-
-            if use_v7_ink:
-                v7_cfg = self._load_v7_cfg(sku)
-                if v7_cfg:
-                    expected_ink = params.get("expected_ink_count") or v7_cfg.get("expected_ink_count")
-                    if expected_ink is not None:
-                        try:
-                            from lens_signature_engine_v7.core.measure.diagnostics.v2_diagnostics import (
-                                build_v2_diagnostics,
-                            )
-
-                            v2_diag = build_v2_diagnostics(
-                                processed_image,
-                                v7_cfg,
-                                expected_ink_count=int(expected_ink),
-                                expected_ink_count_registry=None,
-                                expected_ink_count_input=int(expected_ink),
-                            )
-                            if v2_diag:
-                                inspection_result.ink_analysis = {
-                                    "schema_version": "ink_analysis.v7",
-                                    "engine": "v7",
-                                    "expected_ink_count": int(expected_ink),
-                                    "v2_diagnostics": v2_diag,
-                                }
-                            else:
-                                warnings.append("V7 ink analysis returned empty diagnostics")
-                        except Exception as exc:
-                            warnings.append(f"V7 ink analysis failed: {exc}")
-
-            # PHASE7 Priority 5: 진단 정보, 경고, 제안 추가
-            inspection_result.diagnostics = diagnostics if diagnostics else None
-            inspection_result.warnings = warnings if warnings else None
-            inspection_result.suggestions = suggestions if suggestions else None
-
-            # 처리 시간 계산
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000  # ms
-
-            logger.info(
-                f"Processing complete: {inspection_result.judgment}, "
-                f"ΔE={inspection_result.overall_delta_e:.2f}, "
-                f"time={processing_time:.1f}ms, "
-                f"diagnostics={len(diagnostics)}, warnings={len(warnings)}, suggestions={len(suggestions)}"
-            )
-
-            # 중간 결과 저장 (옵션)
-            if self.save_intermediates and save_dir:
-                self._save_intermediates(
-                    save_dir,
-                    image_path.stem,
-                    {
-                        "processed_image": processed_image,
-                        "lens_detection": lens_detection,
-                        "radial_profile": radial_profile,
-                        "zones": zones,
-                        "inspection_result": inspection_result,
-                        "processing_time_ms": processing_time,
-                    },
-                )
-
             return inspection_result
 
         except LensDetectionError as e:
@@ -502,54 +1438,6 @@ class InspectionPipeline:
                 f"  Image: {image_path}\n"
                 f"  Error: {e}\n"
                 f"  Suggestion: Check image quality, adjust detector config, or verify lens is visible"
-            )
-
-        except ZoneSegmentationError as e:
-            logger.error(f"Zone segmentation failed: {e}")
-            # Zone 분할 실패 시 복구 시도: expected_zones 힌트 사용
-            if expected_zones is None:
-                logger.info("Attempting recovery with default 3-zone segmentation")
-                try:
-                    # Recovery에도 r_inner, r_outer 적용
-                    optical_clear_ratio = params.get("optical_clear_ratio", 0.15)
-                    center_exclude_ratio = params.get("center_exclude_ratio", 0.0)
-                    r_inner = max(0.0, optical_clear_ratio, center_exclude_ratio)
-                    r_outer = 0.95
-                    zones = self.zone_segmenter.segment(
-                        radial_profile, expected_zones=3, r_inner=r_inner, r_outer=r_outer
-                    )
-                    logger.info(f"Recovery successful: segmented into {len(zones)} zones")
-                    # 처리 계속 진행
-                    inspection_result = self.color_evaluator.evaluate(zones, sku, self.sku_config)
-                    inspection_result.lens_detection = lens_detection
-                    inspection_result.zones = zones
-                    inspection_result.image = image
-                    inspection_result.radial_profile = radial_profile
-                    inspection_result.metrics = quality_metrics
-                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
-                    logger.info(
-                        f"Processing complete (with recovery): {inspection_result.judgment}, "
-                        f"time={processing_time:.1f}ms"
-                    )
-                    return inspection_result
-                except Exception as recovery_error:
-                    logger.error(f"Recovery failed: {recovery_error}")
-
-            raise PipelineError(
-                f"Pipeline failed at zone segmentation\n"
-                f"  Image: {image_path}\n"
-                f"  Error: {e}\n"
-                f"  Suggestion: Add 'expected_zones' hint to SKU config, or check radial profile quality"
-            )
-
-        except ColorEvaluationError as e:
-            logger.error(f"Color evaluation failed: {e}")
-            raise PipelineError(
-                f"Pipeline failed at color evaluation\n"
-                f"  Image: {image_path}\n"
-                f"  SKU: {sku}\n"
-                f"  Error: {e}\n"
-                f"  Suggestion: Verify SKU config has baseline values for all detected zones"
             )
 
         except Exception as e:
@@ -565,6 +1453,7 @@ class InspectionPipeline:
         self,
         image_paths: List[str],
         sku: str,
+        ink: str = "INK_DEFAULT",
         output_csv: Optional[Path] = None,
         continue_on_error: bool = True,
         parallel: bool = False,
@@ -596,7 +1485,7 @@ class InspectionPipeline:
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks
-                future_to_path = {executor.submit(self.process, path, sku): path for path in image_paths}
+                future_to_path = {executor.submit(self.process, path, sku, ink): path for path in image_paths}
 
                 # Collect results as they complete
                 for i, future in enumerate(as_completed(future_to_path)):
@@ -624,7 +1513,7 @@ class InspectionPipeline:
                 logger.info(f"Processing {i+1}/{len(image_paths)}: {image_path}")
 
                 try:
-                    result = self.process(image_path, sku)
+                    result = self.process(image_path, sku, ink)
                     results.append(result)
 
                 except PipelineError as e:
