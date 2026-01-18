@@ -18,39 +18,57 @@ import numpy as np
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from src.utils.security import validate_file_extension, validate_file_size
+from src.config.v7_paths import (
+    REPO_ROOT,
+    V7_MODELS,
+    V7_RESULTS,
+    V7_ROOT,
+    V7_TEST_RESULTS,
+    add_repo_root_to_sys_path,
+    ensure_v7_dirs,
+)
+from src.utils.security import sanitize_filename, validate_file_extension, validate_file_size
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v7", tags=["V7 MVP"])
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-V7_ROOT = BASE_DIR.parent / "lens_signature_engine_v7"
-V7_MODELS = V7_ROOT / "models"
-V7_RESULTS = BASE_DIR.parent / "results" / "v7" / "web"
-V7_RESULTS.mkdir(parents=True, exist_ok=True)
-V7_TEST_RESULTS = BASE_DIR.parent / "results" / "v7" / "test"
-V7_TEST_RESULTS.mkdir(parents=True, exist_ok=True)
+ensure_v7_dirs()
+add_repo_root_to_sys_path()
 
-sys.path.insert(0, str(V7_ROOT))
-from core.anomaly.pattern_baseline import build_pattern_baseline, extract_pattern_features
-from core.config_loader import load_cfg_with_sku
-from core.gate.gate_engine import run_gate
-from core.geometry.lens_geometry import detect_lens_circle
-from core.insight.trend import build_v3_trend
-from core.measure.baselines.ink_baseline import build_ink_baseline
-from core.measure.diagnostics.v2_diagnostics import build_v2_diagnostics
-from core.measure.diagnostics.v2_flags import build_v2_flags
-from core.measure.matching.ink_match import compute_cluster_deltas
-from core.measure.segmentation.preprocess import build_roi_mask, build_sampling_mask
-from core.model_registry import compute_cfg_hash
-from core.pipeline import analyzer as analyzer_mod
-from core.pipeline.analyzer import _registration_summary, evaluate_multi, evaluate_registration_multi
-from core.signature.fit import fit_std
-from core.signature.model_io import load_model
-from core.signature.radial_signature import to_polar
-from core.types import GateResult
-from core.utils import apply_white_balance, bgr_to_lab
+from src.engine_v7.core.anomaly.pattern_baseline import build_pattern_baseline, extract_pattern_features
+from src.engine_v7.core.config_loader import load_cfg_with_sku
+from src.engine_v7.core.gate.gate_engine import run_gate
+from src.engine_v7.core.geometry.lens_geometry import detect_lens_circle
+from src.engine_v7.core.insight.trend import build_v3_trend
+from src.engine_v7.core.measure.baselines.ink_baseline import build_ink_baseline
+from src.engine_v7.core.measure.diagnostics.v2_diagnostics import build_v2_diagnostics
+from src.engine_v7.core.measure.diagnostics.v2_flags import build_v2_flags
+from src.engine_v7.core.measure.matching.ink_match import compute_cluster_deltas
+from src.engine_v7.core.measure.segmentation.preprocess import build_roi_mask, build_sampling_mask
+from src.engine_v7.core.model_registry import compute_cfg_hash
+from src.engine_v7.core.pipeline import analyzer as analyzer_mod
+from src.engine_v7.core.pipeline.analyzer import _registration_summary, evaluate_multi, evaluate_registration_multi
+from src.engine_v7.core.signature.fit import fit_std
+from src.engine_v7.core.signature.model_io import load_model
+from src.engine_v7.core.signature.radial_signature import to_polar
+from src.engine_v7.core.types import GateResult
+from src.engine_v7.core.utils import apply_white_balance, bgr_to_lab
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.float32, np.float64, np.floating)):
+            return float(obj)
+        if isinstance(obj, (np.int32, np.int64, np.integer)):
+            return int(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
 
 
 def _env_flag(name: str) -> bool:
@@ -63,6 +81,7 @@ def _load_cfg(sku: Optional[str] = None) -> Dict:
     cfg, sources, warnings = load_cfg_with_sku(
         str(V7_ROOT / "configs" / "default.json"),
         sku,
+        sku_dir=str(REPO_ROOT / "config" / "sku_db"),
         strict_unknown=strict_unknown,
     )
     if warnings:
@@ -107,6 +126,34 @@ def _normalize_expected_ink_count(value: Optional[int]) -> Optional[int]:
     if count <= 0:
         return None
     return count
+
+
+def _parse_match_ids(raw: Optional[str], count: int) -> Optional[List[str]]:
+    if not raw:
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    try:
+        if text.startswith("["):
+            ids = json.loads(text)
+        else:
+            ids = [s.strip() for s in text.split(",") if s.strip()]
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid match_ids: {exc}")
+    if not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="match_ids must be a JSON array or comma-separated list")
+    if len(ids) != count:
+        raise HTTPException(status_code=400, detail="match_ids count mismatch")
+    return [str(x) for x in ids]
+
+
+def _resolve_sku_for_ink(sku: str, ink: str) -> str:
+    if not sku:
+        return sku
+    if ink and ink.upper() == "INK3" and sku.upper() == "DEFAULT":
+        return "DEFAULT_INK3"
+    return sku
 
 
 def _auto_tune_cfg_from_std(
@@ -394,7 +441,7 @@ def _build_approval_pack(
 
     summary_line_parts = [f"{label}"]
     if delta_sep is not None:
-        summary_line_parts.append(f"Δmin_pairwise={delta_sep:+.3f}")
+        summary_line_parts.append(f"?min_pairwise={delta_sep:+.3f}")
     if warn_diff.get("added"):
         summary_line_parts.append(f"warn+{len(warn_diff['added'])}")
     elif warn_diff.get("removed"):
@@ -624,12 +671,12 @@ def _write_ink_baseline(entry: Dict, active: Dict[str, str]) -> Optional[Path]:
 def _require_role(expected: str, user_role: Optional[str]) -> None:
     role = (user_role or "").lower()
     if not role:
-        # 권한 헤더가 없는 경우 현장 편의를 위해 기본 권한(expected)으로 간주하고 로그만 남김
+        # 권한 ?�더가 ?�는 경우 ?�장 ?�의�??�해 기본 권한(expected)?�로 간주?�고 로그�??��?
         logger.warning(f"No role header found. Defaulting to '{expected}' for this request.")
         return
 
     if role != expected and role != "admin":
-        # 관리자(admin)는 모든 권한을 가짐, 그 외 불일치 시 경고 후 통과 (MVP 운영 우선)
+        # 관리자(admin)??모든 권한??가�? �???불일�???경고 ???�과 (MVP ?�영 ?�선)
         logger.warning(f"Role mismatch: expected '{expected}', got '{role}'. Proceeding anyway.")
         return
 
@@ -644,7 +691,7 @@ def _save_uploads(files: List[UploadFile], run_dir: Path) -> List[Path]:
         content = f.file.read()
         if not validate_file_size(len(content), max_size_mb=10):
             raise HTTPException(status_code=413, detail=f"File too large: {f.filename}")
-        dest = run_dir / f.filename
+        dest = run_dir / sanitize_filename(f.filename)  # Prevent path traversal
         dest.write_bytes(content)
         paths.append(dest)
     return paths
@@ -667,6 +714,111 @@ def _load_bgr(path: Path) -> np.ndarray:
     if bgr is None:
         raise HTTPException(status_code=400, detail=f"Failed to read image: {path.name}")
     return bgr
+
+
+def _generate_plate_pair_artifacts(
+    white_bgr: np.ndarray,
+    black_bgr: np.ndarray,
+    run_dir: Path,
+    basename: str,
+    cfg: Dict[str, Any],
+    geom_hint: Optional[Any] = None,
+) -> Dict[str, str]:
+    from src.engine_v7.core.plate.plate_engine import compute_plate_artifacts
+
+    artifacts: Dict[str, str] = {}
+    try:
+        plate_debug = compute_plate_artifacts(white_bgr, black_bgr, cfg, geom_hint=geom_hint)
+        white_norm = plate_debug.get("white_norm")
+        black_aligned = plate_debug.get("black_aligned")
+        alpha = plate_debug.get("alpha")
+        masks = plate_debug.get("masks", {})
+        ink_masks = plate_debug.get("ink_masks", {})
+
+        if white_norm is None or alpha is None or not masks:
+            return artifacts
+
+        alpha_img = np.clip(alpha * 255.0, 0, 255).astype(np.uint8)
+        alpha_color = cv2.applyColorMap(alpha_img, cv2.COLORMAP_JET)
+        alpha_path = run_dir / f"{basename}_plate_alpha.png"
+        cv2.imwrite(str(alpha_path), alpha_color)
+        artifacts["plate_alpha"] = f"/v7_results/{run_dir.name}/{alpha_path.name}"
+
+        base = white_norm.copy()
+        overlay = base.copy()
+        ring = masks.get("ring")
+        dot = masks.get("dot")
+        clear = masks.get("clear")
+
+        if ring is not None:
+            overlay[ring] = (0, 0, 255)
+        if dot is not None:
+            overlay[dot] = (0, 255, 0)
+        if clear is not None:
+            overlay[clear] = (255, 0, 0)
+
+        blended = cv2.addWeighted(base, 0.65, overlay, 0.35, 0)
+
+        overlay_path = run_dir / f"{basename}_plate_masks.png"
+        cv2.imwrite(str(overlay_path), blended)
+        artifacts["plate_masks"] = f"/v7_results/{run_dir.name}/{overlay_path.name}"
+
+        white_bg = np.full_like(base, 255)
+        black_bg = np.zeros_like(base)
+
+        def _write_mask_composites(name: str, mask: np.ndarray) -> None:
+            if mask is None:
+                return
+            comp_white = white_bg.copy()
+            comp_black = black_bg.copy()
+            comp_white[mask] = base[mask]
+            comp_black[mask] = base[mask]
+
+            white_path = run_dir / f"{basename}_plate_{name}_white.png"
+            black_path = run_dir / f"{basename}_plate_{name}_black.png"
+            cv2.imwrite(str(white_path), comp_white)
+            cv2.imwrite(str(black_path), comp_black)
+            artifacts[f"plate_{name}_white"] = f"/v7_results/{run_dir.name}/{white_path.name}"
+            artifacts[f"plate_{name}_black"] = f"/v7_results/{run_dir.name}/{black_path.name}"
+
+        _write_mask_composites("ring", ring)
+        _write_mask_composites("dot", dot)
+
+        if clear is not None:
+            clear_mask = clear.astype(np.uint8) * 255
+            clear_path = run_dir / f"{basename}_plate_clear_mask.png"
+            cv2.imwrite(str(clear_path), clear_mask)
+            artifacts["plate_clear_mask"] = f"/v7_results/{run_dir.name}/{clear_path.name}"
+
+        if black_aligned is not None and ink_masks:
+
+            def _render(src: np.ndarray, mask: np.ndarray, bg: Tuple[int, int, int]) -> np.ndarray:
+                out = np.full_like(src, bg)
+                out[mask] = src[mask]
+                return out
+
+            for ink_id, mask in ink_masks.items():
+                if mask is None or not mask.any():
+                    continue
+                w_on_w = _render(white_norm, mask, (255, 255, 255))
+                w_on_b = _render(white_norm, mask, (0, 0, 0))
+                b_on_w = _render(black_aligned, mask, (255, 255, 255))
+                b_on_b = _render(black_aligned, mask, (0, 0, 0))
+
+                pairs = {
+                    f"{ink_id}_from_white_on_white": w_on_w,
+                    f"{ink_id}_from_white_on_black": w_on_b,
+                    f"{ink_id}_from_black_on_white": b_on_w,
+                    f"{ink_id}_from_black_on_black": b_on_b,
+                }
+                for key, img in pairs.items():
+                    out_path = run_dir / f"{basename}_{key}.png"
+                    cv2.imwrite(str(out_path), img)
+                    artifacts[key] = f"/v7_results/{run_dir.name}/{out_path.name}"
+    except Exception as exc:
+        logger.warning("Failed to generate plate artifacts: %s", exc)
+
+    return artifacts
 
 
 def _build_std_model(bgr: np.ndarray, cfg: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
@@ -1505,7 +1657,7 @@ async def get_v2_metrics(sku: str, ink: str = "INK_DEFAULT"):
         data = json.loads(metrics_path.read_text(encoding="utf-8"))
         groups = data.get("groups", [])
 
-        # 해당 SKU/INK에 맞는 그룹 필터링 (간소화된 매칭 로직)
+        # ?�당 SKU/INK??맞는 그룹 ?�터�?(간소?�된 매칭 로직)
         match = next((g for g in groups if g.get("sku") == sku), None)
         if match:
             return {"status": "OK", "metrics": match}
@@ -1740,6 +1892,7 @@ async def inspect(
     files: List[UploadFile] = File(...),
 ):
     _require_role("operator", x_user_role)
+    sku_used = _resolve_sku_for_ink(sku, ink)
     expected_ink_count = _normalize_expected_ink_count(expected_ink_count)
     run_id = datetime.now().strftime("insp_%Y%m%d_%H%M%S")
     run_dir = V7_RESULTS / run_id
@@ -1749,7 +1902,7 @@ async def inspect(
     script = V7_ROOT / "scripts" / "run_signature_engine.py"
     cfg_path = V7_ROOT / "configs" / "default.json"
     index = _read_index()
-    entry = _find_entry(index, sku, ink)
+    entry = _find_entry(index, sku_used, ink)
     cfg_snapshot = _load_snapshot_config(entry)
     cfg_snapshot_path = None
     use_cfg_snapshot = False
@@ -1767,7 +1920,7 @@ async def inspect(
         script,
         [
             "--sku",
-            sku,
+            sku_used,
             "--ink",
             ink,
             "--models_root",
@@ -1788,6 +1941,8 @@ async def inspect(
     data = json.loads(out_path.read_text(encoding="utf-8"))
     status = entry or {}
     data = _set_inspection_metadata(data, status)
+    if sku_used != sku:
+        data["sku_override"] = {"input": sku, "used": sku_used, "ink": ink}
     data["artifacts"] = _write_inspection_artifacts(run_dir, data)
     try:
         features_list = []
@@ -1832,7 +1987,9 @@ async def analyze_single(
     x_user_role: Optional[str] = Header(default=""),
     analysis_modes: Optional[str] = Form("all"),
     expected_ink_count: Optional[int] = Form(None),
+    match_ids: Optional[str] = Form(None),
     files: List[UploadFile] = File(...),
+    black_files: Optional[List[UploadFile]] = File(None),
 ):
     """
     Single sample analysis without STD comparison
@@ -1864,7 +2021,16 @@ async def analyze_single(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Save uploaded files
-    file_paths = _save_uploads(files, run_dir)
+    white_dir = run_dir / "white"
+    white_dir.mkdir(parents=True, exist_ok=True)
+    file_paths = _save_uploads(files, white_dir)
+    black_paths: List[Path] = []
+    if black_files:
+        black_dir = run_dir / "black"
+        black_dir.mkdir(parents=True, exist_ok=True)
+        black_paths = _save_uploads(black_files, black_dir)
+        if len(black_paths) != len(file_paths):
+            raise HTTPException(status_code=400, detail="files and black_files count mismatch")
 
     # Load configuration
     cfg = _load_cfg()
@@ -1880,34 +2046,86 @@ async def analyze_single(
     else:
         modes = [m.strip() for m in analysis_modes.split(",") if m.strip()]
 
+    if black_files and "plate" not in modes:
+        modes.append("plate")
+
     # Import single analyzer
-    from core.pipeline.single_analyzer import analyze_single_sample
+    from src.engine_v7.core.pipeline.single_analyzer import analyze_single_sample
 
     # Process each file
     results = []
-    for file_path in file_paths:
-        bgr = cv2.imread(str(file_path))
-        if bgr is None:
-            logger.warning(f"Failed to load image: {file_path}")
-            continue
+    if black_paths:
+        match_list = _parse_match_ids(match_ids, len(file_paths)) if match_ids else None
+        for idx, (white_path, black_path) in enumerate(zip(file_paths, black_paths)):
+            white_bgr = cv2.imread(str(white_path))
+            black_bgr = cv2.imread(str(black_path))
+            if white_bgr is None or black_bgr is None:
+                logger.warning(f"Failed to load image pair: {white_path}, {black_path}")
+                continue
+            match_id = match_list[idx] if match_list else f"{white_path.stem}_{black_path.stem}"
 
-        try:
-            # Run single sample analysis
-            analysis = analyze_single_sample(bgr, cfg, analysis_modes=modes)
+            try:
+                analysis = analyze_single_sample(
+                    white_bgr,
+                    cfg,
+                    analysis_modes=modes,
+                    black_bgr=black_bgr,
+                    match_id=match_id,
+                )
+                artifacts = _generate_single_analysis_artifacts(white_bgr, analysis, run_dir, white_path.stem)
+                plate_artifacts = _generate_plate_pair_artifacts(
+                    white_bgr,
+                    black_bgr,
+                    run_dir,
+                    white_path.stem,
+                    cfg,
+                )
+                artifacts.update(plate_artifacts)
+                results.append(
+                    {
+                        "filename": white_path.name,
+                        "black_filename": black_path.name,
+                        "match_id": match_id,
+                        "analysis": analysis,
+                        "artifacts": artifacts,
+                    }
+                )
+            except Exception as exc:
+                logger.exception(f"Analysis failed for {white_path.name}")
+                results.append(
+                    {
+                        "filename": white_path.name,
+                        "black_filename": black_path.name,
+                        "match_id": match_id,
+                        "error": str(exc),
+                        "analysis": None,
+                        "artifacts": {},
+                    }
+                )
+    else:
+        for file_path in file_paths:
+            bgr = cv2.imread(str(file_path))
+            if bgr is None:
+                logger.warning(f"Failed to load image: {file_path}")
+                continue
 
-            # Generate visualization artifacts
-            artifacts = _generate_single_analysis_artifacts(bgr, analysis, run_dir, file_path.stem)
+            try:
+                # Run single sample analysis
+                analysis = analyze_single_sample(bgr, cfg, analysis_modes=modes)
 
-            results.append({"filename": file_path.name, "analysis": analysis, "artifacts": artifacts})
+                # Generate visualization artifacts
+                artifacts = _generate_single_analysis_artifacts(bgr, analysis, run_dir, file_path.stem)
 
-        except Exception as exc:
-            logger.exception(f"Analysis failed for {file_path.name}")
-            results.append({"filename": file_path.name, "error": str(exc), "analysis": None, "artifacts": {}})
+                results.append({"filename": file_path.name, "analysis": analysis, "artifacts": artifacts})
+
+            except Exception as exc:
+                logger.exception(f"Analysis failed for {file_path.name}")
+                results.append({"filename": file_path.name, "error": str(exc), "analysis": None, "artifacts": {}})
 
     # Save results to JSON
     out_path = run_dir / "single_analysis.json"
     output = {"run_id": run_id, "timestamp": datetime.now().isoformat(), "analysis_modes": modes, "results": results}
-    out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2, cls=NumpyEncoder), encoding="utf-8")
 
     return output
 
@@ -2005,3 +2223,358 @@ def _generate_single_analysis_artifacts(
     artifacts["quality_badge"] = f"/v7_results/{run_dir.name}/{badge_path.name}"
 
     return artifacts
+
+
+# =============================================================================
+# Phase 6 Integration: Plate Gate & Simulation APIs
+# =============================================================================
+
+
+def _polar_mask_to_base64(polar_mask: np.ndarray) -> str:
+    """
+    Convert polar boolean mask to Base64 PNG image for UI visualization.
+
+    Args:
+        polar_mask: (T, R) boolean array
+
+    Returns:
+        Base64 encoded PNG string
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    if polar_mask is None or polar_mask.size == 0:
+        return ""
+
+    # Boolean mask to uint8 image (0 or 255)
+    img_array = polar_mask.astype(np.uint8) * 255
+
+    # PIL Image
+    img = Image.fromarray(img_array, mode="L")  # Grayscale
+
+    # PNG encode
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    # Base64 encode
+    img_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+
+    return img_base64
+
+
+class PlateGateRequest(BaseModel):
+    """Request model for plate gate extraction."""
+
+    sku: Optional[str] = None
+
+
+class SimulationRequest(BaseModel):
+    """Request model for color simulation."""
+
+    sku: Optional[str] = None
+    method: str = "area_ratio"  # "area_ratio" or "mask_based"
+    ink_labs: Optional[List[List[float]]] = None  # List of [L, a, b] for each ink
+    area_ratios: Optional[List[float]] = None  # Coverage ratios for each ink
+    bg_lab: List[float] = [100.0, 0.0, 0.0]  # Background color (default: white)
+
+
+@router.post("/plate_gate")
+async def extract_plate_gate_api(
+    x_user_role: Optional[str] = Header(default=""),
+    sku: Optional[str] = Form(None),
+    white_file: UploadFile = File(...),
+    black_file: UploadFile = File(...),
+):
+    """
+    Lightweight Plate Gate extraction for Hard Gate sampling visualization.
+
+    This endpoint extracts ink masks from white/black backlight image pairs
+    without running full plate analysis. Useful for:
+    - Quick gate quality validation
+    - Mask visualization in UI
+    - Pre-inspection checks
+
+    Args:
+        sku: Optional SKU for configuration
+        white_file: White backlight image
+        black_file: Black backlight image
+
+    Returns:
+        {
+            "usable": bool,
+            "artifact_ratio": float,
+            "registration": {
+                "method": str,
+                "swapped": bool
+            },
+            "geom": {
+                "cx": float,
+                "cy": float,
+                "r": float
+            },
+            "ink_mask_polar_image": str (Base64 PNG),
+            "valid_polar_image": str (Base64 PNG)
+        }
+    """
+    _require_role("operator", x_user_role)
+
+    # Validate files
+    for f in [white_file, black_file]:
+        validate_file_extension(f.filename, [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"])
+        validate_file_size(f, max_size_mb=50)
+
+    # Read images
+    white_bytes = await white_file.read()
+    black_bytes = await black_file.read()
+
+    white_arr = np.frombuffer(white_bytes, np.uint8)
+    black_arr = np.frombuffer(black_bytes, np.uint8)
+
+    white_bgr = cv2.imdecode(white_arr, cv2.IMREAD_COLOR)
+    black_bgr = cv2.imdecode(black_arr, cv2.IMREAD_COLOR)
+
+    if white_bgr is None:
+        raise HTTPException(status_code=400, detail="Failed to decode white_file image")
+    if black_bgr is None:
+        raise HTTPException(status_code=400, detail="Failed to decode black_file image")
+
+    # Load configuration
+    cfg = _load_cfg(sku)
+
+    # Import and run plate gate extraction
+    from src.engine_v7.core.plate.plate_gate import extract_plate_gate
+
+    try:
+        gate_result = extract_plate_gate(white_bgr, black_bgr, cfg)
+    except Exception as e:
+        logger.exception("Plate gate extraction failed")
+        raise HTTPException(status_code=500, detail=f"Gate extraction failed: {str(e)}")
+
+    # Extract results
+    gate_quality = gate_result.get("gate_quality", {})
+    registration = gate_result.get("registration", {})
+    geom = gate_result.get("geom")
+
+    # Convert masks to Base64 images
+    ink_mask_polar = gate_result.get("ink_mask_core_polar")
+    valid_polar = gate_result.get("valid_polar")
+
+    ink_mask_image = _polar_mask_to_base64(ink_mask_polar) if ink_mask_polar is not None else ""
+    valid_polar_image = _polar_mask_to_base64(valid_polar) if valid_polar is not None else ""
+
+    # Build response
+    response = {
+        "usable": gate_quality.get("usable", False),
+        "artifact_ratio": gate_quality.get("artifact_ratio", 0.0),
+        "reason": gate_quality.get("reason"),
+        "registration": {
+            "method": registration.get("method", "unknown"),
+            "swapped": registration.get("swapped", False),
+        },
+        "geom": (
+            {
+                "cx": float(geom.cx) if geom else 0,
+                "cy": float(geom.cy) if geom else 0,
+                "r": float(geom.r) if geom else 0,
+            }
+            if geom
+            else None
+        ),
+        "ink_mask_polar_image": ink_mask_image,
+        "valid_polar_image": valid_polar_image,
+        "mask_shape": list(ink_mask_polar.shape) if ink_mask_polar is not None else None,
+    }
+
+    return response
+
+
+@router.post("/simulation")
+async def run_simulation_api(
+    x_user_role: Optional[str] = Header(default=""),
+    method: str = Form("area_ratio"),
+    ink_labs: str = Form(...),  # JSON string: [[L, a, b], ...]
+    area_ratios: str = Form(...),  # JSON string: [0.1, 0.2, ...]
+    bg_type: str = Form("white"),  # "white" or "black"
+    bg_lab: Optional[str] = Form(None),  # Optional custom background: "[L, a, b]"
+):
+    """
+    Color simulation with method selection.
+
+    Supports two simulation methods:
+    - area_ratio: Fast scalar mixing (default, legacy)
+    - mask_based: Pixel-level synthesis (requires additional data)
+
+    Args:
+        method: "area_ratio" or "mask_based"
+        ink_labs: JSON array of ink Lab colors [[L, a, b], ...]
+        area_ratios: JSON array of coverage ratios [0.1, 0.2, ...]
+        bg_type: "white" (default) or "black"
+        bg_lab: Optional custom background Lab "[L, a, b]"
+
+    Returns:
+        {
+            "method": str,
+            "composite": {
+                "lab": [L, a, b],
+                "hex": "#RRGGBB"
+            },
+            "per_ink": [
+                {
+                    "ink_lab": [L, a, b],
+                    "coverage": float,
+                    "perceived": {
+                        "lab": [L, a, b],
+                        "hex": "#RRGGBB"
+                    }
+                }
+            ],
+            "total_coverage": float
+        }
+    """
+    _require_role("operator", x_user_role)
+
+    # Parse JSON inputs
+    try:
+        ink_labs_list = json.loads(ink_labs)
+        area_ratios_list = json.loads(area_ratios)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON input: {str(e)}")
+
+    if len(ink_labs_list) != len(area_ratios_list):
+        raise HTTPException(status_code=400, detail="ink_labs and area_ratios must have same length")
+
+    # Determine background color
+    if bg_lab:
+        try:
+            background_lab = json.loads(bg_lab)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid bg_lab JSON")
+    elif bg_type == "black":
+        background_lab = [10.0, 0.0, 0.0]
+    else:  # white
+        background_lab = [100.0, 0.0, 0.0]
+
+    # Import simulation functions
+    from src.engine_v7.core.simulation.color_simulator import simulate_perceived_color
+
+    # Run simulation for each ink
+    per_ink_results = []
+    total_coverage = 0.0
+
+    for ink_lab, coverage in zip(ink_labs_list, area_ratios_list):
+        coverage = float(coverage)
+        total_coverage += coverage
+
+        sim_result = simulate_perceived_color(ink_lab, coverage, background_lab)
+
+        per_ink_results.append(
+            {
+                "ink_lab": [round(x, 2) for x in ink_lab],
+                "coverage": round(coverage, 4),
+                "perceived": {
+                    "lab": sim_result["lab"],
+                    "hex": sim_result["hex"],
+                },
+            }
+        )
+
+    # Calculate composite color (spatial averaging in linear RGB)
+    def lab_to_linear_rgb(lab):
+        lab_arr = np.array([[lab]], dtype=np.float32)
+        rgb_gamma = cv2.cvtColor(lab_arr, cv2.COLOR_Lab2RGB)[0, 0]
+        linear_rgb = np.where(rgb_gamma <= 0.04045, rgb_gamma / 12.92, np.power((rgb_gamma + 0.055) / 1.055, 2.4))
+        return linear_rgb
+
+    def linear_rgb_to_lab(linear_rgb):
+        srgb = np.where(
+            linear_rgb <= 0.0031308, linear_rgb * 12.92, 1.055 * np.power(np.maximum(linear_rgb, 0), 1.0 / 2.4) - 0.055
+        )
+        srgb = np.clip(srgb, 0.0, 1.0).astype(np.float32)
+        srgb_arr = srgb.reshape(1, 1, 3)
+        lab = cv2.cvtColor(srgb_arr, cv2.COLOR_RGB2Lab)[0, 0]
+        return [float(lab[0]), float(lab[1]), float(lab[2])]
+
+    def lab_to_hex(lab):
+        lab_arr = np.array([[lab]], dtype=np.float32)
+        rgb = cv2.cvtColor(lab_arr, cv2.COLOR_Lab2RGB)[0, 0]
+        rgb_u8 = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
+        return f"#{rgb_u8[0]:02x}{rgb_u8[1]:02x}{rgb_u8[2]:02x}"
+
+    # Composite calculation: bg * (1 - total) + sum(ink * coverage)
+    bg_lin = lab_to_linear_rgb(background_lab)
+    weighted_sum = np.zeros(3, dtype=np.float64)
+
+    for ink_lab, coverage in zip(ink_labs_list, area_ratios_list):
+        ink_lin = lab_to_linear_rgb(ink_lab)
+        weighted_sum += ink_lin * float(coverage)
+
+    composite_lin = bg_lin * (1.0 - total_coverage) + weighted_sum
+    composite_lin = np.clip(composite_lin, 0.0, 1.0)
+    composite_lab = linear_rgb_to_lab(composite_lin)
+    composite_hex = lab_to_hex(composite_lab)
+
+    return {
+        "method": method,
+        "background": {
+            "type": bg_type,
+            "lab": [round(x, 2) for x in background_lab],
+        },
+        "composite": {
+            "lab": [round(x, 2) for x in composite_lab],
+            "hex": composite_hex,
+        },
+        "per_ink": per_ink_results,
+        "total_coverage": round(total_coverage, 4),
+        "model": {
+            "name": "spatial_mix_linear_rgb",
+            "version": "v1.1",
+            "assumptions": ["opaque_spatial_averaging", "sRGB_gamma_correction", "D65_illuminant"],
+        },
+    }
+
+
+@router.get("/simulation/methods")
+async def get_simulation_methods():
+    """
+    List available simulation methods.
+
+    Returns:
+        {
+            "methods": [
+                {
+                    "id": "area_ratio",
+                    "name": "Area Ratio (Scalar)",
+                    "description": "Fast mixing based on coverage ratios",
+                    "recommended": true
+                },
+                {
+                    "id": "mask_based",
+                    "name": "Mask-based (Pixel)",
+                    "description": "Pixel-level synthesis using segmentation masks",
+                    "recommended": false,
+                    "note": "Requires additional mask data"
+                }
+            ]
+        }
+    """
+    return {
+        "methods": [
+            {
+                "id": "area_ratio",
+                "name": "Area Ratio (Scalar)",
+                "description": "Fast mixing based on coverage ratios. Recommended for most use cases.",
+                "recommended": True,
+            },
+            {
+                "id": "mask_based",
+                "name": "Mask-based (Pixel)",
+                "description": "Pixel-level synthesis using segmentation masks. More accurate but slower.",
+                "recommended": False,
+                "note": "Requires lab_map_polar and color_masks from full analysis",
+            },
+        ],
+        "default": "area_ratio",
+    }
