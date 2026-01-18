@@ -32,3 +32,6 @@ std_registration_pkg/
 lens_signature_engine_v7/share_pkg/inspect_ink*.json
 lens_signature_engine_v7/share_pkg/std_reg_*.json
 *.db
+
+# Lighthouse reports
+lighthouse_reports/
