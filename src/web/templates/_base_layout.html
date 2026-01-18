@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Color Meter - 렌즈 품질 분석 시스템" />
+    <title>{% block title %}Color Meter{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+
+    <!-- Design System -->
+    <link rel="stylesheet" href="/static/css/design_system.css" />
+
+    <!-- Tailwind CSS (for utility classes) -->
+    <script
+      src="/static/vendor/tailwind.min.js"
+      onerror="
+        this.onerror = null;
+        this.src = 'https://cdn.tailwindcss.com';
+      "
+    ></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Font Awesome -->
+    <link
+      rel="stylesheet"
+      href="/static/vendor/fontawesome.min.css"
+      onerror="
+        this.onerror = null;
+        this.href =
+          'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+      "
+    />
+
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <!-- Main Navigation -->
+    <nav class="main-nav">
+      <div
+        class="container mx-auto px-6 py-4 flex items-center justify-between"
+      >
+        <!-- Brand -->
+        <a href="/" class="nav-brand">
+          <div
+            class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold shadow-md"
+          >
+            CM
+          </div>
+          <div class="flex flex-col">
+            <span class="font-bold text-lg">Color Meter</span>
+            <span class="text-xs text-dim hidden md:block"
+              >Lens Quality Analysis</span
+            >
+          </div>
+        </a>
+
+        <!-- Navigation Menu -->
+        <div class="flex items-center gap-2">
+          <a href="/" class="nav-link">
+            <i class="fa-solid fa-house w-4"></i>
+            <span class="hidden md:inline">Home</span>
+          </a>
+          <a href="/v7" class="nav-link">
+            <i class="fa-solid fa-crosshairs w-4"></i>
+            <span class="hidden md:inline">Inspection</span>
+          </a>
+          <a href="/single_analysis" class="nav-link">
+            <i class="fa-solid fa-flask w-4"></i>
+            <span class="hidden md:inline">Single Analysis</span>
+          </a>
+          <a href="/calibration" class="nav-link">
+            <i class="fa-solid fa-sliders w-4"></i>
+            <span class="hidden md:inline">Calibration</span>
+          </a>
+          <a href="/history" class="nav-link">
+            <i class="fa-solid fa-clock-rotate-left w-4"></i>
+            <span class="hidden md:inline">History</span>
+          </a>
+          <a href="/stats" class="nav-link">
+            <i class="fa-solid fa-chart-simple w-4"></i>
+            <span class="hidden md:inline">Stats</span>
+          </a>
+        </div>
+
+        <!-- User/Settings (future) -->
+        <div class="flex items-center gap-2">
+          <button
+            id="themeToggle"
+            class="btn-icon btn-secondary"
+            title="Toggle theme"
+            aria-label="Toggle theme"
+          >
+            <i class="fa-solid fa-moon"></i>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="min-h-screen">{% block content %}{% endblock %}</main>
+
+    <!-- Footer -->
+    <footer class="border-t border-default mt-16 py-8">
+      <div class="container mx-auto px-6">
+        <div
+          class="flex flex-col md:flex-row items-center justify-between gap-4"
+        >
+          <div class="text-sm text-secondary">
+            <p>© 2025 Color Meter. Lens Quality Analysis System.</p>
+            <p class="text-xs text-dim mt-1">
+              Powered by Lens Signature Engine v7
+            </p>
+          </div>
+          <div class="flex gap-4 text-sm">
+            <a href="/docs" class="text-secondary hover:text-primary"
+              >Documentation</a
+            >
+            <a href="/api/docs" class="text-secondary hover:text-primary"
+              >API</a
+            >
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Notification Container -->
+    <div
+      id="notificationContainer"
+      class="fixed top-4 right-4 z-50 space-y-2"
+    ></div>
+
+    <!-- Core Scripts -->
+    <script type="module" src="/static/js/core/state.js"></script>
+    <script type="module" src="/static/js/core/api.js"></script>
+    <script type="module" src="/static/js/utils/notifications.js"></script>
+
+    <!-- Theme Toggle Script -->
+    <script>
+      // Theme toggle functionality
+      const themeToggle = document.getElementById("themeToggle");
+      const html = document.documentElement;
+
+      // Load saved theme
+      const savedTheme = localStorage.getItem("theme") || "dark";
+      html.dataset.theme = savedTheme;
+      updateThemeIcon(savedTheme);
+
+      themeToggle.addEventListener("click", () => {
+        const currentTheme = html.dataset.theme || "dark";
+        const newTheme = currentTheme === "dark" ? "light" : "dark";
+        html.dataset.theme = newTheme;
+        localStorage.setItem("theme", newTheme);
+        updateThemeIcon(newTheme);
+      });
+
+      function updateThemeIcon(theme) {
+        const icon = themeToggle.querySelector("i");
+        if (theme === "dark") {
+          icon.className = "fa-solid fa-moon";
+        } else {
+          icon.className = "fa-solid fa-sun";
+        }
+      }
+
+      // Active link highlighting
+      const currentPath = window.location.pathname;
+      document.querySelectorAll(".nav-link").forEach((link) => {
+        if (link.getAttribute("href") === currentPath) {
+          link.classList.add("active");
+        }
+      });
+    </script>
+
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

@@ -35,3 +35,6 @@ lens_signature_engine_v7/share_pkg/std_reg_*.json
 
 # Lighthouse reports
 lighthouse_reports/
+
+# Web assets (downloadable from CDN)
+src/web/static/webfonts/

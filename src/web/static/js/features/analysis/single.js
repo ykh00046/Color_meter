@@ -36,10 +36,10 @@ export async function runSingleAnalysis() {
         appState.setState('analysis.isProcessing', true);
 
         const fd = new FormData();
-        fd.append('white_file', whiteFile);
-        if (blackFile) fd.append('black_file', blackFile);
+        fd.append('files', whiteFile);
+        if (blackFile) fd.append('black_files', blackFile);
         fd.append('expected_ink_count', inkCount);
-        fd.append('analysis_scope', byId('analysisScope')?.value || 'full');
+        fd.append('analysis_modes', byId('analysisScope')?.value || 'all');
 
         const data = await apiClient.post('/v7/analyze_single', fd, 'multipart');
 
