@@ -1,18 +1,25 @@
-// Shared utilities for v7 UI.
-(function() {
-const v7 = window.v7 || (window.v7 = { api: {}, utils: {}, state: {}, render: {}, actions: {}, viewer: {}, products: {}, tabs: {}, copy: {} });
+/**
+ * Color conversion and DOM utilities for Color Meter
+ * Migrated from v7/utils.js
+ */
 
-v7.utils.byId = (id) => document.getElementById(id);
-window.byId = v7.utils.byId;
+// DOM Utilities
+export function byId(id) {
+    return document.getElementById(id);
+}
 
-v7.utils.safeText = (id, text) => {
-    const el = v7.utils.byId(id);
+export function safeText(id, text) {
+    const el = byId(id);
     if (el) el.textContent = text;
-};
+}
 
-v7.utils.clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+// Math Utilities
+export function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
 
-v7.utils.normalizeLab = (lab) => {
+// Color Conversion Utilities
+export function normalizeLab(lab) {
     let [l, a, b] = lab;
     const needsNormalize = l > 100 || a > 128 || b > 128 || a < -128 || b < -128;
     if (needsNormalize) {
@@ -21,11 +28,11 @@ v7.utils.normalizeLab = (lab) => {
         b = b - 128;
     }
     return [l, a, b];
-};
+}
 
-v7.utils.labToRgb = (lab) => {
+export function labToRgb(lab) {
     if (!Array.isArray(lab) || lab.length < 3) return null;
-    let [l, a, b] = v7.utils.normalizeLab(lab);
+    let [l, a, b] = normalizeLab(lab);
     let y = (l + 16) / 116;
     let x = y + a / 500;
     let z = y - b / 200;
@@ -49,23 +56,24 @@ v7.utils.labToRgb = (lab) => {
 
     const rgb = [r, g, b2].map((v) => {
         const vv = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
-        return Math.round(v7.utils.clamp(vv, 0, 1) * 255);
+        return Math.round(clamp(vv, 0, 1) * 255);
     });
     return rgb;
-};
+}
 
-v7.utils.rgbToHex = (rgb) => {
+export function rgbToHex(rgb) {
     if (!Array.isArray(rgb)) return null;
     const hex = rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
     return `#${hex}`.toUpperCase();
-};
+}
 
-v7.utils.labToHex = (lab) => {
-    const rgb = v7.utils.labToRgb(lab);
-    return rgb ? v7.utils.rgbToHex(rgb) : null;
-};
+export function labToHex(lab) {
+    const rgb = labToRgb(lab);
+    return rgb ? rgbToHex(rgb) : null;
+}
 
-v7.utils.REASON_MAP = {
+// Reason/Error Code Mappings
+export const REASON_MAP = {
     PATTERN_BASELINE_NOT_FOUND: {
         title: "패턴 기준 없음",
         desc: "패턴 기준이 없어 비교를 수행하지 못했습니다.",
@@ -138,15 +146,24 @@ v7.utils.REASON_MAP = {
     }
 };
 
-v7.utils.getReasonInfo = (code) => {
+export function getReasonInfo(code) {
     if (!code) {
         return { title: "사유 없음", desc: "사유 코드가 없습니다.", fix: "" };
     }
-    return v7.utils.REASON_MAP[code] || {
+    return REASON_MAP[code] || {
         title: "알 수 없음",
         desc: code,
         fix: "로그를 확인하세요."
     };
-};
+}
 
-})();
+// Global error handlers
+if (typeof window !== 'undefined') {
+    window.addEventListener("unhandledrejection", (event) => {
+        console.error("Unhandled promise rejection:", event.reason);
+    });
+
+    window.addEventListener("error", (event) => {
+        console.error("Unhandled error:", event.error || event.message);
+    });
+}

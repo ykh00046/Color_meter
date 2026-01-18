@@ -1,8 +1,9 @@
-// UI copy constants for v7 UI.
-(function() {
-const v7 = window.v7 || (window.v7 = { api: {}, utils: {}, state: {}, render: {}, actions: {}, viewer: {}, products: {}, tabs: {}, copy: {} });
+/**
+ * UI Copy/i18n constants
+ * Migrated from v7/copy.js
+ */
 
-v7.copy = {
+export const UI_TEXT = {
     buttons: {
         inspectStart: "검사 실행",
         inspectRunning: "검사 중...",
@@ -43,14 +44,24 @@ v7.copy = {
     }
 };
 
-v7.t = (path, fallback = "") => {
+/**
+ * Get text by path
+ * @param {string} path - Dot-separated path (e.g., 'buttons.inspectStart')
+ * @param {string} fallback - Fallback text
+ * @returns {string}
+ */
+export function t(path, fallback = "") {
     const parts = path.split(".");
-    let node = v7.copy;
+    let node = UI_TEXT;
+
     for (const key of parts) {
-        if (!node || typeof node !== "object" || !(key in node)) return fallback;
+        if (!node || typeof node !== "object" || !(key in node)) {
+            return fallback;
+        }
         node = node[key];
     }
-    return typeof node === "string" ? node : fallback;
-};
 
-})();
+    return typeof node === "string" ? node : fallback;
+}
+
+export default UI_TEXT;
