@@ -29,7 +29,7 @@
   /* Text Colors */
   --text-primary: #e2e8f0;
   --text-secondary: #cbd5e1;
-  --text-dim: #94a3b8;
+  --text-dim: #a1b0c4;
   --text-inverse: #0f172a;
 
   /* Border Colors */
@@ -684,6 +684,104 @@ label {
     transform: translateX(100%);
     opacity: 0;
   }
+}
+
+/* ==========================================
+   Drop Zone (Drag & Drop Upload)
+   ========================================== */
+
+.drop-zone {
+  border: 2px dashed var(--border-dim);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+  border-color: var(--color-primary);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.drop-zone:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.drop-zone.has-file {
+  border-style: solid;
+  border-color: var(--color-success);
+  background-color: rgba(16, 185, 129, 0.05);
+}
+
+.drop-zone-icon {
+  font-size: var(--font-size-2xl);
+  color: var(--text-dim);
+  margin-bottom: var(--spacing-xs);
+}
+
+.drop-zone-text {
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+}
+
+.drop-zone-preview {
+  margin-top: var(--spacing-sm);
+}
+
+.drop-zone-preview img {
+  max-height: 80px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  margin: 0 auto;
+}
+
+/* ==========================================
+   Progress Indicator
+   ========================================== */
+
+.progress-container {
+  padding: var(--spacing-sm) 0;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+/* ==========================================
+   Accessible Utilities
+   ========================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 /* ==========================================

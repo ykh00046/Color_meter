@@ -1,0 +1,67 @@
+{# Single Analysis - Upload Card Partial #}
+<div class="terminal-panel p-6 mb-6">
+    <h2 class="text-xl font-bold mb-6">이미지 업로드</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- White Background -->
+        <div>
+            <label class="block text-sm font-semibold text-secondary mb-2" for="fileWhite">
+                White 배경 이미지 <span class="text-error">*</span>
+            </label>
+            <div id="saWhiteDropZone" class="drop-zone" role="button" tabindex="0"
+                 aria-label="Upload white background image. Click or drag and drop."
+                 data-placeholder="파일 선택...">
+                <input type="file" id="fileWhite" accept=".png,.jpg,.jpeg,.bmp,.tiff,.tif"
+                       class="sr-only" aria-hidden="true">
+                <div class="flex items-center justify-between gap-2">
+                    <span id="fileWhiteName" class="drop-zone-text truncate">파일 선택...</span>
+                    <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+                </div>
+                <div id="saWhitePreview" class="drop-zone-preview hidden"></div>
+            </div>
+        </div>
+
+        <!-- Black Background (Optional) -->
+        <div>
+            <label class="block text-sm font-semibold text-secondary mb-2" for="fileBlack">
+                Black 배경 이미지 (선택)
+            </label>
+            <div id="saBlackDropZone" class="drop-zone" role="button" tabindex="0"
+                 aria-label="Upload black background image. Click or drag and drop."
+                 data-placeholder="파일 선택...">
+                <input type="file" id="fileBlack" accept=".png,.jpg,.jpeg,.bmp,.tiff,.tif"
+                       class="sr-only" aria-hidden="true">
+                <div class="flex items-center justify-between gap-2">
+                    <span id="fileBlackName" class="drop-zone-text truncate">파일 선택...</span>
+                    <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+                </div>
+                <div id="saBlackPreview" class="drop-zone-preview hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div>
+            <label class="block text-sm font-semibold text-secondary mb-2" for="inkCountInput">예상 잉크 수</label>
+            <input type="number" id="inkCountInput" class="terminal-input" value="3" min="1" max="8"
+                   aria-describedby="inkCountHint">
+            <span id="inkCountHint" class="sr-only">Number of inks expected (1-8)</span>
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-secondary mb-2" for="analysisScope">분석 범위</label>
+            <select id="analysisScope" class="terminal-input">
+                <option value="all">전체 분석</option>
+                <option value="gate,color,ink">빠른 분석</option>
+            </select>
+        </div>
+
+        <div class="flex items-end">
+            <button id="btnAnalyze" class="btn btn-primary w-full">
+                <i class="fa-solid fa-play mr-2"></i>
+                분석시작
+            </button>
+        </div>
+    </div>
+</div>

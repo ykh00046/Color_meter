@@ -6,3 +6,4 @@
 | phase6-pipeline | 100% | 2026-01-31 | plan, design, analysis, report |
 | analyzer-refactor | 100% | 2026-01-31 | plan, design, analysis, report |
 | v7-router-split | 95% | 2026-01-31 | plan, design, analysis, report |
+| web-ui-modernization | 95% | 2026-01-31 | plan, design, analysis, report |

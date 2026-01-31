@@ -1,0 +1,58 @@
+{# Single Analysis - Palette Tab Panel #}
+<div class="result-tab-content active" data-tab-content="palette"
+     id="panel-palette" role="tabpanel" aria-labelledby="tab-btn-palette">
+    <h3 class="text-lg font-bold mb-4">감지된 잉크 색상</h3>
+    <div class="image-panel">
+        <div class="image-pair">
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-base font-semibold">White Image</h4>
+                    <span id="whiteOriginalMeta" class="text-xs text-dim"></span>
+                </div>
+                <img id="whiteOriginalImage" class="image-frame hidden" alt="White original" loading="lazy">
+            </div>
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-base font-semibold">Black Image</h4>
+                    <span id="blackOriginalMeta" class="text-xs text-dim"></span>
+                </div>
+                <img id="blackOriginalImage" class="image-frame hidden" alt="Black original" loading="lazy">
+            </div>
+        </div>
+        <div class="mt-6">
+            <h4 class="text-sm font-semibold mb-2">Ink Palette</h4>
+            <div id="inkPaletteContainer" class="ink-palette"></div>
+        </div>
+        <div class="ink-simulator">
+            <div class="sim-header-group">
+                <div class="title-row">
+                    <div>
+                        <div class="sim-title">Intrinsic Color Simulation</div>
+                        <div class="text-xs text-dim">Beer-Lambert preview using intrinsic k</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="trustBadge" class="badge badge-gray">Loading</span>
+                        <span id="simStatus" class="text-xs text-dim"></span>
+                    </div>
+                </div>
+                <div id="simWarningBox" class="warning-alert" style="display:none;">
+                    <span class="icon">!</span>
+                    <span id="simWarningText"></span>
+                </div>
+            </div>
+            <div class="sim-controls">
+                <div class="sim-control">
+                    <label>Background</label>
+                    <div class="sim-bg-buttons" id="simBgButtons"></div>
+                </div>
+                <div class="sim-control">
+                    <label>Thickness</label>
+                    <input id="simThickness" class="sim-slider" type="range" min="0.5" max="2.0" step="0.1" value="1.0">
+                    <div id="simThicknessValue" class="sim-thickness-value">1.0x</div>
+                </div>
+            </div>
+            <div id="inkSimulationGrid" class="ink-sim-grid"></div>
+            <div id="inkSimulationEmpty" class="text-xs text-dim hidden">No intrinsic k data available.</div>
+        </div>
+    </div>
+</div>

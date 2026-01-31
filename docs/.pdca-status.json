@@ -46,6 +46,20 @@
         "report": "docs/archive/2026-01/analyzer-refactor/analyzer-refactor.report.md"
       }
     },
+    "web-ui-modernization": {
+      "phase": "archived",
+      "matchRate": 95,
+      "iterations": 1,
+      "createdAt": "2026-01-31T16:00:00.000Z",
+      "updatedAt": "2026-01-31T20:00:00.000Z",
+      "archivedTo": "docs/archive/2026-01/web-ui-modernization/",
+      "documents": {
+        "plan": "docs/archive/2026-01/web-ui-modernization/web-ui-modernization.plan.md",
+        "design": "docs/archive/2026-01/web-ui-modernization/web-ui-modernization.design.md",
+        "analysis": "docs/archive/2026-01/web-ui-modernization/web-ui-modernization.analysis.md",
+        "report": "docs/archive/2026-01/web-ui-modernization/web-ui-modernization.report.md"
+      }
+    },
     "v7-router-split": {
       "phase": "archived",
       "matchRate": 95,
@@ -95,6 +109,12 @@
       "completedAt": "2026-01-31T15:00:00.000Z",
       "matchRate": 95,
       "iterations": 0
+    },
+    {
+      "feature": "web-ui-modernization",
+      "completedAt": "2026-01-31T20:00:00.000Z",
+      "matchRate": 95,
+      "iterations": 1
     }
   ]
 }

@@ -3,7 +3,7 @@
 {% block title %}검사 이력 | Color Meter{% endblock %}
 
 {% block extra_head %}
-<script src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
+<script defer src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
 {% endblock %}
 
 {% block content %}
@@ -42,19 +42,19 @@
         <h2 class="text-xl font-bold mb-6">필터로 기록을 좁혀보기</h2>
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
-                <label class="block text-xs text-dim mb-2">SKU Code</label>
+                <label class="block text-xs text-dim mb-2" for="filter-sku">SKU Code</label>
                 <input type="text" id="filter-sku" placeholder="SKU001" class="terminal-input">
             </div>
             <div>
-                <label class="block text-xs text-dim mb-2">Operator</label>
+                <label class="block text-xs text-dim mb-2" for="filter-operator">Operator</label>
                 <input type="text" id="filter-operator" placeholder="Operator" class="terminal-input">
             </div>
             <div>
-                <label class="block text-xs text-dim mb-2">Batch</label>
+                <label class="block text-xs text-dim mb-2" for="filter-batch">Batch</label>
                 <input type="text" id="filter-batch" placeholder="Batch/Lot" class="terminal-input">
             </div>
             <div>
-                <label class="block text-xs text-dim mb-2">Judgment</label>
+                <label class="block text-xs text-dim mb-2" for="filter-judgment">Judgment</label>
                 <select id="filter-judgment" class="terminal-input">
                     <option value="">All</option>
                     <option value="OK">OK</option>
@@ -65,11 +65,11 @@
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-xs text-dim mb-2">Start</label>
+                    <label class="block text-xs text-dim mb-2" for="filter-start">Start</label>
                     <input type="date" id="filter-start" class="terminal-input">
                 </div>
                 <div>
-                    <label class="block text-xs text-dim mb-2">End</label>
+                    <label class="block text-xs text-dim mb-2" for="filter-end">End</label>
                     <input type="date" id="filter-end" class="terminal-input">
                 </div>
             </div>
@@ -84,45 +84,12 @@
         </div>
     </div>
 
-    <!-- History Table -->
+    <!-- History Table (DataTable component) -->
     <div class="terminal-panel p-6">
         <div class="flex items-center justify-between mb-6">
             <h2 class="text-xl font-bold">검사 기록</h2>
-            <div class="text-sm text-dim">
-                Showing <span id="showing-count">0</span> of <span id="total-count">0</span> records
-            </div>
         </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
-                <thead class="text-xs text-dim uppercase border-b border-default">
-                    <tr>
-                        <th class="px-4 py-3">ID</th>
-                        <th class="px-4 py-3">Date/Time</th>
-                        <th class="px-4 py-3">SKU</th>
-                        <th class="px-4 py-3">Image</th>
-                        <th class="px-4 py-3">Operator</th>
-                        <th class="px-4 py-3">Batch</th>
-                        <th class="px-4 py-3">Judgment</th>
-                        <th class="px-4 py-3">ΔE</th>
-                        <th class="px-4 py-3">Confidence</th>
-                        <th class="px-4 py-3">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="history-table-body" class="divide-y divide-border-default"></tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        <div class="mt-4 flex items-center justify-between">
-            <button id="btn-prev" onclick="previousPage()" class="btn btn-secondary">
-                <i class="fa-solid fa-chevron-left mr-2"></i>Previous
-            </button>
-            <div class="text-sm text-dim">Page <span id="current-page">1</span></div>
-            <button id="btn-next" onclick="nextPage()" class="btn btn-secondary">
-                Next<i class="fa-solid fa-chevron-right ml-2"></i>
-            </button>
-        </div>
+        <div id="history-data-table" class="overflow-x-auto"></div>
     </div>
 </div>
 
@@ -142,127 +109,76 @@
 
 {% block extra_scripts %}
 <script src="/static/js/history.js" onerror="console.error('Failed to load history.js')"></script>
-<script>
-    // Inline script from original (simplified)
-    let currentPage = 1;
-    let totalRecords = 0;
-    const pageSize = 20;
+<script type="module">
+    import { DataTable } from '/static/js/shared/data_table.js';
 
-    async function loadHistory() {
-        try {
-            const skip = (currentPage - 1) * pageSize;
-            const params = new URLSearchParams({ skip, limit: pageSize });
+    function judgmentBadge(v) {
+        let cls = 'bg-purple-500';
+        if (v === 'OK') cls = 'bg-success';
+        else if (v === 'OK_WITH_WARNING') cls = 'bg-warning';
+        else if (v === 'NG') cls = 'bg-error';
+        return `<span class="px-2 py-1 rounded-full text-xs font-semibold ${cls}">${v}</span>`;
+    }
+
+    function formatDate(v) {
+        if (!v) return '-';
+        const d = new Date(v);
+        return `<div>${d.toLocaleDateString('ko-KR')}</div><div class="text-xs text-dim">${d.toLocaleTimeString('ko-KR')}</div>`;
+    }
+
+    const historyTable = new DataTable({
+        containerId: 'history-data-table',
+        pageSize: 20,
+        emptyMessage: 'No records found',
+        columns: [
+            { key: 'id', label: 'ID', sortable: true, formatter: (v) => `#${v}` },
+            { key: 'created_at', label: 'Date/Time', sortable: true, formatter: formatDate },
+            { key: 'sku_code', label: 'SKU', sortable: true, formatter: (v) => `<span class="font-semibold">${v}</span>` },
+            { key: 'image_filename', label: 'Image', formatter: (v) => `<span class="text-dim max-w-xs truncate inline-block" title="${v}">${v}</span>` },
+            { key: 'operator', label: 'Operator', formatter: (v) => `<span class="text-dim">${v || '-'}</span>` },
+            { key: 'batch_number', label: 'Batch', formatter: (v) => `<span class="text-dim">${v || '-'}</span>` },
+            { key: 'judgment', label: 'Judgment', sortable: true, formatter: judgmentBadge },
+            { key: 'overall_delta_e', label: '\u0394E', sortable: true, formatter: (v) => v != null ? v.toFixed(2) : '-' },
+            { key: 'confidence', label: 'Confidence', sortable: true, formatter: (v) => v != null ? `${(v * 100).toFixed(1)}%` : '-' },
+            { key: 'session_id', label: 'Action', formatter: (v) => `<button onclick="viewDetail('${v}')" class="text-primary hover:text-primary-hover font-medium"><i class="fa-solid fa-eye mr-1"></i>View</button>` },
+        ],
+        fetchData: async (params) => {
+            const qs = new URLSearchParams({ skip: params.skip, limit: params.limit });
 
             const sku = document.getElementById('filter-sku').value;
             const operator = document.getElementById('filter-operator').value;
             const batch = document.getElementById('filter-batch').value;
             const judgment = document.getElementById('filter-judgment').value;
 
-            if (sku) params.append('sku_code', sku);
-            if (operator) params.append('operator', operator);
-            if (batch) params.append('batch_number', batch);
-            if (judgment) params.append('judgment', judgment);
+            if (sku) qs.append('sku_code', sku);
+            if (operator) qs.append('operator', operator);
+            if (batch) qs.append('batch_number', batch);
+            if (judgment) qs.append('judgment', judgment);
 
-            const response = await fetch(`/api/inspection/history?${params}`);
-            const data = await response.json();
+            const resp = await fetch(`/api/inspection/history?${qs}`);
+            const data = await resp.json();
+            return { rows: data.results, total: data.total };
+        },
+    });
 
-            totalRecords = data.total;
-            renderTable(data.results);
-            updatePagination();
+    // Expose functions for inline onclick handlers
+    window.applyFilters = () => {
+        historyTable.filter({});
+    };
 
-            document.getElementById('showing-count').textContent = data.results.length;
-            document.getElementById('total-count').textContent = data.total;
-        } catch (error) {
-            console.error('Failed to load history:', error);
-        }
-    }
+    window.exportCsv = () => {
+        historyTable.exportCsv('inspection_history.csv');
+    };
 
-    function renderTable(results) {
-        const tbody = document.getElementById('history-table-body');
-        if (results.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-dim">No records found</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = results.map(row => {
-            const date = new Date(row.created_at);
-            const dateStr = date.toLocaleDateString('ko-KR');
-            const timeStr = date.toLocaleTimeString('ko-KR');
-
-            let badgeClass = 'bg-purple-500';
-            if (row.judgment === 'OK') badgeClass = 'bg-success';
-            else if (row.judgment === 'OK_WITH_WARNING') badgeClass = 'bg-warning';
-            else if (row.judgment === 'NG') badgeClass = 'bg-error';
-
-            return `
-                <tr class="hover:bg-elevated transition-colors">
-                    <td class="px-4 py-3">#${row.id}</td>
-                    <td class="px-4 py-3 text-dim">
-                        <div>${dateStr}</div>
-                        <div class="text-xs">${timeStr}</div>
-                    </td>
-                    <td class="px-4 py-3 font-semibold">${row.sku_code}</td>
-                    <td class="px-4 py-3 text-dim max-w-xs truncate" title="${row.image_filename}">${row.image_filename}</td>
-                    <td class="px-4 py-3 text-dim">${row.operator || '-'}</td>
-                    <td class="px-4 py-3 text-dim">${row.batch_number || '-'}</td>
-                    <td class="px-4 py-3">
-                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${badgeClass}">${row.judgment}</span>
-                    </td>
-                    <td class="px-4 py-3">${row.overall_delta_e.toFixed(2)}</td>
-                    <td class="px-4 py-3">${(row.confidence * 100).toFixed(1)}%</td>
-                    <td class="px-4 py-3">
-                        <button onclick="viewDetail('${row.session_id}')" class="text-primary hover:text-primary-hover font-medium">
-                            <i class="fa-solid fa-eye mr-1"></i>View
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    function updatePagination() {
-        const totalPages = Math.ceil(totalRecords / pageSize);
-        document.getElementById('current-page').textContent = currentPage;
-        document.getElementById('btn-prev').disabled = currentPage === 1;
-        document.getElementById('btn-next').disabled = currentPage >= totalPages;
-    }
-
-    function previousPage() {
-        if (currentPage > 1) {
-            currentPage--;
-            loadHistory();
-        }
-    }
-
-    function nextPage() {
-        const totalPages = Math.ceil(totalRecords / pageSize);
-        if (currentPage < totalPages) {
-            currentPage++;
-            loadHistory();
-        }
-    }
-
-    function applyFilters() {
-        currentPage = 1;
-        loadHistory();
-    }
-
-    function exportCsv() {
-        const params = new URLSearchParams();
-        const sku = document.getElementById('filter-sku').value;
-        if (sku) params.append('sku_code', sku);
-        window.location.href = `/api/inspection/history/export?${params.toString()}`;
-    }
-
-    function viewDetail(sessionId) {
+    window.viewDetail = (sessionId) => {
         alert(`Detail view for session: ${sessionId}\nFull implementation pending`);
-    }
+    };
 
-    function closeDetailModal() {
+    window.closeDetailModal = () => {
         document.getElementById('detail-modal').classList.add('hidden');
-    }
+    };
 
-    // Load on page load
-    window.addEventListener('load', applyFilters);
+    // Load on page ready
+    historyTable.load();
 </script>
 {% endblock %}

@@ -3,7 +3,7 @@
 {% block title %}단독 샘플 분석 - Color Meter v7{% endblock %}
 
 {% block extra_head %}
-<script src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
+<script defer src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
 
 <style>
     /* Page-specific styles using design system variables */
@@ -569,62 +569,7 @@
     </div>
 
     <!-- Upload Section -->
-    <div class="terminal-panel p-6 mb-6">
-        <h2 class="text-xl font-bold mb-6">이미지 업로드</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <!-- White Background -->
-            <div>
-                <label class="block text-sm font-semibold text-secondary mb-2">
-                    White 배경 이미지 <span class="text-error">*</span>
-                </label>
-                <div class="relative">
-                    <input type="file" id="fileWhite" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                    <div class="terminal-input flex items-center justify-between pointer-events-none">
-                        <span id="fileWhiteName" class="text-dim truncate">파일 선택...</span>
-                        <i class="fa-solid fa-upload"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Black Background (Optional) -->
-            <div>
-                <label class="block text-sm font-semibold text-secondary mb-2">
-                    Black 배경 이미지 (선택)
-                </label>
-                <div class="relative">
-                    <input type="file" id="fileBlack" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
-                    <div class="terminal-input flex items-center justify-between pointer-events-none">
-                        <span id="fileBlackName" class="text-dim truncate">파일 선택...</span>
-                        <i class="fa-solid fa-upload"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Settings -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div>
-                <label class="block text-sm font-semibold text-secondary mb-2">예상 잉크 수</label>
-                <input type="number" id="inkCountInput" class="terminal-input" value="3" min="1" max="8">
-            </div>
-
-            <div>
-                <label class="block text-sm font-semibold text-secondary mb-2">분석 범위</label>
-                <select id="analysisScope" class="terminal-input">
-                    <option value="all">전체 분석</option>
-                    <option value="gate,color,ink">빠른 분석</option>
-                </select>
-            </div>
-
-            <div class="flex items-end">
-                <button id="btnAnalyze" class="btn btn-primary w-full">
-                    <i class="fa-solid fa-play mr-2"></i>
-                    분석시작
-                </button>
-            </div>
-        </div>
-    </div>
+    {% include "partials/_sa_upload_card.html" %}
 
     <!-- Results Section -->
     <div id="resultsSection" class="hidden">
@@ -658,136 +603,52 @@
 
         <!-- Tabs -->
         <div class="terminal-panel p-6">
-            <div class="result-tabs">
-                <button class="result-tab-btn active" data-tab="palette">
-                    <i class="fa-solid fa-palette mr-2"></i>
+            <div class="result-tabs" role="tablist" aria-label="Analysis result tabs">
+                <button class="result-tab-btn active" data-tab="palette"
+                        role="tab" aria-selected="true" aria-controls="panel-palette"
+                        id="tab-btn-palette" tabindex="0">
+                    <i class="fa-solid fa-palette mr-2" aria-hidden="true"></i>
                     잉크 팔레트
                 </button>
-                <button class="result-tab-btn" data-tab="radial">
-                    <i class="fa-solid fa-chart-pie mr-2"></i>
+                <button class="result-tab-btn" data-tab="radial"
+                        role="tab" aria-selected="false" aria-controls="panel-radial"
+                        id="tab-btn-radial" tabindex="-1">
+                    <i class="fa-solid fa-chart-pie mr-2" aria-hidden="true"></i>
                     방사형 분포
                 </button>
-                <button class="result-tab-btn" data-tab="plate-legacy" style="display:none">
-                    <i class="fa-solid fa-layer-group mr-2"></i>
+                <button class="result-tab-btn" data-tab="plate-legacy" style="display:none"
+                        role="tab" aria-selected="false" aria-controls="panel-plate-legacy"
+                        id="tab-btn-plate-legacy" tabindex="-1">
+                    <i class="fa-solid fa-layer-group mr-2" aria-hidden="true"></i>
                     판 분리 분석
                 </button>
-                <button class="result-tab-btn" data-tab="plate-black-legacy" style="display:none">
-                    <i class="fa-solid fa-circle-half-stroke mr-2"></i>
+                <button class="result-tab-btn" data-tab="plate-black-legacy" style="display:none"
+                        role="tab" aria-selected="false" aria-controls="panel-plate-black-legacy"
+                        id="tab-btn-plate-black-legacy" tabindex="-1">
+                    <i class="fa-solid fa-circle-half-stroke mr-2" aria-hidden="true"></i>
                     Plate Black
                 </button>
-                <button class="result-tab-btn" data-tab="details">
-                    <i class="fa-solid fa-list mr-2"></i>
+                <button class="result-tab-btn" data-tab="details"
+                        role="tab" aria-selected="false" aria-controls="panel-details"
+                        id="tab-btn-details" tabindex="-1">
+                    <i class="fa-solid fa-list mr-2" aria-hidden="true"></i>
                     상세 지표
                 </button>
             </div>
 
             <!-- Tab Contents -->
-              <div class="result-tab-content active" data-tab-content="palette">
-                  <h3 class="text-lg font-bold mb-4">감지된 잉크 색상</h3>
-                  <div class="image-panel">
-                      <div class="image-pair">
-                          <div>
-                              <div class="flex items-center justify-between mb-3">
-                                  <h4 class="text-base font-semibold">White Image</h4>
-                                  <span id="whiteOriginalMeta" class="text-xs text-dim"></span>
-                              </div>
-                              <img id="whiteOriginalImage" class="image-frame hidden" alt="White original">
-                          </div>
-                          <div>
-                              <div class="flex items-center justify-between mb-3">
-                                  <h4 class="text-base font-semibold">Black Image</h4>
-                                  <span id="blackOriginalMeta" class="text-xs text-dim"></span>
-                              </div>
-                              <img id="blackOriginalImage" class="image-frame hidden" alt="Black original">
-                          </div>
-                      </div>
-                      <div class="mt-6">
-                          <h4 class="text-sm font-semibold mb-2">Ink Palette</h4>
-                          <div id="inkPaletteContainer" class="ink-palette"></div>
-                      </div>
-                      <div class="ink-simulator">
-                          <div class="sim-header-group">
-                              <div class="title-row">
-                                  <div>
-                                      <div class="sim-title">Intrinsic Color Simulation</div>
-                                      <div class="text-xs text-dim">Beer-Lambert preview using intrinsic k</div>
-                                  </div>
-                                  <div class="flex items-center gap-2">
-                                      <span id="trustBadge" class="badge badge-gray">Loading</span>
-                                      <span id="simStatus" class="text-xs text-dim"></span>
-                                  </div>
-                              </div>
-                              <div id="simWarningBox" class="warning-alert" style="display:none;">
-                                  <span class="icon">!</span>
-                                  <span id="simWarningText"></span>
-                              </div>
-                          </div>
-                          <div class="sim-controls">
-                              <div class="sim-control">
-                                  <label>Background</label>
-                                  <div class="sim-bg-buttons" id="simBgButtons"></div>
-                              </div>
-                              <div class="sim-control">
-                                  <label>Thickness</label>
-                                  <input id="simThickness" class="sim-slider" type="range" min="0.5" max="2.0" step="0.1" value="1.0">
-                                  <div id="simThicknessValue" class="sim-thickness-value">1.0x</div>
-                              </div>
-                          </div>
-                          <div id="inkSimulationGrid" class="ink-sim-grid"></div>
-                          <div id="inkSimulationEmpty" class="text-xs text-dim hidden">No intrinsic k data available.</div>
-                      </div>
-                  </div>
-              </div>
-
-            <div class="result-tab-content" data-tab-content="radial">
-                <h3 class="text-lg font-bold mb-4">방사형 분포 패턴</h3>
-                <div class="chart-container">
-                    <canvas id="radialChart"></canvas>
-                </div>
-            </div>
-
-            <div class="result-tab-content" data-tab-content="plate-legacy" style="display:none">
-                <h3 class="text-lg font-bold mb-4">판 분리 분석</h3>
-                <div id="plateSourceToggleLegacy" class="flex flex-wrap items-center gap-2 mb-4 hidden">
-                    <button id="plateSourcePlateLegacy" class="btn btn-secondary text-xs px-2 py-1">Plate</button>
-                    <button id="plateSourceLiteLegacy" class="btn btn-secondary text-xs px-2 py-1">Plate-Lite</button>
-                    <span id="plateSourceLabelLegacy" class="text-xs text-dim ml-auto"></span>
-                </div>
-                <div id="plateAnalysisContainerLegacy"></div>
-            </div>
-
-            <div class="result-tab-content" data-tab-content="plate-black-legacy" style="display:none">
-                <h3 class="text-lg font-bold mb-4">Plate Black</h3>
-                <div id="plateBlackAnalysisContainerLegacy"></div>
-            </div>
-
-            <div class="result-tab-content" data-tab-content="details">
-                <h3 class="text-lg font-bold mb-4">상세 측정 지표</h3>
-                <div id="detailsContainer"></div>
-            </div>
+            {% include "partials/_sa_palette_panel.html" %}
+            {% include "partials/_sa_signature_panel.html" %}
+            {% include "partials/_sa_diagnostics_panel.html" %}
+            {% include "partials/_sa_detail_panel.html" %}
         </div>
 
         <!-- Download Section -->
-        <div class="download-section mt-6">
-            <h3 class="text-lg font-bold mb-2">분석 결과 다운로드</h3>
-            <p class="text-sm text-secondary mb-4">Copy Spec JSON 형식으로 저장</p>
-            <button id="btnDownloadSpec" class="btn btn-success">
-                <i class="fa-solid fa-download mr-2"></i>
-                Copy Spec 다운로드
-            </button>
-        </div>
+        {% include "partials/_sa_comparison_panel.html" %}
     </div>
 
     <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="bg-surface p-8 rounded-lg shadow-2xl text-center">
-            <div class="spinner spinner-lg mb-4">
-                <i class="fa-solid fa-spinner fa-spin text-4xl text-primary"></i>
-            </div>
-            <p class="text-lg font-semibold">분석 중...</p>
-            <p class="text-sm text-secondary mt-2">잠시만 기다려주세요</p>
-        </div>
-    </div>
+    {% include "partials/_sa_settings_panel.html" %}
 </div>
 {% endblock %}
 
@@ -808,9 +669,37 @@
     // Import visualization modules
     import * as visuals from '/static/js/components/visuals.js';
 
+    // Import drag & drop upload
+    import { createDragDropUpload } from '/static/js/shared/file_upload.js';
+
+    // Import progress tracker
+    import { ProgressTracker } from '/static/js/shared/progress.js';
+
     // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
         initSingleAnalysis();
+
+        // Initialize drag & drop for white and black file uploads
+        createDragDropUpload({
+            dropZoneId: 'saWhiteDropZone',
+            fileInputId: 'fileWhite',
+            displayId: 'fileWhiteName',
+            previewId: 'saWhitePreview',
+        });
+        createDragDropUpload({
+            dropZoneId: 'saBlackDropZone',
+            fileInputId: 'fileBlack',
+            displayId: 'fileBlackName',
+            previewId: 'saBlackPreview',
+        });
+
+        // Initialize progress tracker
+        const saProgress = new ProgressTracker({
+            containerId: 'saProgressContainer',
+            fillId: 'saProgressFill',
+            textId: 'saProgressText',
+        });
+        window.saProgress = saProgress;
 
         // Global debug access
         window.appState = appState;
@@ -823,21 +712,40 @@
 </script>
 
 <script>
-    // Tab switching (file handlers are in single.js initSingleAnalysis)
-    document.querySelectorAll('.result-tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tabName = btn.dataset.tab;
-
-            // Update buttons
-            document.querySelectorAll('.result-tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Update content
-            document.querySelectorAll('.result-tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.querySelector(`[data-tab-content="${tabName}"]`).classList.add('active');
+    // Tab switching with ARIA support
+    function switchSaTab(tabName) {
+        document.querySelectorAll('.result-tab-btn').forEach(b => {
+            const isActive = b.dataset.tab === tabName;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-selected', String(isActive));
+            b.setAttribute('tabindex', isActive ? '0' : '-1');
         });
+        document.querySelectorAll('.result-tab-content').forEach(content => {
+            content.classList.toggle('active', content.dataset.tabContent === tabName);
+        });
+    }
+
+    document.querySelectorAll('.result-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchSaTab(btn.dataset.tab));
     });
+
+    // Keyboard navigation for tabs (Arrow Left/Right, Home, End)
+    const tabList = document.querySelector('[role="tablist"]');
+    if (tabList) {
+        tabList.addEventListener('keydown', (e) => {
+            const tabs = [...tabList.querySelectorAll('[role="tab"]:not([style*="display:none"])')];
+            const idx = tabs.indexOf(e.target);
+            let next = -1;
+            if (e.key === 'ArrowRight') next = (idx + 1) % tabs.length;
+            else if (e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = tabs.length - 1;
+            if (next >= 0) {
+                e.preventDefault();
+                tabs[next].focus();
+                switchSaTab(tabs[next].dataset.tab);
+            }
+        });
+    }
 </script>
 {% endblock %}

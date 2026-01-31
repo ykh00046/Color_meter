@@ -17,7 +17,7 @@
         }
     }
 </script>
-<script src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
+<script defer src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
 
 <style>
     /* V7 Console specific layout - hide footer for full-height experience */
@@ -244,23 +244,26 @@
                         <!-- Control Bar -->
                         <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
                             <div class="md:col-span-3">
-                                <label class="data-label">Product</label>
+                                <label class="data-label" for="inspProductSelect">Product</label>
                                 <select id="inspProductSelect" class="terminal-input">
                                     <option value="" disabled selected>Select SKU...</option>
                                 </select>
                             </div>
                             <div class="md:col-span-3">
-                                <label class="data-label">Image</label>
-                                <div class="relative">
-                                    <input id="inspFiles" type="file" class="absolute inset-0 opacity-0 cursor-pointer">
-                                    <div class="terminal-input truncate flex items-center justify-between pointer-events-none">
-                                        <span id="inspFileName" class="text-dim">Upload Image...</span>
-                                        <i class="fa-solid fa-upload"></i>
+                                <label class="data-label" for="inspFiles">Image</label>
+                                <div id="inspDropZone" class="drop-zone" role="button" tabindex="0"
+                                     aria-label="Upload inspection image. Click or drag and drop."
+                                     data-placeholder="Upload Image...">
+                                    <input id="inspFiles" type="file" class="sr-only"
+                                           accept=".png,.jpg,.jpeg,.bmp,.tiff,.tif" aria-hidden="true">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span id="inspFileName" class="drop-zone-text truncate">Upload Image...</span>
+                                        <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
                                     </div>
                                 </div>
                             </div>
                             <div class="md:col-span-2">
-                                <label class="data-label">Mode</label>
+                                <label class="data-label" for="inspMode">Mode</label>
                                 <select id="inspMode" class="terminal-input">
                                     <option value="all" selected>All</option>
                                     <option value="pattern">Pattern & Color</option>
@@ -268,8 +271,9 @@
                                 </select>
                             </div>
                             <div class="md:col-span-2">
-                                <label class="data-label">Expected Ink</label>
-                                <input id="inspInkCountDisplay" class="terminal-input text-center" value="-" disabled>
+                                <label class="data-label" for="inspInkCountDisplay">Expected Ink</label>
+                                <input id="inspInkCountDisplay" class="terminal-input text-center" value="-" disabled
+                                       aria-label="Expected ink count (auto-detected)">
                             </div>
                             <div class="md:col-span-2 flex items-end">
                                 <button id="btnInspect" class="btn btn-primary w-full">Run Inspection</button>
@@ -280,6 +284,16 @@
                         <div id="inspResultArea" class="hidden space-y-6">
                             <!-- Unified Summary Card -->
                             <div id="unifiedSummaryCard"></div>
+
+                            <!-- Inspection Progress -->
+                            <div id="inspProgressContainer" class="progress-container hidden"
+                                 role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+                                 aria-label="Inspection progress">
+                                <div class="progress-bar">
+                                    <div id="inspProgressFill" class="progress-fill" style="width: 0%"></div>
+                                </div>
+                                <span id="inspProgressText" class="progress-text">Preparing...</span>
+                            </div>
 
                             <!-- Judgment Bar -->
                             <div id="inspSummaryCard" class="terminal-panel p-4 flex flex-col md:flex-row items-center justify-between gap-4 border-l-4 border-slate-600">
@@ -308,7 +322,7 @@
                                 </div>
                                 <div id="analysisViewer" class="image-viewer aspect-[21/9]">
                                     <div id="analysisCanvasWrap" class="w-full h-full relative">
-                                        <img id="inspMainImg" class="w-full h-full object-contain" src="">
+                                        <img id="inspMainImg" class="w-full h-full object-contain" src="" loading="lazy">
                                         <canvas id="hotspotOverlay" class="absolute inset-0 w-full h-full"></canvas>
                                     </div>
                                     <div id="inspImageEmpty" class="absolute inset-0 flex items-center justify-center text-dim">Waiting for image...</div>
@@ -380,31 +394,61 @@
     import { byId } from '/static/js/utils/helpers.js';
     import { showNotification } from '/static/js/utils/notifications.js';
 
-    // Import feature modules
+    // Import primary feature modules (inspection loaded eagerly)
     import { initInspection } from '/static/js/features/inspection/inspection.js';
-    import { initRegistration } from '/static/js/features/registration/registration.js';
-    import { initStdAdmin } from '/static/js/features/history/std_admin.js';
-    import { initTestTab } from '/static/js/features/test/test.js';
     import { loadProducts, setupProductListeners } from '/static/js/features/inspection/products.js';
     import { initResultTabs } from '/static/js/components/tabs.js';
+
+    // Lazy-load secondary tab modules on first access
+    const _tabModules = {};
+    async function lazyInitTab(tabName) {
+        if (tabName === 'registration' && !_tabModules.registration) {
+            const mod = await import('/static/js/features/registration/registration.js');
+            mod.initRegistration();
+            _tabModules.registration = true;
+        } else if (tabName === 'std-admin' && !_tabModules.stdAdmin) {
+            const mod = await import('/static/js/features/history/std_admin.js');
+            mod.initStdAdmin();
+            _tabModules.stdAdmin = true;
+        } else if (tabName === 'test' && !_tabModules.test) {
+            const mod = await import('/static/js/features/test/test.js');
+            mod.initTestTab();
+            _tabModules.test = true;
+        }
+    }
+    window._lazyInitTab = lazyInitTab;
 
     // Import visualization modules
     import * as visuals from '/static/js/components/visuals.js';
     import * as diagnosticsVisuals from '/static/js/features/inspection/diagnostics_visuals.js';
     import * as uiImprovements from '/static/js/components/ui_improvements.js';
+    import { createDragDropUpload } from '/static/js/shared/file_upload.js';
+    import { ProgressTracker } from '/static/js/shared/progress.js';
 
     // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
         // Initialize all modules
         initInspection();
-        initRegistration();
-        initStdAdmin();
-        initTestTab();
+
+        // Initialize drag & drop for inspection file upload
+        createDragDropUpload({
+            dropZoneId: 'inspDropZone',
+            fileInputId: 'inspFiles',
+            displayId: 'inspFileName',
+        });
         initResultTabs();
 
         // Load products
         loadProducts();
         setupProductListeners();
+
+        // Initialize progress tracker for inspection
+        const inspProgress = new ProgressTracker({
+            containerId: 'inspProgressContainer',
+            fillId: 'inspProgressFill',
+            textId: 'inspProgressText',
+        });
+        window.inspProgress = inspProgress;
 
         // Global debug access
         window.appState = appState;
@@ -419,7 +463,7 @@
 </script>
 
 <script>
-    // Tab switching function
+    // Tab switching function with lazy module loading
     function switchTab(tabName) {
         // Hide all tabs
         document.querySelectorAll('.tab-content').forEach(tab => {
@@ -434,6 +478,11 @@
         // Show selected tab
         document.getElementById(`view-${tabName}`).classList.add('active');
         document.getElementById(`tab-${tabName}`).classList.add('active');
+
+        // Lazy-load tab module on first visit
+        if (window._lazyInitTab) {
+            window._lazyInitTab(tabName);
+        }
     }
 
     // Visualization toggle
