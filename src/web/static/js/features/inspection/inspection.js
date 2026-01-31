@@ -85,6 +85,9 @@ export async function runInspection() {
         appState.setState('inspection.isProcessing', true);
         byId('inspResultArea')?.classList.remove('hidden');
 
+        // Start progress indicator
+        if (window.inspProgress) window.inspProgress.start();
+
         // Prepare form data
         const expectedInk = byId('inspInkCountDisplay')?.dataset?.value || res.expectedInkCount || '';
         const inspMode = byId('inspMode')?.value || 'all';
@@ -116,11 +119,20 @@ export async function runInspection() {
         // Render results (placeholder - would import render functions)
         renderInspectionResults(data, result, resultItem);
 
+        // Complete progress
+        if (window.inspProgress) window.inspProgress.complete();
+        setTimeout(() => {
+            if (window.inspProgress) window.inspProgress.stop();
+        }, 600);
+
         showNotification('완료', '검사가 완료되었습니다', 'success');
 
     } catch (err) {
         console.error('Inspection failed:', err);
         showNotification('오류', `검사 실패: ${err.message}`, 'error');
+
+        // Stop progress on error
+        if (window.inspProgress) window.inspProgress.stop();
     } finally {
         if (btnInspect) {
             btnInspect.disabled = false;

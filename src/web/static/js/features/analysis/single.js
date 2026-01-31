@@ -67,6 +67,10 @@ export async function runSingleAnalysis() {
 
         appState.setState('analysis.isProcessing', true);
 
+        // Show loading overlay with progress
+        byId('loadingOverlay')?.classList.remove('hidden');
+        if (window.saProgress) window.saProgress.start();
+
         // Build FormData with required and optional parameters
         const fd = new FormData();
 
@@ -107,6 +111,13 @@ export async function runSingleAnalysis() {
         byId('resultsSection')?.classList.remove('hidden');
         renderAnalysisResults(data);
 
+        // Complete progress and hide overlay
+        if (window.saProgress) window.saProgress.complete();
+        setTimeout(() => {
+            byId('loadingOverlay')?.classList.add('hidden');
+            if (window.saProgress) window.saProgress.stop();
+        }, 600);
+
         showNotification('완료', '분석이 완료되었습니다', 'success');
 
     } catch (err) {
@@ -123,6 +134,10 @@ export async function runSingleAnalysis() {
             console.error('[SingleAnalysis] Validation error details:', detail);
         }
         showNotification('오류', `분석 실패: ${errorMsg}`, 'error');
+
+        // Hide overlay on error
+        if (window.saProgress) window.saProgress.stop();
+        byId('loadingOverlay')?.classList.add('hidden');
     } finally {
         if (btnAnalyze) {
             btnAnalyze.disabled = false;
