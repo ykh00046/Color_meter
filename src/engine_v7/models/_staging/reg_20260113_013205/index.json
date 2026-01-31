@@ -1,0 +1,23 @@
+{
+  "schema_version": "std_registry_index.v1",
+  "engine_version": "v7",
+  "created_at": "2026-01-13T01:32:06.067117",
+  "updated_at": "2026-01-13T01:32:06.740730",
+  "items": [
+    {
+      "sku": "SKU_SMOKE_PACK_1768235500",
+      "ink": "INK1",
+      "active": {
+        "LOW": "SKU_SMOKE_PACK_1768235500/INK1/LOW/v20260113_013205",
+        "MID": "SKU_SMOKE_PACK_1768235500/INK1/MID/v20260113_013206",
+        "HIGH": "SKU_SMOKE_PACK_1768235500/INK1/HIGH/v20260113_013206"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "SYSTEM",
+      "created_at": "2026-01-13T01:32:06.067181",
+      "color_mode": "aggregate",
+      "expected_ink_count": 3
+    }
+  ]
+}

@@ -138,6 +138,6 @@ class TestDetailResponse(BaseModel):
                 "file_size_bytes": 2048000,
                 "image_width": 1920,
                 "image_height": 1080,
-                "analysis_result": {"sku": "SKU001", "judgment": "OK", "overall_delta_e": 2.5, "zone_results": []},
+                "analysis_result": {"sku": "SKU001", "judgment": "OK", "overall_delta_e": 2.5},
             }
         }

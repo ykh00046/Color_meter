@@ -44,7 +44,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Run full test suite: pytest tests/ -v"
 echo "  2. Start Web UI: python3 -m src.web.app"
-echo "  3. Run pipeline: python3 -m src.pipeline data/raw_images/SKU001_OK_001.jpg"
+echo "  3. Run pipeline: python3 -m src.services.inspection_service data/raw_images/SKU001_OK_001.jpg"
 echo ""
 
 exit 0

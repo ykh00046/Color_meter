@@ -61,3 +61,7 @@
 - Make median_theta aggregation robust to outliers in radial signatures.
 - Stabilize label matching with Hungarian assignment.
 - Expose effective_density/alpha metadata in single analysis ink outputs.
+
+## v7.15 (local)
+- Add intrinsic ink color inference from white/black pairs (Linear v2 + Beer-Lambert k).
+- Record intrinsic fields per cluster and include background calibration metadata in single analysis outputs.

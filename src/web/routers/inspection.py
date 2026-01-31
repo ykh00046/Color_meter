@@ -25,6 +25,132 @@ router = APIRouter(prefix="/api/inspection", tags=["inspection"])
 
 
 # ================================
+# Query Builder
+# ================================
+
+
+class InspectionQueryBuilder:
+    """
+    Fluent query builder for InspectionHistory queries.
+
+    Eliminates duplicate filter logic across multiple endpoints.
+    """
+
+    def __init__(self, db: Session):
+        self.db = db
+        self.query = db.query(InspectionHistory)
+
+    def filter_sku(self, sku_code: Optional[str]) -> "InspectionQueryBuilder":
+        if sku_code:
+            self.query = self.query.filter(InspectionHistory.sku_code == sku_code)
+        return self
+
+    def filter_operator(self, operator: Optional[str]) -> "InspectionQueryBuilder":
+        if operator:
+            self.query = self.query.filter(InspectionHistory.operator == operator)
+        return self
+
+    def filter_batch(self, batch_number: Optional[str]) -> "InspectionQueryBuilder":
+        if batch_number:
+            self.query = self.query.filter(InspectionHistory.batch_number == batch_number)
+        return self
+
+    def filter_judgment(self, judgment: Optional[str]) -> "InspectionQueryBuilder":
+        if judgment:
+            try:
+                judgment_enum = JudgmentType(judgment.upper())
+                self.query = self.query.filter(InspectionHistory.judgment == judgment_enum)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid judgment value: {judgment}")
+        return self
+
+    def filter_delta_e_range(
+        self, min_delta_e: Optional[float], max_delta_e: Optional[float]
+    ) -> "InspectionQueryBuilder":
+        if min_delta_e is not None:
+            self.query = self.query.filter(InspectionHistory.overall_delta_e >= min_delta_e)
+        if max_delta_e is not None:
+            self.query = self.query.filter(InspectionHistory.overall_delta_e <= max_delta_e)
+        return self
+
+    def filter_date_range(
+        self, start_date: Optional[datetime], end_date: Optional[datetime]
+    ) -> "InspectionQueryBuilder":
+        if start_date:
+            self.query = self.query.filter(InspectionHistory.created_at >= start_date)
+        if end_date:
+            self.query = self.query.filter(InspectionHistory.created_at <= end_date)
+        return self
+
+    def filter_needs_action(self, needs_action_only: bool) -> "InspectionQueryBuilder":
+        if needs_action_only:
+            self.query = self.query.filter(InspectionHistory.judgment.in_([JudgmentType.NG, JudgmentType.RETAKE]))
+        return self
+
+    def filter_has_warnings(self, has_warnings: Optional[bool]) -> "InspectionQueryBuilder":
+        if has_warnings is True:
+            self.query = self.query.filter(InspectionHistory.has_warnings == 1)
+        elif has_warnings is False:
+            self.query = self.query.filter(InspectionHistory.has_warnings == 0)
+        return self
+
+    def order_by_created_desc(self) -> "InspectionQueryBuilder":
+        self.query = self.query.order_by(desc(InspectionHistory.created_at))
+        return self
+
+    def paginate(self, skip: int, limit: int) -> "InspectionQueryBuilder":
+        self.query = self.query.offset(skip).limit(limit)
+        return self
+
+    def count(self) -> int:
+        return self.query.count()
+
+    def all(self) -> List[InspectionHistory]:
+        return self.query.all()
+
+    def first(self) -> Optional[InspectionHistory]:
+        return self.query.first()
+
+
+def _calculate_pass_rate(pass_count: int, total: int) -> float:
+    """Calculate pass rate with safe division."""
+    return round((pass_count or 0) / total if total > 0 else 0.0, 4)
+
+
+def _empty_stats_response(start_date: datetime, end_date: datetime, days: int = 7) -> Dict[str, Any]:
+    """Return empty stats response for missing table or no data."""
+    return {
+        "total_inspections": 0,
+        "judgment_counts": {},
+        "pass_rate": 0.0,
+        "avg_delta_e": 0.0,
+        "avg_confidence": 0.0,
+        "time_range": {"start": start_date.isoformat(), "end": end_date.isoformat(), "days": days},
+    }
+
+
+def _to_jsonable(value: Any) -> Any:
+    try:
+        import numpy as np
+    except Exception:
+        np = None
+    from dataclasses import asdict, is_dataclass
+
+    if is_dataclass(value):
+        return {k: _to_jsonable(v) for k, v in asdict(value).items()}
+    if np is not None:
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, (np.integer, np.floating)):
+            return value.item()
+    if isinstance(value, dict):
+        return {k: _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(v) for v in value]
+    return value
+
+
+# ================================
 # Helper Functions
 # ================================
 
@@ -65,19 +191,15 @@ def save_inspection_to_history(
         logger.warning(f"Unknown judgment value: {judgment_value}, defaulting to RETAKE")
         judgment = JudgmentType.RETAKE
 
-    # Extract zone results
-    zone_results = getattr(result, "zone_results", [])
-    zones_count = len(zone_results)
-
     # Extract core fields
     overall_delta_e = float(getattr(result, "overall_delta_e", 0.0))
     confidence = float(getattr(result, "confidence", 0.0))
 
     # Extract ng_reasons, retake_reasons, decision_trace, next_actions
-    ng_reasons = getattr(result, "ng_reasons", [])
-    retake_reasons = getattr(result, "retake_reasons", [])
-    decision_trace = getattr(result, "decision_trace", None)
-    next_actions = getattr(result, "next_actions", [])
+    ng_reasons = _to_jsonable(getattr(result, "ng_reasons", []))
+    retake_reasons = _to_jsonable(getattr(result, "retake_reasons", []))
+    decision_trace = _to_jsonable(getattr(result, "decision_trace", None))
+    next_actions = _to_jsonable(getattr(result, "next_actions", []))
 
     # Extract lens detection info
     lens_detection = getattr(result, "lens_detection", None)
@@ -85,39 +207,29 @@ def save_inspection_to_history(
     lens_confidence = float(getattr(lens_detection, "confidence", 0.0)) if lens_detection else None
 
     # Build full analysis result JSON
-    analysis_result = {
-        "sku": sku_code,
-        "timestamp": getattr(result, "timestamp", datetime.utcnow()).isoformat(),
-        "judgment": judgment_value,
-        "overall_delta_e": overall_delta_e,
-        "confidence": confidence,
-        "zones_count": zones_count,
-        "zone_results": [
-            {
-                "zone_name": zr.zone_name,
-                "measured_lab": [float(v) for v in zr.measured_lab],
-                "target_lab": [float(v) for v in zr.target_lab] if zr.target_lab else None,
-                "delta_e": float(zr.delta_e),
-                "threshold": float(zr.threshold),
-                "is_ok": zr.is_ok,
-            }
-            for zr in zone_results
-        ],
-        "ng_reasons": ng_reasons,
-        "retake_reasons": retake_reasons,
-        "decision_trace": decision_trace,
-        "next_actions": next_actions,
-        "confidence_breakdown": getattr(result, "confidence_breakdown", None),
-        "risk_factors": getattr(result, "risk_factors", []),
-        "analysis_summary": getattr(result, "analysis_summary", None),
-        "metrics": getattr(result, "metrics", None),
-        "diagnostics": getattr(result, "diagnostics", []),
-        "warnings": getattr(result, "warnings", []),
-        "suggestions": getattr(result, "suggestions", []),
-        "ink_analysis": getattr(result, "ink_analysis", None),
-        "radial_profile": getattr(result, "radial_profile", None),
-        "uniformity_analysis": getattr(result, "uniformity_analysis", None),
-    }
+    analysis_result = _to_jsonable(
+        {
+            "sku": sku_code,
+            "timestamp": getattr(result, "timestamp", datetime.utcnow()).isoformat(),
+            "judgment": judgment_value,
+            "overall_delta_e": overall_delta_e,
+            "confidence": confidence,
+            "ng_reasons": ng_reasons,
+            "retake_reasons": retake_reasons,
+            "decision_trace": decision_trace,
+            "next_actions": next_actions,
+            "confidence_breakdown": getattr(result, "confidence_breakdown", None),
+            "risk_factors": getattr(result, "risk_factors", []),
+            "analysis_summary": getattr(result, "analysis_summary", None),
+            "metrics": getattr(result, "metrics", None),
+            "diagnostics": getattr(result, "diagnostics", []),
+            "warnings": getattr(result, "warnings", []),
+            "suggestions": getattr(result, "suggestions", []),
+            "ink_analysis": getattr(result, "ink_analysis", None),
+            "radial_profile": getattr(result, "radial_profile", None),
+            "uniformity_analysis": getattr(result, "uniformity_analysis", None),
+        }
+    )
 
     # Analysis flags
     has_warnings = 1 if getattr(result, "warnings", []) else 0
@@ -133,7 +245,6 @@ def save_inspection_to_history(
         judgment=judgment,
         overall_delta_e=overall_delta_e,
         confidence=confidence,
-        zones_count=zones_count,
         analysis_result=analysis_result,
         ng_reasons=ng_reasons if ng_reasons else None,
         retake_reasons=retake_reasons if retake_reasons else None,
@@ -192,51 +303,20 @@ def list_inspection_history(
             "results": [...]
         }
     """
-    # Build query
-    query = db.query(InspectionHistory)
+    builder = (
+        InspectionQueryBuilder(db)
+        .filter_sku(sku_code)
+        .filter_operator(operator)
+        .filter_batch(batch_number)
+        .filter_judgment(judgment)
+        .filter_delta_e_range(min_delta_e, max_delta_e)
+        .filter_date_range(start_date, end_date)
+        .filter_needs_action(needs_action_only)
+        .filter_has_warnings(has_warnings)
+    )
 
-    # Apply filters
-    if sku_code:
-        query = query.filter(InspectionHistory.sku_code == sku_code)
-
-    if operator:
-        query = query.filter(InspectionHistory.operator == operator)
-
-    if batch_number:
-        query = query.filter(InspectionHistory.batch_number == batch_number)
-
-    if judgment:
-        try:
-            judgment_enum = JudgmentType(judgment.upper())
-            query = query.filter(InspectionHistory.judgment == judgment_enum)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid judgment value: {judgment}")
-
-    if min_delta_e is not None:
-        query = query.filter(InspectionHistory.overall_delta_e >= min_delta_e)
-
-    if max_delta_e is not None:
-        query = query.filter(InspectionHistory.overall_delta_e <= max_delta_e)
-
-    if start_date:
-        query = query.filter(InspectionHistory.created_at >= start_date)
-
-    if end_date:
-        query = query.filter(InspectionHistory.created_at <= end_date)
-
-    if needs_action_only:
-        query = query.filter(InspectionHistory.judgment.in_([JudgmentType.NG, JudgmentType.RETAKE]))
-
-    if has_warnings is True:
-        query = query.filter(InspectionHistory.has_warnings == 1)
-    elif has_warnings is False:
-        query = query.filter(InspectionHistory.has_warnings == 0)
-
-    # Get total count
-    total = query.count()
-
-    # Apply pagination and ordering
-    results = query.order_by(desc(InspectionHistory.created_at)).offset(skip).limit(limit).all()
+    total = builder.count()
+    results = builder.order_by_created_desc().paginate(skip, limit).all()
 
     return {
         "total": total,
@@ -664,34 +744,17 @@ def export_inspection_history(
     db: Session = Depends(get_session),
 ) -> StreamingResponse:
     """Export inspection history as CSV."""
-    query = db.query(InspectionHistory)
-
-    if sku_code:
-        query = query.filter(InspectionHistory.sku_code == sku_code)
-
-    if operator:
-        query = query.filter(InspectionHistory.operator == operator)
-
-    if batch_number:
-        query = query.filter(InspectionHistory.batch_number == batch_number)
-
-    if judgment:
-        try:
-            judgment_enum = JudgmentType(judgment.upper())
-            query = query.filter(InspectionHistory.judgment == judgment_enum)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid judgment value: {judgment}")
-
-    if start_date:
-        query = query.filter(InspectionHistory.created_at >= start_date)
-
-    if end_date:
-        query = query.filter(InspectionHistory.created_at <= end_date)
-
-    if needs_action_only:
-        query = query.filter(InspectionHistory.judgment.in_([JudgmentType.NG, JudgmentType.RETAKE]))
-
-    rows = query.order_by(desc(InspectionHistory.created_at)).all()
+    rows = (
+        InspectionQueryBuilder(db)
+        .filter_sku(sku_code)
+        .filter_operator(operator)
+        .filter_batch(batch_number)
+        .filter_judgment(judgment)
+        .filter_date_range(start_date, end_date)
+        .filter_needs_action(needs_action_only)
+        .order_by_created_desc()
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)

@@ -1,0 +1,202 @@
+{
+  "schema_version": "1.0",
+  "sku": "SKU_TEMP_1768202175",
+  "ink": "INK1",
+  "active": {
+    "LOW": "SKU_TEMP_1768202175/INK1/LOW/v20260112_161616",
+    "MID": "SKU_TEMP_1768202175/INK1/MID/v20260112_161619",
+    "HIGH": "SKU_TEMP_1768202175/INK1/HIGH/v20260112_161622"
+  },
+  "active_versions": {
+    "LOW": "v20260112_161616",
+    "MID": "v20260112_161619",
+    "HIGH": "v20260112_161622"
+  },
+  "created_at": "2026-01-12T16:16:31.516475",
+  "cfg_hash": "sha256:8e331e4888eb02e9afd3389bd2f73214a74b0798f8d60d8c7b975df3d5731dff",
+  "config_snapshot_hash": "sha256:8e331e4888eb02e9afd3389bd2f73214a74b0798f8d60d8c7b975df3d5731dff",
+  "config_snapshot": {
+    "polar": {
+      "R": 260,
+      "T": 720
+    },
+    "gate": {
+      "center_off_max": 0.12,
+      "blur_min": 40.0,
+      "illum_max": 0.1,
+      "diagnostic_on_fail": true
+    },
+    "signature": {
+      "r_start": 0.1,
+      "r_end": 0.95,
+      "corr_min": 0.92,
+      "de_mean_max": 10.0,
+      "de_p95_max": 18.0,
+      "use_band_model": true,
+      "band_k": 2.5,
+      "fail_ratio_max": 0.08,
+      "use_weighted_segments": true,
+      "segments": [
+        {
+          "name": "inner",
+          "start": 0.0,
+          "end": 0.33,
+          "weight": 1.2
+        },
+        {
+          "name": "mid",
+          "start": 0.33,
+          "end": 0.66,
+          "weight": 1.0
+        },
+        {
+          "name": "outer",
+          "start": 0.66,
+          "end": 1.0,
+          "weight": 1.4
+        }
+      ],
+      "segment_fail_ratio_max": 0.18,
+      "use_segment_k": true,
+      "segment_k": {
+        "inner": 2.8,
+        "mid": 2.5,
+        "outer": 2.8
+      }
+    },
+    "anomaly": {
+      "r_start": 0.15,
+      "r_end": 0.95,
+      "angular_unif_max": 0.18,
+      "center_frac": 0.22,
+      "center_blob_max": 1,
+      "center_blob_min_area": 80,
+      "enable_heatmap": true,
+      "heatmap_downsample_T": 180,
+      "heatmap_downsample_R": 130
+    },
+    "registration": {
+      "order_check_enabled": false,
+      "order_metric": "L_mean",
+      "order_direction": "asc",
+      "sep_threshold": 1.0,
+      "max_within_std": null
+    },
+    "mode_stability": {
+      "enabled": true,
+      "window": 10,
+      "emit_shift_flag": true
+    },
+    "pattern_baseline": {
+      "require": false,
+      "use_relative": false,
+      "margins": {
+        "blob_count": 1,
+        "blob_area_ratio": 0.2,
+        "uniformity": 0.03,
+        "coverage_eps": 0.01,
+        "sharpness_eps": 0.03
+      }
+    },
+    "diagnostics": {
+      "delta_L_threshold": 2.627485656738281,
+      "delta_a_threshold": 0.8,
+      "delta_b_threshold": 0.8,
+      "coverage_l_delta": 5.0,
+      "coverage_delta_pp_threshold": 2.6200603318250337,
+      "edge_sharpness_delta_threshold": 1.8377658247947692
+    },
+    "v2_ink": {
+      "enabled": true,
+      "auto_k_enabled": true,
+      "auto_k_expand_max": 4,
+      "auto_k_conf_abs_min": 0.1,
+      "auto_k_conf_abs_span": 0.25,
+      "auto_k_conf_gap_span": 0.1,
+      "auto_k_mismatch_conf_thr": 0.7,
+      "auto_k_low_conf_thr": 0.4,
+      "dark_top_p": 0.25,
+      "chroma_top_p": 0.35,
+      "min_samples": 8000,
+      "min_samples_warn": 2000,
+      "l_weight": 0.3,
+      "kmeans_attempts": 10,
+      "rng_seed": 123,
+      "min_area_ratio_warn": 0.03,
+      "separation_d0": 3.0,
+      "separation_k": 1.0,
+      "match_max_deltaE": 54.50771026611328,
+      "match_cost_max": 20.0,
+      "match_spread_warn": 3.0,
+      "roi_r_start": 0.15,
+      "roi_r_end": 0.95
+    },
+    "white_balance": {
+      "enabled": true,
+      "optical_zone_ratio": 0.3,
+      "p_low": 50.0,
+      "p_high": 99.0
+    },
+    "expected_ink_count": 3
+  },
+  "config_snapshot_auto_tune": {
+    "schema_version": "auto_tune.v1",
+    "status": "APPLIED",
+    "generated_at": "2026-01-12T16:16:31.516336",
+    "expected_ink_count": 3,
+    "signature": {
+      "p95_max": 0.0,
+      "mean_max": 0.0,
+      "corr_min": 1.0
+    },
+    "color_shift_abs_max": {
+      "delta_L": 2.1895713806152344,
+      "delta_a": 0.017781972885131836,
+      "delta_b": 0.42688560485839844
+    },
+    "pattern": {
+      "coverage_delta_pp_abs_max": 2.1833836098541948,
+      "edge_sharpness_delta_abs_max": 1.5314715206623077
+    },
+    "ink": {
+      "off_track_max": 45.423091888427734
+    },
+    "errors": []
+  },
+  "registration_summary": {
+    "order_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "order_values": {},
+    "order_ok": true,
+    "sep_threshold": 1.0,
+    "separation": {
+      "LOW_MID": 0.0,
+      "MID_HIGH": 0.0,
+      "LOW_HIGH": 0.0
+    },
+    "min_pairwise_separation": 0.0,
+    "separation_ok": false,
+    "within_mode_stability": {
+      "LOW": null,
+      "MID": null,
+      "HIGH": null
+    },
+    "within_mode_threshold": null,
+    "within_mode_ok": null,
+    "geom_consistency": {
+      "center_drift_px": 0.0,
+      "radius_drift_ratio": 0.0,
+      "passed": null
+    },
+    "warnings": [
+      "WITHIN_MODE_THRESHOLD_DISABLED",
+      "GEOM_THRESHOLD_DISABLED"
+    ]
+  },
+  "warnings": [
+    "WITHIN_MODE_THRESHOLD_DISABLED",
+    "GEOM_THRESHOLD_DISABLED"
+  ],
+  "path": "active_snapshots\\SKU_TEMP_1768202175_INK1_20260112_161631.json"
+}

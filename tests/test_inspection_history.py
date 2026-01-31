@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from src.models import InspectionHistory, JudgmentType
 from src.models.database import Base
-from src.schemas.inspection import InspectionResult, ZoneResult
+from src.schemas.inspection import InspectionResult
 from src.web.routers.inspection import save_inspection_to_history
 
 
@@ -31,37 +31,26 @@ def test_db():
 
 @pytest.fixture
 def sample_inspection_result():
-    """Create a sample InspectionResult for testing"""
-    zone_results = [
-        ZoneResult(
-            zone_name="A",
-            measured_lab=(60.0, 10.0, 20.0),
-            target_lab=(62.0, 11.0, 19.0),
-            delta_e=2.5,
-            threshold=5.0,
-            is_ok=True,
-        ),
-        ZoneResult(
-            zone_name="B",
-            measured_lab=(70.0, -5.0, 15.0),
-            target_lab=(72.0, -4.0, 14.0),
-            delta_e=2.8,
-            threshold=5.0,
-            is_ok=True,
-        ),
-    ]
-
+    """Create a sample InspectionResult for testing (v7 schema)"""
     result = InspectionResult(
         sku="SKU001",
         timestamp=datetime.utcnow(),
         judgment="OK",
         overall_delta_e=2.65,
-        zone_results=zone_results,
         ng_reasons=[],
         confidence=0.95,
-        decision_trace={"final": "OK", "because": "All zones passed", "overrides": []},
+        decision_trace={"final": "OK", "because": "All criteria passed", "overrides": []},
         next_actions=[],
         retake_reasons=[],
+        analysis_summary={
+            "radial": {"delta_e_mean": 2.5, "delta_e_p95": 3.2},
+            "gate": {"passed": True, "scores": {"basic": 0.95}},
+        },
+        confidence_breakdown={
+            "gate_passed": True,
+            "signature_score": 0.95,
+            "label": "OK",
+        },
     )
 
     return result
@@ -87,13 +76,14 @@ def test_save_inspection_to_history(test_db, sample_inspection_result):
     assert history.judgment == JudgmentType.OK
     assert history.overall_delta_e == 2.65
     assert history.confidence == 0.95
-    assert history.zones_count == 2
     assert history.operator == "test_operator"
     assert history.processing_time_ms == 1500
     assert history.lens_detected == 0  # No lens_detection in sample
     assert history.has_warnings == 0
     assert history.has_ink_analysis == 0
-    assert history.has_radial_profile == 0
+    # v7 schema: analysis_summary and confidence_breakdown are present
+    # Note: analysis_result is already a dict property, not a JSON string
+    assert history.analysis_result is not None
 
 
 def test_inspection_history_to_dict(test_db, sample_inspection_result):
@@ -113,7 +103,6 @@ def test_inspection_history_to_dict(test_db, sample_inspection_result):
     assert data["judgment"] == "OK"
     assert data["overall_delta_e"] == 2.65
     assert data["confidence"] == 0.95
-    assert data["zones_count"] == 2
     assert data["is_ok"] is True
     assert data["needs_action"] is False
     assert "analysis_result" not in data  # to_dict() doesn't include full result
@@ -133,7 +122,9 @@ def test_inspection_history_to_dict_full(test_db, sample_inspection_result):
 
     assert "analysis_result" in data
     assert data["analysis_result"]["judgment"] == "OK"
-    assert len(data["analysis_result"]["zone_results"]) == 2
+    # v7 schema: check for analysis_summary instead of zone_results
+    assert "analysis_summary" in data["analysis_result"]
+    assert "confidence_breakdown" in data["analysis_result"]
 
 
 def test_inspection_history_judgment_types(test_db):
@@ -145,7 +136,6 @@ def test_inspection_history_judgment_types(test_db):
         judgment: str
         overall_delta_e: float
         confidence: float
-        zone_results: list
         ng_reasons: list
         decision_trace: dict
         next_actions: list
@@ -156,7 +146,6 @@ def test_inspection_history_judgment_types(test_db):
         judgment="OK",
         overall_delta_e=2.0,
         confidence=0.95,
-        zone_results=[],
         ng_reasons=[],
         decision_trace={},
         next_actions=[],
@@ -178,7 +167,6 @@ def test_inspection_history_judgment_types(test_db):
         judgment="NG",
         overall_delta_e=8.5,
         confidence=0.70,
-        zone_results=[],
         ng_reasons=["Zone B ΔE too high"],
         decision_trace={},
         next_actions=["Check lens quality"],
@@ -201,7 +189,6 @@ def test_inspection_history_judgment_types(test_db):
         judgment="RETAKE",
         overall_delta_e=3.0,
         confidence=0.45,
-        zone_results=[],
         ng_reasons=[],
         decision_trace={},
         next_actions=["Retake image"],
@@ -259,7 +246,6 @@ def test_query_by_judgment(test_db):
         judgment: str
         overall_delta_e: float
         confidence: float
-        zone_results: list
         ng_reasons: list
         decision_trace: dict
         next_actions: list
@@ -270,7 +256,6 @@ def test_query_by_judgment(test_db):
         judgment="OK",
         overall_delta_e=2.0,
         confidence=0.95,
-        zone_results=[],
         ng_reasons=[],
         decision_trace={},
         next_actions=[],
@@ -283,7 +268,6 @@ def test_query_by_judgment(test_db):
         judgment="NG",
         overall_delta_e=8.5,
         confidence=0.70,
-        zone_results=[],
         ng_reasons=[],
         decision_trace={},
         next_actions=[],
@@ -309,7 +293,6 @@ def test_get_summary(test_db):
         judgment: str
         overall_delta_e: float
         confidence: float
-        zone_results: list
         ng_reasons: list
         decision_trace: dict
         next_actions: list
@@ -320,7 +303,6 @@ def test_get_summary(test_db):
         judgment="OK",
         overall_delta_e=2.5,
         confidence=0.95,
-        zone_results=[],
         ng_reasons=[],
         decision_trace={},
         next_actions=[],
@@ -337,7 +319,6 @@ def test_get_summary(test_db):
         judgment="NG",
         overall_delta_e=8.5,
         confidence=0.70,
-        zone_results=[],
         ng_reasons=["Zone B color mismatch"],
         decision_trace={},
         next_actions=[],

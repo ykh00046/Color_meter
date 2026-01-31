@@ -1,0 +1,35 @@
+{
+  "schema_version": "std_registry_meta.v1",
+  "sku": "SKU_SMOKE_BASELINE_1768350528",
+  "ink": "INK1",
+  "mode": "MID",
+  "version": "v20260114_092909",
+  "color_mode": "aggregate",
+  "inputs": {
+    "std_images": [
+      "data\\samples\\INK1\\A1.png"
+    ],
+    "expected_ink_count": null
+  },
+  "outputs": {
+    "has_band": false,
+    "R": 260,
+    "T": 720,
+    "r_start": 0.1,
+    "r_end": 0.95
+  },
+  "stats": {
+    "n_std": 1
+  },
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:4ecb8c5f4ef13ed6150b751973b2f17f9bbd55af4a654880fa06ca72631ad7a8",
+    "cfg_sources": [
+      "C:\\X\\Color_meter\\lens_signature_engine_v7\\configs\\default.json"
+    ],
+    "cfg_warnings": []
+  },
+  "created_by": "",
+  "created_at": "2026-01-14T09:29:09.161017",
+  "notes": ""
+}

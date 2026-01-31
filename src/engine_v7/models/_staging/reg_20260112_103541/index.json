@@ -1,0 +1,23 @@
+{
+  "schema_version": "std_registry_index.v1",
+  "engine_version": "v7",
+  "created_at": "2026-01-12T10:35:41.874503",
+  "updated_at": "2026-01-12T10:35:43.841253",
+  "items": [
+    {
+      "sku": "GGG",
+      "ink": "INK_DEFAULT",
+      "active": {
+        "LOW": "GGG/INK_DEFAULT/LOW/v20260112_103541",
+        "MID": "GGG/INK_DEFAULT/MID/v20260112_103542",
+        "HIGH": "GGG/INK_DEFAULT/HIGH/v20260112_103543"
+      },
+      "status": "ACTIVE",
+      "notes": "",
+      "created_by": "SYSTEM",
+      "created_at": "2026-01-12T10:35:41.874689",
+      "color_mode": "aggregate",
+      "expected_ink_count": 3
+    }
+  ]
+}

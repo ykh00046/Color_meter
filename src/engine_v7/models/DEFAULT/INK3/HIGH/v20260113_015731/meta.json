@@ -1,0 +1,36 @@
+{
+  "schema_version": "std_registry_meta.v1",
+  "sku": "DEFAULT",
+  "ink": "INK3",
+  "mode": "HIGH",
+  "version": "v20260113_015731",
+  "color_mode": "aggregate",
+  "inputs": {
+    "std_images": [
+      "..\\data\\samples\\INK3\\G3.png"
+    ],
+    "expected_ink_count": null
+  },
+  "outputs": {
+    "has_band": false,
+    "R": 260,
+    "T": 720,
+    "r_start": 0.1,
+    "r_end": 0.95
+  },
+  "stats": {
+    "n_std": 1
+  },
+  "engine": {
+    "engine_version": "v7",
+    "cfg_hash": "sha256:719b118c90d01a29b286e2090562e7aac6e9781b7d655d4d9d8376ead51f8bf8",
+    "cfg_sources": [
+      "configs\\default.json",
+      "configs\\sku\\DEFAULT.json"
+    ],
+    "cfg_warnings": []
+  },
+  "created_by": "",
+  "created_at": "2026-01-13T01:57:31.188030",
+  "notes": ""
+}

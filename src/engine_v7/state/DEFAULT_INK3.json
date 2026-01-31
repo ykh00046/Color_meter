@@ -1,0 +1,14 @@
+{
+  "sku": "DEFAULT_INK3",
+  "last_mode": "MID",
+  "history": [
+    {
+      "ts": 1768237807,
+      "mode": "MID"
+    },
+    {
+      "ts": 1768238685,
+      "mode": "MID"
+    }
+  ]
+}

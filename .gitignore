@@ -1,8 +1,10 @@
 color_meter.db
 coverage.json
+.coverage
 htmlcov/
 results/
 reports/coverage/
+reports/
 logs/
 data/raw_images/
 data/samples/
@@ -38,3 +40,12 @@ lighthouse_reports/
 
 # Web assets (downloadable from CDN)
 src/web/static/webfonts/
+
+# Local debug artifacts
+debug_output/
+debug_*.log
+hard_gate_debug*.log
+ink_debug*.log
+diagnosis.log
+test_out.log
+verify_run.log

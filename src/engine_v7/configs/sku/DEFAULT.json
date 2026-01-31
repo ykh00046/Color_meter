@@ -1,0 +1,9 @@
+{
+  "gate": {
+    "center_off_max": 0.18
+  },
+  "signature": {
+    "de_mean_max": 11.5,
+    "de_p95_max": 28.5
+  }
+}

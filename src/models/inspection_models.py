@@ -48,10 +48,9 @@ class InspectionHistory(Base):
     judgment = Column(Enum(JudgmentType), nullable=False, index=True)
     overall_delta_e = Column(Float, nullable=False, index=True)
     confidence = Column(Float, nullable=False)  # 0.0 - 1.0
-    zones_count = Column(Integer, nullable=False, default=0)
 
     # Full analysis result (JSON blob for detailed data)
-    # Contains: zone_results, decision_trace, next_actions, retake_reasons,
+    # Contains: decision_trace, next_actions, retake_reasons,
     #           confidence_breakdown, risk_factors, ink_analysis, radial_profile, etc.
     analysis_result = Column(JSON, nullable=False)
 
@@ -119,7 +118,6 @@ class InspectionHistory(Base):
             "judgment": self.judgment.value if self.judgment else None,
             "overall_delta_e": self.overall_delta_e,
             "confidence": self.confidence,
-            "zones_count": self.zones_count,
             "ng_reasons": self.ng_reasons,
             "retake_reasons": self.retake_reasons,
             "decision_trace": self.decision_trace,

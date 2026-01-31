@@ -1,0 +1,11 @@
+{
+  "signature": {
+    "r_start": 0.1,
+    "r_end": 0.95
+  },
+  "v2_ink": {
+    "roi_r_start": 0.15,
+    "roi_r_end": 0.95
+  },
+  "expected_ink_count": 3
+}

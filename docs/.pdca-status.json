@@ -1,0 +1,100 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-01-31T13:00:00.000Z",
+  "activeFeatures": [],
+  "primaryFeature": null,
+  "features": {
+    "phase5-diagnostics": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterations": 1,
+      "createdAt": "2026-01-30T14:30:00.000Z",
+      "updatedAt": "2026-01-31T15:20:00.000Z",
+      "archivedTo": "docs/archive/2026-01/phase5-diagnostics/",
+      "documents": {
+        "plan": "docs/archive/2026-01/phase5-diagnostics/phase5-diagnostics.plan.md",
+        "design": "docs/archive/2026-01/phase5-diagnostics/phase5-diagnostics.design.md",
+        "analysis": "docs/archive/2026-01/phase5-diagnostics/phase5-diagnostics.analysis.md",
+        "report": "docs/archive/2026-01/phase5-diagnostics/phase5-diagnostics.report.md"
+      }
+    },
+    "phase6-pipeline": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterations": 0,
+      "createdAt": "2026-01-30T15:45:00.000Z",
+      "updatedAt": "2026-01-31T15:25:00.000Z",
+      "archivedTo": "docs/archive/2026-01/phase6-pipeline/",
+      "documents": {
+        "plan": "docs/archive/2026-01/phase6-pipeline/phase6-pipeline.plan.md",
+        "design": "docs/archive/2026-01/phase6-pipeline/phase6-pipeline.design.md",
+        "analysis": "docs/archive/2026-01/phase6-pipeline/phase6-pipeline.analysis.md",
+        "report": "docs/archive/2026-01/phase6-pipeline/phase6-pipeline.report.md"
+      }
+    },
+    "analyzer-refactor": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterations": 0,
+      "createdAt": "2026-01-31T10:30:00.000Z",
+      "updatedAt": "2026-01-31T15:15:00.000Z",
+      "archivedTo": "docs/archive/2026-01/analyzer-refactor/",
+      "documents": {
+        "plan": "docs/archive/2026-01/analyzer-refactor/analyzer-refactor.plan.md",
+        "design": "docs/archive/2026-01/analyzer-refactor/analyzer-refactor.design.md",
+        "analysis": "docs/archive/2026-01/analyzer-refactor/analyzer-refactor.analysis.md",
+        "report": "docs/archive/2026-01/analyzer-refactor/analyzer-refactor.report.md"
+      }
+    },
+    "v7-router-split": {
+      "phase": "archived",
+      "matchRate": 95,
+      "iterations": 0,
+      "createdAt": "2026-01-31T12:30:00.000Z",
+      "updatedAt": "2026-01-31T15:10:00.000Z",
+      "archivedTo": "docs/archive/2026-01/v7-router-split/",
+      "documents": {
+        "plan": "docs/archive/2026-01/v7-router-split/v7-router-split.plan.md",
+        "design": "docs/archive/2026-01/v7-router-split/v7-router-split.design.md",
+        "analysis": "docs/archive/2026-01/v7-router-split/v7-router-split.analysis.md",
+        "report": "docs/archive/2026-01/v7-router-split/v7-router-split.report.md"
+      }
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-01-30T14:06:25.553Z",
+    "onboardingCompleted": true,
+    "lastActivity": "2026-01-31T15:00:00.000Z"
+  },
+  "history": [
+    {
+      "feature": "phase5-diagnostics",
+      "completedAt": "2026-01-30T15:30:00.000Z",
+      "matchRate": 100,
+      "iterations": 1
+    },
+    {
+      "feature": "phase6-pipeline",
+      "completedAt": "2026-01-31T10:00:00.000Z",
+      "matchRate": 100,
+      "iterations": 0
+    },
+    {
+      "feature": "analyzer-refactor",
+      "completedAt": "2026-01-31T12:00:00.000Z",
+      "matchRate": 100,
+      "iterations": 0
+    },
+    {
+      "feature": "v7-router-split",
+      "completedAt": "2026-01-31T15:00:00.000Z",
+      "matchRate": 95,
+      "iterations": 0
+    }
+  ]
+}

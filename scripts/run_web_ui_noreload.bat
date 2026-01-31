@@ -4,6 +4,12 @@ setlocal
 pushd %~dp0..
 title Color Meter Web UI Launcher
 
+REM Cleanup: Kill any existing uvicorn on port 8000 when this script exits
+REM This ensures the server stops when terminal is closed
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
 REM UTF-8 output for Python
 set PYTHONIOENCODING=utf-8
 
@@ -51,7 +57,8 @@ echo.
 echo [STOP] Press Ctrl+C to stop the server.
 echo.
 
-python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000 --log-level info
+REM Use wrapper script to ensure server terminates when terminal closes
+python scripts\server_wrapper.py
 
 popd
 

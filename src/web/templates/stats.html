@@ -1,423 +1,284 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inspection Stats | Color Meter</title>
-    <meta name="description" content="검사 통계, OK/NG 추이, RETAKE 원인을 시각화한 Color Meter 통계 대시보드." />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-0: #070b12;
-            --bg-1: #0d1424;
-            --panel: rgba(15, 23, 42, 0.86);
-            --panel-border: rgba(148, 163, 184, 0.18);
-            --primary: #ff9f1c;
-            --accent: #33d1ff;
-            --text-strong: #f8fafc;
-            --text-muted: #94a3b8;
-        }
+{% extends "_base_layout.html" %}
 
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Space Grotesk', sans-serif;
-            background: radial-gradient(circle at 10% 20%, #152341 0%, var(--bg-1) 45%, var(--bg-0) 100%);
-            color: var(--text-strong);
-        }
+{% block title %}검사 통계 | Color Meter{% endblock %}
 
-        h1, h2, h3 { font-family: 'Fraunces', serif; }
-        .mono { font-family: 'IBM Plex Mono', monospace; }
+{% block extra_head %}
+<script src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
+{% endblock %}
 
-        .grid-overlay {
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            background-image:
-                linear-gradient(90deg, rgba(51, 209, 255, 0.05) 1px, transparent 1px),
-                linear-gradient(rgba(255, 159, 28, 0.04) 1px, transparent 1px);
-            background-size: 80px 80px;
-            opacity: 0.6;
-            z-index: 0;
-        }
-
-        .glass {
-            background: var(--panel);
-            border: 1px solid var(--panel-border);
-            backdrop-filter: blur(18px);
-            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.35);
-        }
-
-        .cta-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, #ff7a00 100%);
-            color: #0a0a0a;
-            border: none;
-        }
-
-        .cta-secondary {
-            border: 1px solid rgba(148, 163, 184, 0.4);
-            color: var(--text-strong);
-            background: rgba(15, 23, 42, 0.5);
-        }
-
-        .field {
-            background: rgba(15, 23, 42, 0.75);
-            border: 1px solid rgba(148, 163, 184, 0.3);
-            color: var(--text-strong);
-        }
-    </style>
-</head>
-<body class="min-h-screen">
-    <div class="grid-overlay"></div>
-    <div class="relative z-10">
-        <header class="max-w-7xl mx-auto px-6 py-6">
-            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div class="flex items-center gap-4">
-                    <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-black text-xl font-bold">CM</div>
-                    <div>
-                        <p class="mono text-xs text-slate-400">INSPECTION STATS</p>
-                        <h1 class="text-3xl">검사 통계 & 품질 추이</h1>
-                    </div>
-                </div>
-                <nav class="flex flex-wrap gap-3 text-sm">
-                    <a href="/" class="cta-secondary px-4 py-2 rounded-full">Overview</a>
-                    <a href="/history" class="cta-secondary px-4 py-2 rounded-full">History</a>
-                    <a href="/v7" class="cta-secondary px-4 py-2 rounded-full">V7</a>
-                </nav>
-            </div>
-        </header>
-
-        <main class="max-w-7xl mx-auto px-6 pb-16 space-y-8">
-            <section class="glass rounded-3xl p-6">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <p class="mono text-xs text-slate-400">FILTERS</p>
-                        <h2 class="text-2xl">기간과 SKU 기준으로 분석</h2>
-                    </div>
-                    <div class="text-xs text-slate-500">필터는 모든 차트와 표에 동시 반영됩니다.</div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-                    <div>
-                        <label class="text-xs text-slate-400">SKU Code</label>
-                        <input id="filter-sku" type="text" placeholder="SKU001" class="field mt-2 w-full px-3 py-2 rounded-lg">
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-400">Start Date</label>
-                        <input id="filter-start" type="date" class="field mt-2 w-full px-3 py-2 rounded-lg">
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-400">End Date</label>
-                        <input id="filter-end" type="date" class="field mt-2 w-full px-3 py-2 rounded-lg">
-                    </div>
-                    <div class="flex items-end gap-2">
-                        <button onclick="applyFilters()" class="cta-primary flex-1 px-4 py-2 rounded-lg font-semibold">Apply</button>
-                        <button onclick="resetFilters()" class="cta-secondary px-4 py-2 rounded-lg">Reset</button>
-                    </div>
-                </div>
-            </section>
-
-            <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="glass rounded-2xl p-5">
-                    <p class="text-xs text-slate-400">Total Inspections</p>
-                    <p class="text-3xl font-semibold mt-1" id="stat-total">-</p>
-                    <p class="text-xs text-slate-500 mt-1" id="stat-range"></p>
-                </div>
-                <div class="glass rounded-2xl p-5">
-                    <p class="text-xs text-slate-400">Pass Rate</p>
-                    <p class="text-3xl font-semibold text-emerald-300 mt-1" id="stat-pass-rate">-</p>
-                    <p class="text-xs text-slate-500 mt-1">OK + OK_WITH_WARNING</p>
-                </div>
-                <div class="glass rounded-2xl p-5">
-                    <p class="text-xs text-slate-400">Avg Delta E</p>
-                    <p class="text-3xl font-semibold mt-1" id="stat-avg-delta-e">-</p>
-                    <p class="text-xs text-slate-500 mt-1">Overall color difference</p>
-                </div>
-                <div class="glass rounded-2xl p-5">
-                    <p class="text-xs text-slate-400">Avg Confidence</p>
-                    <p class="text-3xl font-semibold mt-1" id="stat-avg-confidence">-</p>
-                    <p class="text-xs text-slate-500 mt-1">Inspection confidence</p>
-                </div>
-            </section>
-
-            <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div class="glass rounded-2xl p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-lg">OK/NG/RETAKE</h3>
-                        <span class="text-xs text-slate-500">Last 30 days</span>
-                    </div>
-                    <canvas id="chart-judgment"></canvas>
-                </div>
-                <div class="glass rounded-2xl p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-lg">RETAKE Reasons</h3>
-                        <span class="text-xs text-slate-500">Last 30 days</span>
-                    </div>
-                    <canvas id="chart-retake"></canvas>
-                </div>
-                <div class="glass rounded-2xl p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-lg">Daily Trend</h3>
-                        <span class="text-xs text-slate-500">Last 30 days</span>
-                    </div>
-                    <canvas id="chart-daily"></canvas>
-                </div>
-            </section>
-
-            <section class="glass rounded-3xl p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <p class="mono text-xs text-slate-400">SKU BREAKDOWN</p>
-                        <h2 class="text-2xl">SKU별 결과</h2>
-                    </div>
-                    <span class="text-xs text-slate-500">Sorted by volume</span>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-left text-sm">
-                        <thead class="text-xs text-slate-400 uppercase border-b border-slate-800">
-                            <tr>
-                                <th class="py-3 pr-4">SKU</th>
-                                <th class="py-3 pr-4">Total</th>
-                                <th class="py-3 pr-4">Pass Rate</th>
-                                <th class="py-3 pr-4">Avg ΔE</th>
-                                <th class="py-3 pr-4">Avg Confidence</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sku-table"></tbody>
-                    </table>
-                </div>
-            </section>
-        </main>
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">검사 통계 & 품질 추이</h1>
+        <p class="text-secondary">OK/NG 추이, RETAKE 원인을 시각화한 통계 대시보드</p>
     </div>
 
-    <script>
-        let chartJudgment, chartRetake, chartDaily;
-        const STATS_FILTERS_KEY = 'cm_stats_filters_v1';
-        const FILTER_IDS = ['filter-sku', 'filter-start', 'filter-end'];
+    <!-- Filters -->
+    <div class="terminal-panel p-6 mb-8">
+        <h2 class="text-xl font-bold mb-6">기간과 SKU 기준으로 분석</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-xs text-dim mb-2">SKU Code</label>
+                <input id="filter-sku" type="text" placeholder="SKU001" class="terminal-input">
+            </div>
+            <div>
+                <label class="block text-xs text-dim mb-2">Start Date</label>
+                <input id="filter-start" type="date" class="terminal-input">
+            </div>
+            <div>
+                <label class="block text-xs text-dim mb-2">End Date</label>
+                <input id="filter-end" type="date" class="terminal-input">
+            </div>
+            <div class="flex items-end gap-2">
+                <button onclick="applyFilters()" class="btn btn-primary flex-1">Apply</button>
+                <button onclick="resetFilters()" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+    </div>
 
-        const debounce = (fn, delay = 350) => {
-            let timer;
-            return (...args) => {
-                clearTimeout(timer);
-                timer = setTimeout(() => fn(...args), delay);
-            };
-        };
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="metric-card">
+            <div class="metric-label">Total Inspections</div>
+            <div id="stat-total" class="metric-value">-</div>
+            <div id="stat-range" class="text-xs text-dim mt-2"></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Pass Rate</div>
+            <div id="stat-pass-rate" class="metric-value text-success">-</div>
+            <div class="text-xs text-dim mt-2">OK + OK_WITH_WARNING</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Avg Delta E</div>
+            <div id="stat-avg-delta-e" class="metric-value">-</div>
+            <div class="text-xs text-dim mt-2">Overall color difference</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Avg Confidence</div>
+            <div id="stat-avg-confidence" class="metric-value">-</div>
+            <div class="text-xs text-dim mt-2">Inspection confidence</div>
+        </div>
+    </div>
 
-        function getFilterValues() {
-            return {
-                sku: document.getElementById('filter-sku').value,
-                start: document.getElementById('filter-start').value,
-                end: document.getElementById('filter-end').value
-            };
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="terminal-panel p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold">OK/NG/RETAKE</h3>
+                <span class="text-xs text-dim">Last 30 days</span>
+            </div>
+            <div class="h-64">
+                <canvas id="chart-judgment"></canvas>
+            </div>
+        </div>
+
+        <div class="terminal-panel p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold">RETAKE Reasons</h3>
+                <span class="text-xs text-dim">Last 30 days</span>
+            </div>
+            <div class="h-64">
+                <canvas id="chart-retake"></canvas>
+            </div>
+        </div>
+
+        <div class="terminal-panel p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold">Daily Trend</h3>
+                <span class="text-xs text-dim">Last 30 days</span>
+            </div>
+            <div class="h-64">
+                <canvas id="chart-daily"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- SKU Breakdown Table -->
+    <div class="terminal-panel p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold">SKU별 결과</h2>
+            <span class="text-xs text-dim">Sorted by volume</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="text-xs text-dim uppercase border-b border-default">
+                    <tr>
+                        <th class="py-3 pr-4">SKU</th>
+                        <th class="py-3 pr-4">Total</th>
+                        <th class="py-3 pr-4">Pass Rate</th>
+                        <th class="py-3 pr-4">Avg ΔE</th>
+                        <th class="py-3 pr-4">Avg Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="sku-table"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let chartJudgment, chartRetake, chartDaily;
+
+    async function loadSummary() {
+        const params = getDateRangeParams();
+        const sku = document.getElementById('filter-sku').value;
+        if (sku) params.append('sku_code', sku);
+
+        const res = await fetch(`/api/inspection/history/stats/summary?${params}`);
+        const data = await res.json();
+        document.getElementById('stat-total').textContent = data.total_inspections ?? '-';
+        document.getElementById('stat-pass-rate').textContent = data.pass_rate !== undefined ? `${(data.pass_rate * 100).toFixed(1)}%` : '-';
+        document.getElementById('stat-avg-delta-e').textContent = data.avg_delta_e !== undefined ? data.avg_delta_e.toFixed(2) : '-';
+        document.getElementById('stat-avg-confidence').textContent = data.avg_confidence !== undefined ? `${(data.avg_confidence * 100).toFixed(1)}%` : '-';
+        if (data.time_range) {
+            document.getElementById('stat-range').textContent = `${data.time_range.start.split('T')[0]} ~ ${data.time_range.end.split('T')[0]}`;
         }
+    }
 
-        function setFilterValues(filters) {
-            if (!filters) return;
-            document.getElementById('filter-sku').value = filters.sku || '';
-            document.getElementById('filter-start').value = filters.start || '';
-            document.getElementById('filter-end').value = filters.end || '';
-        }
+    async function loadJudgmentChart() {
+        const params = getDateRangeParams();
+        const sku = document.getElementById('filter-sku').value;
+        if (sku) params.append('sku_code', sku);
+        const res = await fetch(`/api/inspection/history/stats/summary?${params}`);
+        const data = await res.json();
+        const counts = data.judgment_counts || {};
+        const labels = ['OK', 'OK_WITH_WARNING', 'NG', 'RETAKE'];
+        const values = labels.map(label => counts[label] || 0);
 
-        function saveFilters() {
-            try {
-                localStorage.setItem(STATS_FILTERS_KEY, JSON.stringify(getFilterValues()));
-            } catch (error) {
-                console.warn('Failed to save filters:', error);
+        const ctx = document.getElementById('chart-judgment').getContext('2d');
+        if (chartJudgment) chartJudgment.destroy();
+        chartJudgment = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: ['#34d399', '#fbbf24', '#f87171', '#a78bfa'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#e2e8f0' } } }
             }
-        }
-
-        function loadSavedFilters() {
-            try {
-                const saved = localStorage.getItem(STATS_FILTERS_KEY);
-                if (saved) setFilterValues(JSON.parse(saved));
-            } catch (error) {
-                console.warn('Failed to load saved filters:', error);
-            }
-        }
-
-        function setupAutoApply() {
-            const autoApply = debounce(() => applyFilters());
-            FILTER_IDS.forEach(id => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                const eventName = (el.tagName === 'SELECT' || el.type === 'date') ? 'change' : 'input';
-                el.addEventListener(eventName, autoApply);
-                if (eventName === 'change') {
-                    el.addEventListener('input', autoApply);
-                }
-            });
-        }
-
-        function getDateRangeParams() {
-            const start = document.getElementById('filter-start').value;
-            const end = document.getElementById('filter-end').value;
-            const params = new URLSearchParams();
-            if (start) params.append('start_date', `${start}T00:00:00Z`);
-            if (end) params.append('end_date', `${end}T23:59:59Z`);
-            if (!start && !end) params.append('days', '30');
-            return params;
-        }
-
-        function applyFilters() {
-            saveFilters();
-            loadSummary();
-            loadJudgmentChart();
-            loadRetakeChart();
-            loadDailyChart();
-            loadSkuTable();
-        }
-
-        function resetFilters() {
-            document.getElementById('filter-sku').value = '';
-            document.getElementById('filter-start').value = '';
-            document.getElementById('filter-end').value = '';
-            try {
-                localStorage.removeItem(STATS_FILTERS_KEY);
-            } catch (error) {
-                console.warn('Failed to reset saved filters:', error);
-            }
-            applyFilters();
-        }
-
-        async function loadSummary() {
-            const params = getDateRangeParams();
-            const sku = document.getElementById('filter-sku').value;
-            if (sku) params.append('sku_code', sku);
-
-            const res = await fetch(`/api/inspection/history/stats/summary?${params}`);
-            const data = await res.json();
-            document.getElementById('stat-total').textContent = data.total_inspections ?? '-';
-            document.getElementById('stat-pass-rate').textContent = data.pass_rate !== undefined ? `${(data.pass_rate * 100).toFixed(1)}%` : '-';
-            document.getElementById('stat-avg-delta-e').textContent = data.avg_delta_e !== undefined ? data.avg_delta_e.toFixed(2) : '-';
-            document.getElementById('stat-avg-confidence').textContent = data.avg_confidence !== undefined ? `${(data.avg_confidence * 100).toFixed(1)}%` : '-';
-            if (data.time_range) {
-                document.getElementById('stat-range').textContent = `${data.time_range.start.split('T')[0]} ~ ${data.time_range.end.split('T')[0]}`;
-            }
-        }
-
-        async function loadJudgmentChart() {
-            const params = getDateRangeParams();
-            const sku = document.getElementById('filter-sku').value;
-            if (sku) params.append('sku_code', sku);
-            const res = await fetch(`/api/inspection/history/stats/summary?${params}`);
-            const data = await res.json();
-            const counts = data.judgment_counts || {};
-            const labels = ['OK', 'OK_WITH_WARNING', 'NG', 'RETAKE'];
-            const values = labels.map(label => counts[label] || 0);
-
-            const ctx = document.getElementById('chart-judgment').getContext('2d');
-            if (chartJudgment) chartJudgment.destroy();
-            chartJudgment = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: ['#34d399', '#fbbf24', '#f87171', '#a78bfa'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    plugins: { legend: { labels: { color: '#e2e8f0' } } }
-                }
-            });
-        }
-
-        async function loadRetakeChart() {
-            const params = getDateRangeParams();
-            const sku = document.getElementById('filter-sku').value;
-            if (sku) params.append('sku_code', sku);
-            const res = await fetch(`/api/inspection/history/stats/retake-reasons?${params}`);
-            const data = await res.json();
-            const labels = (data.reasons || []).map(r => r.code);
-            const values = (data.reasons || []).map(r => r.count);
-
-            const ctx = document.getElementById('chart-retake').getContext('2d');
-            if (chartRetake) chartRetake.destroy();
-            chartRetake = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Count',
-                        data: values,
-                        backgroundColor: '#60a5fa'
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { ticks: { color: '#e2e8f0' }, grid: { display: false } },
-                        y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.08)' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        async function loadDailyChart() {
-            const params = getDateRangeParams();
-            const sku = document.getElementById('filter-sku').value;
-            if (sku) params.append('sku_code', sku);
-            const res = await fetch(`/api/inspection/history/stats/daily?${params}`);
-            const data = await res.json();
-            const labels = (data.series || []).map(p => p.date);
-            const passRates = (data.series || []).map(p => (p.pass_rate || 0) * 100);
-
-            const ctx = document.getElementById('chart-daily').getContext('2d');
-            if (chartDaily) chartDaily.destroy();
-            chartDaily = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Pass %',
-                        data: passRates,
-                        borderColor: '#22d3ee',
-                        backgroundColor: 'rgba(34,211,238,0.12)',
-                        tension: 0.25,
-                        fill: true
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { ticks: { color: '#e2e8f0' }, grid: { display: false } },
-                        y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: 100 }
-                    },
-                    plugins: { legend: { labels: { color: '#e2e8f0' } } }
-                }
-            });
-        }
-
-        async function loadSkuTable() {
-            const params = getDateRangeParams();
-            const res = await fetch(`/api/inspection/history/stats/by-sku?${params}`);
-            const data = await res.json();
-            const tbody = document.getElementById('sku-table');
-            const entries = Object.entries(data.stats_by_sku || {}).sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
-
-            if (entries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-slate-400">No data</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = entries.map(([sku, stats]) => `
-                <tr class="border-b border-slate-800">
-                    <td class="py-3 pr-4 font-medium text-slate-200">${sku}</td>
-                    <td class="py-3 pr-4 text-slate-400">${stats.total}</td>
-                    <td class="py-3 pr-4 text-slate-400">${(stats.pass_rate * 100).toFixed(1)}%</td>
-                    <td class="py-3 pr-4 text-slate-400">${stats.avg_delta_e.toFixed(2)}</td>
-                    <td class="py-3 pr-4 text-slate-400">${(stats.avg_confidence * 100).toFixed(1)}%</td>
-                </tr>
-            `).join('');
-        }
-
-        window.addEventListener('load', () => {
-            loadSavedFilters();
-            setupAutoApply();
-            applyFilters();
         });
-    </script>
-</body>
-</html>
+    }
+
+    async function loadRetakeChart() {
+        const params = getDateRangeParams();
+        const sku = document.getElementById('filter-sku').value;
+        if (sku) params.append('sku_code', sku);
+        const res = await fetch(`/api/inspection/history/stats/retake-reasons?${params}`);
+        const data = await res.json();
+        const labels = (data.reasons || []).map(r => r.code);
+        const values = (data.reasons || []).map(r => r.count);
+
+        const ctx = document.getElementById('chart-retake').getContext('2d');
+        if (chartRetake) chartRetake.destroy();
+        chartRetake = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Count',
+                    data: values,
+                    backgroundColor: '#60a5fa'
+                }]
+            },
+            options: {
+                scales: {
+                    x: { ticks: { color: '#e2e8f0' }, grid: { display: false } },
+                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.08)' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    async function loadDailyChart() {
+        const params = getDateRangeParams();
+        const sku = document.getElementById('filter-sku').value;
+        if (sku) params.append('sku_code', sku);
+        const res = await fetch(`/api/inspection/history/stats/daily?${params}`);
+        const data = await res.json();
+        const labels = (data.series || []).map(p => p.date);
+        const passRates = (data.series || []).map(p => (p.pass_rate || 0) * 100);
+
+        const ctx = document.getElementById('chart-daily').getContext('2d');
+        if (chartDaily) chartDaily.destroy();
+        chartDaily = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Pass %',
+                    data: passRates,
+                    borderColor: '#22d3ee',
+                    backgroundColor: 'rgba(34,211,238,0.12)',
+                    tension: 0.25,
+                    fill: true
+                }]
+            },
+            options: {
+                scales: {
+                    x: { ticks: { color: '#e2e8f0' }, grid: { display: false } },
+                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.08)' }, beginAtZero: true, max: 100 }
+                },
+                plugins: { legend: { labels: { color: '#e2e8f0' } } }
+            }
+        });
+    }
+
+    async function loadSkuTable() {
+        const params = getDateRangeParams();
+        const res = await fetch(`/api/inspection/history/stats/by-sku?${params}`);
+        const data = await res.json();
+        const tbody = document.getElementById('sku-table');
+        const entries = Object.entries(data.stats_by_sku || {}).sort((a, b) => (b[1].total || 0) - (a[1].total || 0));
+
+        if (entries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-dim">No data</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = entries.map(([sku, stats]) => `
+            <tr class="border-b border-default hover:bg-elevated transition-colors">
+                <td class="py-3 pr-4 font-semibold">${sku}</td>
+                <td class="py-3 pr-4 text-dim">${stats.total}</td>
+                <td class="py-3 pr-4 text-dim">${(stats.pass_rate * 100).toFixed(1)}%</td>
+                <td class="py-3 pr-4 text-dim">${stats.avg_delta_e.toFixed(2)}</td>
+                <td class="py-3 pr-4 text-dim">${(stats.avg_confidence * 100).toFixed(1)}%</td>
+            </tr>
+        `).join('');
+    }
+
+    function getDateRangeParams() {
+        const start = document.getElementById('filter-start').value;
+        const end = document.getElementById('filter-end').value;
+        const params = new URLSearchParams();
+        if (start) params.append('start_date', `${start}T00:00:00Z`);
+        if (end) params.append('end_date', `${end}T23:59:59Z`);
+        if (!start && !end) params.append('days', '30');
+        return params;
+    }
+
+    function applyFilters() {
+        loadSummary();
+        loadJudgmentChart();
+        loadRetakeChart();
+        loadDailyChart();
+        loadSkuTable();
+    }
+
+    function resetFilters() {
+        document.getElementById('filter-sku').value = '';
+        document.getElementById('filter-start').value = '';
+        document.getElementById('filter-end').value = '';
+        applyFilters();
+    }
+
+    window.addEventListener('load', applyFilters);
+</script>
+{% endblock %}

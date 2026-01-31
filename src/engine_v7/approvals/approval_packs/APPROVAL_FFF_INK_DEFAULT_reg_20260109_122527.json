@@ -1,0 +1,82 @@
+{
+  "schema_version": "approval_pack.v1",
+  "approval_id": "ap_reg_20260109_122527_FFF_INK_DEFAULT",
+  "generated_at": "2026-01-09T12:25:32.422166",
+  "context": {
+    "sku": "FFF",
+    "ink": "INK_DEFAULT"
+  },
+  "decision": {
+    "action": "ACTIVATE",
+    "status": "NEEDS_REVIEW",
+    "summary_line": "STD_ACCEPTABLE | warn+2",
+    "policy": {
+      "activation_allowed_only_for": [
+        "STD_ACCEPTABLE"
+      ],
+      "role_required": "Approver"
+    }
+  },
+  "baseline_active": {
+    "active_snapshot_path": "",
+    "snapshot": {
+      "min_pairwise_separation": null,
+      "sep_threshold": null,
+      "warnings": [],
+      "geom_consistency": {}
+    }
+  },
+  "candidate_std": {
+    "registration_id": "reg_20260109_122527",
+    "decision": {
+      "label": "STD_ACCEPTABLE",
+      "reason_codes": [],
+      "reason_messages": []
+    },
+    "summary": {
+      "min_pairwise_separation": 6.799233913421631,
+      "sep_threshold": 1.0,
+      "warnings": [
+        "WITHIN_MODE_THRESHOLD_DISABLED",
+        "GEOM_THRESHOLD_DISABLED"
+      ],
+      "geom_consistency": {
+        "center_drift_px": 45.83449172973633,
+        "radius_drift_ratio": 0.4990842938423157,
+        "passed": null
+      }
+    }
+  },
+  "compare_to_active": {
+    "delta": {
+      "min_pairwise_separation": null
+    },
+    "warnings_diff": {
+      "added": [
+        "GEOM_THRESHOLD_DISABLED",
+        "WITHIN_MODE_THRESHOLD_DISABLED"
+      ],
+      "removed": []
+    }
+  },
+  "impact_preview": {
+    "status": "NOT_AVAILABLE",
+    "notes": [
+      "metrics_report not attached at registration time"
+    ]
+  },
+  "review": {
+    "v2_flags": {
+      "schema": "v2_flags.v1",
+      "severity": "OK",
+      "flags": []
+    }
+  },
+  "final": {
+    "status": "APPROVED",
+    "action": "ACTIVATE",
+    "approved_at": "2026-01-09T12:25:36.508192",
+    "approved_by": "SYSTEM",
+    "active_snapshot_path": "active_snapshots\\FFF_INK_DEFAULT_20260109_122536.json"
+  }
+}

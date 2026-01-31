@@ -60,7 +60,6 @@ export * as gateVisual from './features/inspection/gate_visual.js';
 // =============================================================================
 export { initSingleAnalysis } from './features/analysis/single.js';
 export * as inkVisuals from './features/analysis/ink_visuals.js';
-export * as simulationUI from './features/analysis/simulation_ui.js';
 
 // =============================================================================
 // Features - Registration

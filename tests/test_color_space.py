@@ -1,11 +1,21 @@
-"""
+﻿"""
 Color Space Conversion Tests
 
 Tests for OpenCV Lab ↔ Standard Lab conversions.
 """
 
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
+
+# Add v7 to path for import
+V7_ROOT = Path(__file__).resolve().parents[1] / "src" / "engine_v7"
+if str(V7_ROOT) not in sys.path:
+    sys.path.append(str(V7_ROOT))
+
+from core.utils import delta_e_cie2000
 
 from src.utils.color_space import (
     detect_lab_scale,
@@ -138,7 +148,6 @@ class TestDeltaEConsistency:
 
     def test_delta_e_calculation_before_after(self):
         """Compare delta E before and after Lab scale fix"""
-        from src.utils.color_delta import delta_e_cie2000
 
         # User's measured values (OpenCV scale)
         measured_L_cv = 182.56

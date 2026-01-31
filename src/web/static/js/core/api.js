@@ -88,6 +88,12 @@ class ApiClient {
    */
   async request(url, options) {
     try {
+      const headers = new Headers(options.headers || {});
+      if (url.includes('/api/v7/') && !headers.has('X-User-Role')) {
+        headers.set('X-User-Role', 'operator');
+      }
+      options.headers = headers;
+
       const response = await fetch(url, options);
 
       // Handle non-OK responses
@@ -194,12 +200,6 @@ export const v7Api = {
     return apiClient.post('/v7/plate_gate', formData, 'multipart');
   },
 
-  /**
-   * 시뮬레이션 (Phase 6 연동)
-   */
-  async runSimulation(data) {
-    return apiClient.post('/v7/simulation', data);
-  },
 };
 
 // Export both

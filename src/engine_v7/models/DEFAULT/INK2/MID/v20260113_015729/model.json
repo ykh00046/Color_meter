@@ -1,0 +1,32 @@
+{
+  "schema_version": "std_model.v1",
+  "geom": {
+    "cx": 120.60000610351562,
+    "cy": 123.00000762939453,
+    "r": 104.44000244140625,
+    "confidence": 1.0,
+    "source": "hough_strict"
+  },
+  "meta": {
+    "T": 720,
+    "R": 260,
+    "r0": 26,
+    "r1": 247,
+    "r_start": 0.1,
+    "r_end": 0.95,
+    "n_std": 1,
+    "lab_space": "opencv_lab"
+  },
+  "has_band": false,
+  "has_robust": false,
+  "shapes": {
+    "radial_lab_mean": [
+      221,
+      3
+    ],
+    "radial_lab_p95": [
+      221,
+      3
+    ]
+  }
+}

@@ -1,27 +1,79 @@
-﻿# STD vs Sample 비교 (빠른 시작)
-- 페이지: `/compare`
-- 입력: STD 이미지 1장 + Sample 이미지 1장 업로드
-- 처리: `POST /compare` (reference_file + test_files)
-- 출력: mean/max Delta E, Delta L/Delta a/Delta b 방향, overall shift, zone별 Delta E
-- 결과 다운로드: JSON 다운로드 버튼 (AI 검토/재현용)
-- 현재 방식: Zone 기반 비교 + ink 매핑(있으면) + ink 기준 경고 표시
+﻿# Color Meter - 렌즈 색상 분석 시스템
 
-## 용어/범위 정합
-- Quick Start의 STD는 임시 Reference Image이며, M2 Comparison System의 STD Model과 다름.
-- Quick Start 결과는 M2 ComparisonResult의 부분집합.
-- overall shift는 설명용 지표이며 판정에는 사용하지 않음.
+타사 렌즈의 색상을 측정/분석하여 자사에서 동일한 렌즈를 제작할 수 있도록 지원하는 시스템입니다.
 
-## ink 매핑
-- SKU 설정 파일의 `params.ink_mapping`으로 Zone → Ink 매핑을 정의한다.
-- 매핑이 없으면 모든 Zone은 `ink1`로 묶인다.
+## 핵심 워크플로우
 
-## ink 임계치
-- SKU 설정 파일의 `params.ink_thresholds`로 잉크별 임계치를 정의한다.
-- `default.max_delta_e`가 기본값이며, 잉크별 값으로 덮어쓴다.
-- 잉크 기준은 해당 잉크에 속한 Zone들의 `max_delta_e`를 사용한다.
+```
+[타사 렌즈] → 측정/수치화 → AI 분석 → 자사 BOM 추천
+                                ↓
+                         자사 렌즈 제작
+                                ↓
+[자사 렌즈] → 측정/수치화 → 비교 분석 → 차이량 도출
+                                ↓
+                         AI 조정 권고 → 반복
+```
 
-## 관련 문서
-- 비교 UI 가이드 + 정형 텍스트 템플릿: `docs/guides/comparison/COMPARE_UI_GUIDE.md`
-- Quick Start ↔ M2 매핑: `docs/guides/comparison/QUICK_START_M2_MAPPING.md`
-- Comparison System 1page: `docs/guides/comparison/COMPARISON_SYSTEM_OVERVIEW.md`
-- 샘플 이미지 위치: `data/samples/`
+## 주요 기능
+
+| 기능 | 상태 | 설명 |
+|------|------|------|
+| 렌즈 이미지 측정 | ✅ | 색상 추출, 잉크 세그먼테이션 |
+| 서명 분석 | ✅ | 극좌표 변환, 프로파일 추출 |
+| STD 등록/비교 | ✅ | 표준 모델 학습 및 비교 |
+| Target vs Sample 비교 | 🔧 | 타사 vs 자사 직접 비교 (개발 예정) |
+| AI 분석/추천 | 📋 | BOM 추천, 조정 권고 (계획) |
+
+## 빠른 시작
+
+```bash
+# 환경 설정
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 서버 실행
+python -m src.web.app
+
+# 웹 UI 접속
+http://localhost:8000
+```
+
+## 프로젝트 구조
+
+```
+Color_meter/
+├── src/
+│   ├── engine_v7/     # v7 분석 엔진 (메인)
+│   │   ├── core/           # 핵심 모듈
+│   │   │   ├── measure/    # 측정 (색상, 잉크)
+│   │   │   ├── signature/  # 서명 분석
+│   │   │   ├── decision/   # 판정 로직
+│   │   │   └── pipeline/   # 분석 파이프라인
+│   │   └── configs/        # 설정 파일
+│   ├── web/                # FastAPI 웹 서버
+│   └── pipeline.py         # 통합 파이프라인
+├── docs/                   # 문서
+└── data/                   # 데이터 (이미지, 모델)
+```
+
+## API 엔드포인트
+
+| 엔드포인트 | 설명 |
+|-----------|------|
+| `POST /api/v7/inspect` | 렌즈 검사 |
+| `POST /api/v7/register` | STD 등록 |
+| `POST /api/v7/compare` | 비교 분석 |
+| `GET /compare` | 비교 UI |
+
+## 문서
+
+- [PROJECT_ROADMAP.md](PROJECT_ROADMAP.md) - 프로젝트 로드맵 및 계획
+- [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) - 엔진 통합 현황
+- [docs/INDEX.md](docs/INDEX.md) - 전체 문서 색인
+
+## 기술 스택
+
+- **Backend**: Python, FastAPI, NumPy, OpenCV, scikit-learn
+- **Frontend**: HTML/CSS/JavaScript (정적)
+- **분석**: k-means 클러스터링, LAB 색공간, 극좌표 변환

@@ -1,421 +1,308 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Meter | 렌즈 품질 분석</title>
-    <meta name="description" content="렌즈 품질 분석 - STD 비교 및 단독 샘플 분석" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-dark: #0a0f1e;
-            --bg-card: #111827;
-            --border: rgba(148, 163, 184, 0.2);
-            --primary: #f59e0b;
-            --primary-hover: #fbbf24;
-            --secondary: #3b82f6;
-            --secondary-hover: #60a5fa;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-        }
+{% extends "_base_layout.html" %}
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+{% block title %}Color Meter | 렌즈 품질 분석{% endblock %}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1f35 100%);
-            color: var(--text-primary);
-            min-height: 100vh;
-        }
+{% block extra_head %}
+<style>
+    /* Hero Section */
+    .hero {
+        text-align: center;
+        padding: 4rem 0;
+    }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 1.5rem;
-        }
+    .badge {
+        display: inline-block;
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-full);
+        font-size: var(--font-size-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
 
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 1rem;
-            padding: 2rem;
-            transition: all 0.3s ease;
-        }
+    .hero h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
 
-        .card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(148, 163, 184, 0.4);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        }
+    .hero p {
+        font-size: var(--font-size-lg);
+        color: var(--text-secondary);
+        margin-bottom: 2.5rem;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
 
-        .btn-primary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            background: var(--primary);
-            color: #000;
-            padding: 1rem 2rem;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-        }
+    .cta-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
 
-        .btn-primary:hover {
-            background: var(--primary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3);
-        }
+    /* Feature Cards */
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        padding: 3rem 0;
+    }
 
-        .btn-secondary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            background: var(--secondary);
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-        }
+    .feature-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 2rem;
+        transition: all 0.3s ease;
+    }
 
-        .btn-secondary:hover {
-            background: var(--secondary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
-        }
+    .feature-card:hover {
+        transform: translateY(-4px);
+        border-color: var(--color-primary);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
 
-        .btn-calibration {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-        }
+    .icon {
+        width: 60px;
+        height: 60px;
+        border-radius: var(--radius-lg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
 
-        .btn-calibration:hover {
-            background: linear-gradient(135deg, #7c3aed, #8b5cf6);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
-        }
+    .icon-compare {
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        color: #000;
+    }
 
-        .badge {
-            display: inline-block;
-            background: rgba(245, 158, 11, 0.15);
-            color: var(--primary);
-            padding: 0.375rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            border: 1px solid rgba(245, 158, 11, 0.3);
-        }
+    .icon-single {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        color: white;
+    }
 
-        .icon {
-            width: 3rem;
-            height: 3rem;
-            border-radius: 0.75rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
+    .icon-calibration {
+        background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+        font-size: 2rem;
+    }
 
-        .icon-compare {
-            background: linear-gradient(135deg, #f59e0b, #fb923c);
-            color: #000;
-        }
+    .feature-title {
+        font-size: var(--font-size-xl);
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+    }
 
-        .icon-single {
-            background: linear-gradient(135deg, #3b82f6, #60a5fa);
-            color: #fff;
-        }
+    .feature-desc {
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 1.5rem;
+        font-size: var(--font-size-sm);
+    }
 
-        .icon-calibration {
-            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-            color: #fff;
-        }
+    .feature-list {
+        list-style: none;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
 
-        header {
-            padding: 1.5rem 0;
-            border-bottom: 1px solid var(--border);
-        }
+    .feature-list li {
+        padding: 0.5rem 0;
+        color: var(--text-secondary);
+        font-size: var(--font-size-sm);
+    }
 
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: var(--text-primary);
-        }
+    .feature-list li::before {
+        content: "✓";
+        color: var(--color-success);
+        font-weight: 700;
+        margin-right: 0.5rem;
+    }
 
-        .logo-icon {
-            width: 2.5rem;
-            height: 2.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            border-radius: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: #000;
-        }
+    /* Button Variants for Landing */
+    .btn-amber {
+        background: #f59e0b;
+        color: #000;
+    }
 
-        nav a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            transition: all 0.2s ease;
-        }
+    .btn-amber:hover {
+        background: #fbbf24;
+        box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3);
+    }
 
-        nav a:hover {
-            color: var(--text-primary);
-            background: rgba(255, 255, 255, 0.05);
-        }
+    .btn-blue {
+        background: #3b82f6;
+        color: white;
+    }
 
-        .hero {
-            text-align: center;
-            padding: 4rem 0;
-        }
+    .btn-blue:hover {
+        background: #60a5fa;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
+    }
 
+    .btn-purple {
+        background: #8b5cf6;
+        color: white;
+    }
+
+    .btn-purple:hover {
+        background: #a78bfa;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.3);
+    }
+
+    /* Links Section */
+    .quick-links {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .quick-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        transition: all 0.2s ease;
+        font-size: var(--font-size-sm);
+    }
+
+    .quick-link:hover {
+        border-color: var(--color-primary);
+        color: var(--text-primary);
+        background: var(--bg-elevated);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
         .hero h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            line-height: 1.2;
-            margin-bottom: 1rem;
+            font-size: 2rem;
         }
 
         .hero p {
-            font-size: 1.125rem;
-            color: var(--text-secondary);
-            margin-bottom: 2.5rem;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
+            font-size: 1rem;
         }
 
         .cta-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
+            flex-direction: column;
         }
 
         .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            padding: 3rem 0;
+            grid-template-columns: 1fr;
         }
+    }
+</style>
+{% endblock %}
 
-        .feature-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-        }
+{% block content %}
+<div class="container mx-auto px-6 py-12">
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="badge mb-6">v7 Engine Ready</div>
+        <h1>렌즈 품질을 빠르고 정확하게<br/>분석합니다</h1>
+        <p>STD 비교, 단독 분석, 색 정확도 교정까지<br/>세 가지 분석 모드를 지원합니다.</p>
 
-        .feature-desc {
-            color: var(--text-secondary);
-            line-height: 1.6;
-            margin-bottom: 1.5rem;
-        }
-
-        .feature-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .feature-list li {
-            padding: 0.5rem 0;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        .feature-list li::before {
-            content: "✓";
-            color: var(--primary);
-            font-weight: 700;
-            margin-right: 0.5rem;
-        }
-
-        footer {
-            border-top: 1px solid var(--border);
-            padding: 2rem 0;
-            margin-top: 4rem;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        .quick-links {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 2rem; }
-            .hero p { font-size: 1rem; }
-            .cta-buttons { flex-direction: column; }
-            .features { grid-template-columns: 1fr; }
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="container">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <a href="/" class="logo">
-                    <div class="logo-icon">CM</div>
-                    <div>
-                        <div style="font-weight: 600; font-size: 1.125rem;">Color Meter</div>
-                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Lens Quality Analysis</div>
-                    </div>
-                </a>
-                <nav style="display: flex; gap: 0.5rem;">
-                    <a href="/history">History</a>
-                    <a href="/stats">Stats</a>
-                </nav>
-            </div>
+        <div class="cta-buttons">
+            <a href="/v7" class="btn btn-amber">
+                <i class="fa-solid fa-chevron-right"></i>
+                비교
+            </a>
+            <a href="/single_analysis" class="btn btn-blue">
+                <i class="fa-solid fa-flask"></i>
+                단독
+            </a>
+            <a href="/calibration" class="btn btn-purple">
+                <i class="fa-solid fa-crosshairs"></i>
+                교정
+            </a>
         </div>
-    </header>
+    </section>
 
-    <main class="container">
-        <section class="hero">
-            <div class="badge" style="margin-bottom: 1.5rem;">v7 Engine Ready</div>
-            <h1>렌즈 품질을 빠르고 정확하게<br/>분석합니다</h1>
-            <p>STD 비교, 단독 분석, 색 정확도 교정까지<br/>세 가지 분석 모드를 지원합니다.</p>
-
-            <div class="cta-buttons">
-                <a href="/v7" class="btn-primary">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <path d="M9 18l6-6-6-6"/>
-                    </svg>
-                    비교
-                </a>
-                <a href="/single_analysis" class="btn-secondary">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 6v6l4 2"/>
-                    </svg>
-                    단독
-                </a>
-                <a href="/calibration" class="btn-calibration">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                    </svg>
-                    교정
-                </a>
-            </div>
-        </section>
-
-        <section class="features">
-            <div class="card">
-                <div class="icon icon-compare">VS</div>
-                <h2 class="feature-title">STD 비교 분석</h2>
-                <p class="feature-desc">표준(STD) 이미지와 테스트 샘플을 비교하여 색상 차이를 정량적으로 평가합니다.</p>
-                <ul class="feature-list">
-                    <li>Delta E 기반 색상 차이 측정</li>
-                    <li>Lab 공간 이동 방향 분석</li>
-                    <li>방사형 프로파일 비교</li>
-                    <li>잉크 클러스터 매칭</li>
-                    <li>영역별 편차 히트맵</li>
-                    <li>자동 OK/NG 판정</li>
-                </ul>
-                <div style="margin-top: 1.5rem;">
-                    <a href="/v7" class="btn-primary" style="width: 100%;">비교 분석 시작</a>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="icon icon-single">1</div>
-                <h2 class="feature-title">단독 샘플 분석</h2>
-                <p class="feature-desc">STD 없이 샘플 자체의 품질을 종합적으로 평가합니다. 연구개발 및 초기 평가에 적합합니다.</p>
-                <ul class="feature-list">
-                    <li>종합 품질 점수 (0-100)</li>
-                    <li>Gate 기하학적 검사</li>
-                    <li>색상 분포 히스토그램</li>
-                    <li>방사형 균일성 분석</li>
-                    <li>잉크 색상 클러스터 검출</li>
-                    <li>패턴 품질 및 경고 시스템</li>
-                </ul>
-                <div style="margin-top: 1.5rem;">
-                    <a href="/single_analysis" class="btn-secondary" style="width: 100%;">단독 분석 시작</a>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="icon icon-calibration">🎯</div>
-                <h2 class="feature-title">색 정확도 교정</h2>
-                <p class="feature-desc">ColorChecker를 사용하여 측정 환경(카메라+조명)의 색 정확도를 검증합니다. 측정 전 필수 점검 항목입니다.</p>
-                <ul class="feature-list">
-                    <li>24패치 표준 색상 비교</li>
-                    <li>ΔE (Delta E) 정확도 평가</li>
-                    <li>Lab 채널별 Bias 분석</li>
-                    <li>측정 환경 적합성 판정</li>
-                    <li>색온도/밝기 조정 가이드</li>
-                    <li>Pass/Fail 자동 판정</li>
-                </ul>
-                <div style="margin-top: 1.5rem;">
-                    <a href="/calibration" class="btn-calibration" style="width: 100%;">교정 시작</a>
-                </div>
-            </div>
-        </section>
-
-        <section style="text-align: center; padding: 3rem 0;">
-            <div class="card" style="max-width: 600px; margin: 0 auto;">
-                <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">추가 기능</h3>
-                <div class="quick-links">
-                    <a href="/history" style="color: var(--text-secondary); text-decoration: none; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 0.5rem; transition: all 0.2s ease;">
-                        검사 이력
-                    </a>
-                    <a href="/stats" style="color: var(--text-secondary); text-decoration: none; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 0.5rem; transition: all 0.2s ease;">
-                        통계 대시보드
-                    </a>
-                </div>
-                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">
-                    과거 검사 결과 조회 및 통계 분석
-                </p>
-            </div>
-        </section>
-    </main>
-
-    <footer>
-        <div class="container">
-            <p>© 2025 Color Meter. Lens Quality Analysis System.</p>
-            <p style="margin-top: 0.5rem; font-size: 0.75rem;">Powered by Lens Signature Engine v7</p>
+    <!-- Features Section -->
+    <section class="features">
+        <!-- STD 비교 분석 -->
+        <div class="feature-card">
+            <div class="icon icon-compare">VS</div>
+            <h2 class="feature-title">STD 비교 분석</h2>
+            <p class="feature-desc">표준(STD) 이미지와 테스트 샘플을 비교하여 색상 차이를 정량적으로 평가합니다.</p>
+            <ul class="feature-list">
+                <li>Delta E 기반 색상 차이 측정</li>
+                <li>Lab 공간 이동 방향 분석</li>
+                <li>방사형 프로파일 비교</li>
+                <li>잉크 클러스터 매칭</li>
+                <li>영역별 편차 히트맵</li>
+                <li>자동 OK/NG 판정</li>
+            </ul>
+            <a href="/v7" class="btn btn-amber w-full">비교 분석 시작</a>
         </div>
-    </footer>
 
-    <style>
-        .quick-links a:hover {
-            border-color: var(--primary);
-            color: var(--text-primary);
-        }
-    </style>
-</body>
-</html>
+        <!-- 단독 샘플 분석 -->
+        <div class="feature-card">
+            <div class="icon icon-single">1</div>
+            <h2 class="feature-title">단독 샘플 분석</h2>
+            <p class="feature-desc">STD 없이 샘플 자체의 품질을 종합적으로 평가합니다. 연구개발 및 초기 평가에 적합합니다.</p>
+            <ul class="feature-list">
+                <li>종합 품질 점수 (0-100)</li>
+                <li>Gate 기하학적 검사</li>
+                <li>색상 분포 히스토그램</li>
+                <li>방사형 균일성 분석</li>
+                <li>잉크 색상 클러스터 검출</li>
+                <li>패턴 품질 및 경고 시스템</li>
+            </ul>
+            <a href="/single_analysis" class="btn btn-blue w-full">단독 분석 시작</a>
+        </div>
+
+        <!-- 색 정확도 교정 -->
+        <div class="feature-card">
+            <div class="icon icon-calibration">🎯</div>
+            <h2 class="feature-title">색 정확도 교정</h2>
+            <p class="feature-desc">ColorChecker를 사용하여 측정 환경(카메라+조명)의 색 정확도를 검증합니다. 측정 전 필수 점검 항목입니다.</p>
+            <ul class="feature-list">
+                <li>24패치 표준 색상 비교</li>
+                <li>ΔE (Delta E) 정확도 평가</li>
+                <li>Lab 채널별 Bias 분석</li>
+                <li>측정 환경 적합성 판정</li>
+                <li>색온도/밝기 조정 가이드</li>
+                <li>Pass/Fail 자동 판정</li>
+            </ul>
+            <a href="/calibration" class="btn btn-purple w-full">교정 시작</a>
+        </div>
+    </section>
+
+    <!-- Additional Features -->
+    <section class="text-center py-12">
+        <div class="card max-w-2xl mx-auto">
+            <h3 class="text-xl font-semibold mb-4">추가 기능</h3>
+            <div class="quick-links mb-4">
+                <a href="/history" class="quick-link">
+                    <i class="fa-solid fa-clock-rotate-left mr-2"></i>
+                    검사 이력
+                </a>
+                <a href="/stats" class="quick-link">
+                    <i class="fa-solid fa-chart-simple mr-2"></i>
+                    통계 대시보드
+                </a>
+                <a href="/design_system_demo" class="quick-link">
+                    <i class="fa-solid fa-palette mr-2"></i>
+                    Design System Demo
+                </a>
+            </div>
+            <p class="text-secondary text-sm">
+                과거 검사 결과 조회 및 통계 분석
+            </p>
+        </div>
+    </section>
+</div>
+{% endblock %}

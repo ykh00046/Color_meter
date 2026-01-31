@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-01-30T18:19:36.969Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-01-31T10:30:00.000Z",
+    "activeFeatures": [
+      "phase5-diagnostics",
+      "phase6-pipeline",
+      "analyzer-refactor"
+    ],
+    "primaryFeature": "analyzer-refactor",
+    "features": {
+      "phase5-diagnostics": {
+        "phase": "completed",
+        "matchRate": 100,
+        "iterations": 1,
+        "createdAt": "2026-01-30T14:30:00.000Z",
+        "updatedAt": "2026-01-30T15:30:00.000Z",
+        "documents": {
+          "plan": "docs/01-plan/features/phase5-diagnostics.plan.md",
+          "design": "docs/02-design/features/phase5-diagnostics.design.md",
+          "analysis": "docs/03-analysis/phase5-diagnostics.analysis.md",
+          "report": "docs/04-report/phase5-diagnostics.report.md"
+        }
+      },
+      "phase6-pipeline": {
+        "phase": "completed",
+        "matchRate": 100,
+        "iterations": 0,
+        "createdAt": "2026-01-30T15:45:00.000Z",
+        "updatedAt": "2026-01-31T10:00:00.000Z",
+        "documents": {
+          "plan": "docs/01-plan/features/phase6-pipeline.plan.md",
+          "design": "docs/02-design/features/phase6-pipeline.design.md",
+          "analysis": "docs/03-analysis/phase6-pipeline.analysis.md",
+          "report": "docs/04-report/phase6-pipeline.report.md"
+        }
+      },
+      "analyzer-refactor": {
+        "phase": "check",
+        "matchRate": 100,
+        "iterations": 0,
+        "createdAt": "2026-01-31T10:30:00.000Z",
+        "updatedAt": "2026-01-31T11:00:00.000Z",
+        "documents": {
+          "plan": "docs/01-plan/features/analyzer-refactor.plan.md",
+          "design": "docs/02-design/features/analyzer-refactor.design.md",
+          "analysis": null,
+          "report": null
+        }
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-01-30T14:06:25.553Z",
+      "onboardingCompleted": true,
+      "lastActivity": "2026-01-31T10:30:00.000Z"
+    },
+    "history": [
+      {
+        "feature": "phase5-diagnostics",
+        "completedAt": "2026-01-30T15:30:00.000Z",
+        "matchRate": 100,
+        "iterations": 1
+      },
+      {
+        "feature": "phase6-pipeline",
+        "completedAt": "2026-01-31T10:00:00.000Z",
+        "matchRate": 100,
+        "iterations": 0
+      }
+    ]
+  }
+}

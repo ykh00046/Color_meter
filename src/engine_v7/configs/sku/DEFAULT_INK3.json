@@ -1,0 +1,19 @@
+{
+  "gate": {
+    "center_off_max": 0.18
+  },
+  "signature": {
+    "de_mean_max": 11.5,
+    "de_p95_max": 28.5
+  },
+  "diagnostics": {
+    "delta_L_threshold": 2.0,
+    "coverage_delta_pp_threshold": 6.0
+  },
+  "anomaly": {
+    "center_blob_max": 2
+  },
+  "v2_ink": {
+    "auto_k_mismatch_conf_thr": 1.1
+  }
+}

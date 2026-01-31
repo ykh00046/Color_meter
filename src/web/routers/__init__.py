@@ -2,6 +2,6 @@
 Web API Routers
 """
 
-from . import std, test, v7
+from . import v7
 
-__all__ = ["std", "test", "v7"]
+__all__ = ["v7"]

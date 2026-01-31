@@ -1,0 +1,247 @@
+{
+  "polar": {
+    "R": 260,
+    "T": 720
+  },
+  "gate": {
+    "center_off_max": 0.12,
+    "blur_min": 40.0,
+    "illum_max": 0.1,
+    "diagnostic_on_fail": true
+  },
+  "signature": {
+    "r_start": 0.1,
+    "r_end": 0.95,
+    "corr_min": 0.92,
+    "de_mean_max": 10.0,
+    "de_p95_max": 18.0,
+    "use_band_model": true,
+    "band_k": 2.5,
+    "fail_ratio_max": 0.08,
+    "use_weighted_segments": true,
+    "segments": [
+      {
+        "name": "inner",
+        "start": 0.0,
+        "end": 0.33,
+        "weight": 1.2
+      },
+      {
+        "name": "mid",
+        "start": 0.33,
+        "end": 0.66,
+        "weight": 1.0
+      },
+      {
+        "name": "outer",
+        "start": 0.66,
+        "end": 1.0,
+        "weight": 1.4
+      }
+    ],
+    "segment_fail_ratio_max": 0.18,
+    "use_segment_k": true,
+    "segment_k": {
+      "inner": 2.8,
+      "mid": 2.5,
+      "outer": 2.8
+    }
+  },
+  "anomaly": {
+    "r_start": 0.15,
+    "r_end": 0.95,
+    "angular_unif_max": 0.18,
+    "center_frac": 0.22,
+    "center_blob_max": 1,
+    "center_blob_min_area": 80,
+    "enable_heatmap": true,
+    "heatmap_downsample_T": 180,
+    "heatmap_downsample_R": 130
+  },
+  "registration": {
+    "order_check_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "sep_threshold": 1.0,
+    "max_within_std": null
+  },
+  "mode_stability": {
+    "enabled": true,
+    "window": 10,
+    "emit_shift_flag": true
+  },
+  "pattern_baseline": {
+    "require": false,
+    "use_relative": false,
+    "margins": {
+      "blob_count": 1,
+      "blob_area_ratio": 0.2,
+      "uniformity": 0.03,
+      "coverage_eps": 0.01,
+      "sharpness_eps": 0.03
+    }
+  },
+  "diagnostics": {
+    "delta_L_threshold": 1.0,
+    "delta_a_threshold": 0.8,
+    "delta_b_threshold": 0.8,
+    "coverage_l_delta": 5.0,
+    "coverage_delta_pp_threshold": 2.0,
+    "edge_sharpness_delta_threshold": 0.1
+  },
+  "v2_ink": {
+    "enabled": true,
+    "use_primary_extraction": true,
+    "clustering_method": "gmm",
+    "gmm_covariance_type": "full",
+    "auto_k_enabled": true,
+    "auto_k_expand_max": 4,
+    "auto_k_conf_abs_min": 0.1,
+    "auto_k_conf_abs_span": 0.25,
+    "auto_k_conf_gap_span": 0.1,
+    "auto_k_mismatch_conf_thr": 0.7,
+    "auto_k_low_conf_thr": 0.4,
+    "dark_top_p": 0.25,
+    "chroma_top_p": 0.35,
+    "min_samples": 8000,
+    "min_samples_warn": 2000,
+    "l_weight": 0.3,
+    "adaptive_l_weight": true,
+    "adaptive_l_weight_low_chroma": 8.0,
+    "adaptive_l_weight_high_chroma": 20.0,
+    "kmeans_attempts": 10,
+    "rng_seed": 123,
+    "min_area_ratio_warn": 0.03,
+    "separation_d0": 3.0,
+    "separation_k": 1.0,
+    "match_max_deltaE": 6.0,
+    "match_cost_max": 20.0,
+    "match_spread_warn": 3.0,
+    "roi_r_start": 0.15,
+    "roi_r_end": 0.98
+  },
+  "white_balance": {
+    "enabled": true,
+    "optical_zone_ratio": 0.3,
+    "p_low": 50.0,
+    "p_high": 99.0
+  },
+  "plate": {
+    "norm_size": 512,
+    "r_bg": 0.35,
+    "r_clear_guard": 0.43,
+    "r_exclude_outer": 0.92,
+    "outer_shadow_ratio": 0.92,
+    "outer_shadow_percentile": 10.0,
+    "registration_min_score": 0.15,
+    "registration_ecc_enabled": true,
+    "registration_ecc_warp": "euclidean",
+    "registration_ecc_max_iter": 50,
+    "registration_ecc_eps": 1e-05,
+    "registration_ecc_min_cc": 0.1,
+    "registration_ecc_min_apply_cc": 0.2,
+    "registration_ecc_use_grad": false,
+    "registration_ecc_use_mask": true,
+    "registration_ecc_mask_r0": 0.25,
+    "registration_ecc_mask_r1": 0.98,
+    "registration_orb_enabled": true,
+    "registration_orb_max_features": 2000,
+    "registration_orb_min_inlier_ratio": 0.2,
+    "registration_orb_edge_threshold": 15,
+    "registration_orb_patch_size": 31,
+    "registration_orb_fast_threshold": 10,
+    "registration_max_dy_px": 4.0,
+    "alpha_clear_th": 0.08,
+    "alpha_print_th": 0.25,
+    "alpha_print_th_mode": "stats",
+    "alpha_stats_k": 2.5,
+    "alpha_stats_floor": 0.2,
+    "alpha_otsu_min": 0.1,
+    "alpha_otsu_max": 0.6,
+    "alpha_otsu_floor": 0.3,
+    "alpha_otsu_fallback": 0.25,
+    "alpha_print_th_core": 0.4,
+    "alpha_mask_blur_ksize": 3,
+    "alpha_print_percentile": 30.0,
+    "alpha_percentile_floor": 0.2,
+    "alpha_percentile_use_full": true,
+    "alpha_ring_percentile": null,
+    "alpha_dot_th": 0.2,
+    "alpha_dot_percentile": null,
+    "alpha_print_transition_th": 0.25,
+    "alpha_print_core_th": 0.35,
+    "clear_l_th": 80.0,
+    "alpha_clip": [
+      0.02,
+      0.98
+    ],
+    "spatial_bg_enabled": true,
+    "spatial_bg_r_outer": 0.98,
+    "spatial_bg_stride": 4,
+    "r_clear": 0.4,
+    "r_outer_bg": 0.98,
+    "wb_outer_min_delta": 5.0,
+    "wb_outer_action": "swap",
+    "wb_diff_min": 3.0,
+    "wb_denom_min": 30.0,
+    "r_ring0": 0.7,
+    "r_ring1": 0.95,
+    "alpha_ring_th": 0.45,
+    "ring_morph_ksize": 7,
+    "ink_core_erode_px": 2,
+    "ink_block_size": 4,
+    "ink_dist_weight": 1.0,
+    "ink_bg_white_l_max": 98.0,
+    "ink_bg_black_l_min": 5.0,
+    "valid_erode_px": 2,
+    "ink_cluster_min_dist": 4.0,
+    "pupil_leak_soft_max": 0.125,
+    "pupil_leak_hard_max": 0.135,
+    "bg_leak_soft_max": 0.425,
+    "bg_leak_hard_max": 0.45,
+    "raw_ink_area_soft_min": 0.75,
+    "raw_ink_area_hard_min": 0.7
+  },
+  "plate_lite": {
+    "enabled": true,
+    "override_plate": true,
+    "blur_ksize": 5,
+    "backlight": 255.0,
+    "alpha_threshold": 0.1,
+    "paper_color": {
+      "lab": [
+        95.0,
+        0.0,
+        0.0
+      ],
+      "source": "static"
+    }
+  },
+  "intrinsic_color": {
+    "mode": "FIXED",
+    "ref_white_srgb": [
+      235.51,
+      223.36,
+      210.27
+    ],
+    "ref_black_srgb": [
+      54.72,
+      56.67,
+      47.6
+    ],
+    "gamma": 2.2,
+    "outer_bg_frac": 0.95,
+    "align_black": true,
+    "eps": 1e-06,
+    "min_white_brightness": 80.0,
+    "min_bright_keep_ratio": 0.1,
+    "prefer_brightest_mask": true,
+    "white_bg_margin": 10.0,
+    "warn_k_high": 3.0,
+    "warn_k_low": 0.0,
+    "warn_t_high": 1.02,
+    "debug_dir": "C:\\X\\Color_meter\\v7_results\\intrinsic_debug",
+    "updated_at": "2026-01-29T16:05:50.931902"
+  },
+  "expected_ink_count": 3
+}

@@ -59,7 +59,7 @@ echo.
 echo Next steps:
 echo   1. Run full test suite: pytest tests/ -v
 echo   2. Start Web UI: python -m src.web.app
-echo   3. Run pipeline: python -m src.pipeline data/raw_images/SKU001_OK_001.jpg
+echo   3. Run pipeline: python -m src.services.inspection_service data/raw_images/SKU001_OK_001.jpg
 echo.
 
 exit /b 0

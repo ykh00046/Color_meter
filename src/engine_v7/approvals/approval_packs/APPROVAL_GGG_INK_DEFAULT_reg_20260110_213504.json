@@ -1,0 +1,148 @@
+{
+  "schema_version": "approval_pack.v1",
+  "approval_id": "ap_reg_20260110_213504_GGG_INK_DEFAULT",
+  "generated_at": "2026-01-10T21:35:09.302706",
+  "context": {
+    "sku": "GGG",
+    "ink": "INK_DEFAULT"
+  },
+  "decision": {
+    "action": "ACTIVATE",
+    "status": "RECOMMENDED",
+    "summary_line": "STD_ACCEPTABLE | Δmin_pairwise=+0.000",
+    "policy": {
+      "activation_allowed_only_for": [
+        "STD_ACCEPTABLE"
+      ],
+      "role_required": "Approver"
+    }
+  },
+  "baseline_active": {
+    "active_snapshot_path": "C:/X/Color_meter/lens_signature_engine_v7/models/active_snapshots/GGG_INK_DEFAULT_20260109_130553.json",
+    "snapshot": {
+      "min_pairwise_separation": 7.795336723327637,
+      "sep_threshold": 1.0,
+      "warnings": [
+        "WITHIN_MODE_THRESHOLD_DISABLED",
+        "GEOM_THRESHOLD_DISABLED"
+      ],
+      "geom_consistency": {
+        "center_drift_px": 45.60877227783203,
+        "radius_drift_ratio": 0.3902091681957245,
+        "passed": null
+      }
+    }
+  },
+  "candidate_std": {
+    "registration_id": "reg_20260110_213504",
+    "decision": {
+      "label": "STD_ACCEPTABLE",
+      "reason_codes": [],
+      "reason_messages": []
+    },
+    "summary": {
+      "min_pairwise_separation": 7.795336723327637,
+      "sep_threshold": 1.0,
+      "warnings": [
+        "WITHIN_MODE_THRESHOLD_DISABLED",
+        "GEOM_THRESHOLD_DISABLED"
+      ],
+      "geom_consistency": {
+        "center_drift_px": 45.60877227783203,
+        "radius_drift_ratio": 0.3902091681957245,
+        "passed": null
+      }
+    }
+  },
+  "compare_to_active": {
+    "delta": {
+      "min_pairwise_separation": 0.0
+    },
+    "warnings_diff": {
+      "added": [],
+      "removed": []
+    }
+  },
+  "impact_preview": {
+    "status": "NOT_AVAILABLE",
+    "notes": [
+      "metrics_report not attached at registration time"
+    ]
+  },
+  "review": {
+    "v2_flags": {
+      "schema": "v2_flags.v1",
+      "severity": "WARN",
+      "flags": [
+        {
+          "code": "V2_AUTO_K_MISMATCH",
+          "severity": "WARN",
+          "title": "Auto-k suggests different ink count",
+          "detail": "expected=3, suggested=3, conf=1.0",
+          "evidence": {
+            "expected_ink_count": 3,
+            "suggested_k": 3,
+            "confidence": 1.0
+          }
+        },
+        {
+          "code": "V2_INK_SHIFT_SUMMARY",
+          "severity": "INFO",
+          "title": "Ink shift summary",
+          "detail": "max_off_track=5.50 (Ink1), uncertain=true",
+          "evidence": {
+            "uncertain": true,
+            "max_off_track": 5.5010175704956055,
+            "max_index": 0
+          }
+        }
+      ],
+      "source": {
+        "inspection_result_path": "C:\\X\\Color_meter\\lens_signature_engine_v7\\results\\web\\insp_20260109_130604\\inspection.json",
+        "pattern_baseline_path": "pattern_baselines/GGG/INK_DEFAULT/PB_GGG_INK_DEFAULT_20260109_130553.json",
+        "active_versions": {
+          "LOW": "v20260109_130547",
+          "MID": "v20260109_130548",
+          "HIGH": "v20260109_130548"
+        }
+      }
+    }
+  },
+  "info": {
+    "v3_summary": {
+      "schema_version": "v3_summary.v1",
+      "summary": [
+        "기준 대비 변화: Ink1 밝아짐, 노랑 증가, 빨강 증가 (ACTIVE STD, ΔL 5.1, Δb 1.8).",
+        "auto-k 33 (1.00); minΔE 5.1; 참고용(indicative only)."
+      ],
+      "key_signals": [
+        "매칭 불확실: 변화 신호는 참고용입니다.",
+        "Ink1 최대 ΔE 6.9 (ΔL 5.1 밝아짐, Δb 1.8 노랑 증가, Δa 4.3 빨강 증가)"
+      ],
+      "supporting_metrics": {
+        "max_deltaE": 6.935064315795898,
+        "mean_deltaE": 5.541136105855306,
+        "suggested_k": 3,
+        "expected_k": 3,
+        "confidence": 1.0
+      },
+      "meta": {
+        "window_requested": 0,
+        "window_effective": 0,
+        "data_sparsity": true,
+        "confidence_source": "auto_k_silhouette",
+        "metrics_basis": [
+          "v2_diagnostics",
+          "active_index"
+        ],
+        "source": "inspection",
+        "generated_at": "2026-01-09T13:06:06.704450",
+        "generator": "v3_summary_engine@v1.0.0",
+        "severity": "WARN",
+        "confidence_components": {
+          "auto_k": 1.0
+        }
+      }
+    }
+  }
+}

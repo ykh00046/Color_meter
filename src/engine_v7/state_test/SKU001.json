@@ -1,0 +1,14 @@
+{
+  "sku": "SKU001",
+  "last_mode": "LOW",
+  "history": [
+    {
+      "ts": 1766542645,
+      "mode": "LOW"
+    },
+    {
+      "ts": 1766542648,
+      "mode": "LOW"
+    }
+  ]
+}

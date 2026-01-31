@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
-from src.schemas.inspection import InspectionResult, Zone
+from src.schemas.inspection import InspectionResult
 
 
 class TelemetryExporter:
@@ -48,7 +48,6 @@ class TelemetryExporter:
         image: Optional[np.ndarray] = None,
         radial_profile: Optional[Any] = None,
         lens_detection: Optional[Any] = None,
-        zones: Optional[List[Zone]] = None,
         ring_sector_cells: Optional[List[Any]] = None,
         uniformity_analysis: Optional[Dict[str, Any]] = None,
         boundary_detection: Optional[Dict[str, Any]] = None,
@@ -65,7 +64,6 @@ class TelemetryExporter:
             image: 원본 이미지
             radial_profile: Radial profile 원본
             lens_detection: 렌즈 검출 정보
-            zones: Zone 분할 결과
             ring_sector_cells: Ring×Sector 셀 리스트
             uniformity_analysis: 균일성 분석 결과
             boundary_detection: 경계 검출 상세 정보
@@ -88,49 +86,26 @@ class TelemetryExporter:
                 "overall_delta_e": float(inspection_result.overall_delta_e),
                 "confidence": float(inspection_result.confidence),
                 "ng_reasons": inspection_result.ng_reasons,
-                "zone_count": len(inspection_result.zone_results),
             },
-            # 2. Zone별 평가 결과
-            "zone_results": [
-                {
-                    "zone_name": zr.zone_name,
-                    "measured_lab": {
-                        "L": float(zr.measured_lab[0]),
-                        "a": float(zr.measured_lab[1]),
-                        "b": float(zr.measured_lab[2]),
-                    },
-                    "target_lab": {
-                        "L": float(zr.target_lab[0]),
-                        "a": float(zr.target_lab[1]),
-                        "b": float(zr.target_lab[2]),
-                    },
-                    "delta_e": float(zr.delta_e),
-                    "threshold": float(zr.threshold),
-                    "is_ok": zr.is_ok,
-                }
-                for zr in inspection_result.zone_results
-            ],
             # 3. 렌즈 검출 정보 (상세)
             "lens_detection": self._export_lens_detection(lens_detection) if lens_detection else None,
             # 4. Radial Profile 원본 (AI 학습용 핵심!)
             "radial_profile": (
                 self._export_radial_profile(radial_profile) if radial_profile and self.include_radial_profile else None
             ),
-            # 5. Zone 분할 결과 (상세)
-            "zones": self._export_zones(zones) if zones else None,
-            # 6. Boundary Detection 상세
+            # 5. Boundary Detection 상세
             "boundary_detection": boundary_detection,
-            # 7. Background Mask 통계
+            # 6. Background Mask 통계
             "background_mask": background_mask_stats,
-            # 8. Ring×Sector 2D 분석 (36개 셀)
+            # 7. Ring×Sector 2D 분석 (36개 셀)
             "ring_sector_cells": self._export_ring_sector_cells(ring_sector_cells) if ring_sector_cells else None,
-            # 9. 균일성 분석
+            # 8. 균일성 분석
             "uniformity_analysis": uniformity_analysis,
-            # 10. 이미지 (Base64)
+            # 9. 이미지 (Base64)
             "images": self._export_images(image) if self.include_images and image is not None else None,
-            # 11. 처리 시간 (단계별)
+            # 10. 처리 시간 (단계별)
             "processing_times": processing_times if self.include_processing_times else None,
-            # 12. 설정값 스냅샷 (재현성)
+            # 11. 설정값 스냅샷 (재현성)
             "config_snapshot": config_snapshot if self.include_config_snapshot else None,
         }
 
@@ -150,11 +125,11 @@ class TelemetryExporter:
     def _export_lens_detection(self, lens: Any) -> Dict[str, Any]:
         """렌즈 검출 정보 (상세)"""
         return {
-            "center_x": float(lens.center_x),
-            "center_y": float(lens.center_y),
-            "radius": float(lens.radius),
+            "center_x": float(lens.cx),
+            "center_y": float(lens.cy),
+            "radius": float(lens.r),
             "confidence": float(lens.confidence),
-            "method": lens.method,
+            "method": lens.source,
             "roi": lens.roi.tolist() if isinstance(lens.roi, np.ndarray) else lens.roi,
         }
 
@@ -190,24 +165,6 @@ class TelemetryExporter:
                 "b_std": float(np.std(profile.b)),
             },
         }
-
-    def _export_zones(self, zones: List[Zone]) -> List[Dict[str, Any]]:
-        """Zone 분할 결과 (상세)"""
-        return [
-            {
-                "name": zone.name,
-                "r_start": float(zone.r_start),
-                "r_end": float(zone.r_end),
-                "mean_L": float(zone.mean_L),
-                "mean_a": float(zone.mean_a),
-                "mean_b": float(zone.mean_b),
-                "std_L": float(zone.std_L),
-                "std_a": float(zone.std_a),
-                "std_b": float(zone.std_b),
-                "zone_type": zone.zone_type,
-            }
-            for zone in zones
-        ]
 
     def _export_ring_sector_cells(self, cells: List[Any]) -> List[Dict[str, Any]]:
         """Ring×Sector 36개 셀"""

@@ -1,765 +1,843 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copy Specification Analysis - v7</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        slate: { 850: '#151e32', 900: '#0f172a', 950: '#020617' },
-                        brand: { 500: '#3b82f6', 600: '#2563eb' },
-                        status: { ok: '#10b981', warn: '#f59e0b', ng: '#ef4444' }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace']
-                    }
-                }
-            }
-        }
-    </script>
+{% extends "_base_layout.html" %}
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --base-black: #0f172a;
-            --surface-dark: #151e32;
-            --surface-elevated: #1e293b;
-            --text-primary: #e2e8f0;
-            --text-secondary: #cbd5e1;
-            --text-dim: #94a3b8;
-            --green-ok: #10b981;
-            --yellow-warning: #f59e0b;
-            --red-error: #ef4444;
-            --blue-brand: #3b82f6;
-        }
+{% block title %}단독 샘플 분석 - Color Meter v7{% endblock %}
 
-        * {
-            font-family: 'Inter', -apple-system, sans-serif;
-            box-sizing: border-box;
-        }
+{% block extra_head %}
+<script src="/static/vendor/chart.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js'"></script>
 
-        body {
-            background: var(--base-black);
-            color: var(--text-primary);
-            min-height: 100vh;
-        }
+<style>
+    /* Page-specific styles using design system variables */
+    body {
+        background: linear-gradient(135deg, var(--bg-base) 0%, #1a1f35 100%);
+    }
 
-        .terminal-panel {
-            background: linear-gradient(180deg, rgba(17, 27, 42, 0.95), rgba(10, 16, 26, 0.9));
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            box-shadow: 0 24px 60px rgba(7, 11, 18, 0.6);
-            backdrop-filter: blur(10px);
-        }
+    /* Tab System Override for this page */
+    .result-tabs {
+        display: flex;
+        gap: 0.5rem;
+        border-bottom: 1px solid var(--border-default);
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+    }
 
-        .quality-ring-container {
-            position: relative;
-            width: 200px;
-            height: 200px;
-        }
+    .result-tab-btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: transparent;
+        color: var(--text-dim);
+        font-weight: 600;
+        font-size: var(--font-size-sm);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
 
-        .quality-ring {
-            transform: rotate(-90deg);
-        }
+    .result-tab-btn:hover {
+        color: var(--text-primary);
+        background: var(--bg-elevated);
+    }
 
-        .quality-score-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }
+    .result-tab-btn.active {
+        color: var(--color-primary);
+        border-bottom-color: var(--color-primary);
+    }
 
-        .score-number {
-            font-size: 48px;
-            font-weight: 700;
-            line-height: 1;
-        }
+    .result-tab-content {
+        display: none;
+    }
 
-        .score-label {
-            font-size: 18px;
-            color: var(--text-dim);
-            margin-top: 4px;
-        }
+    .result-tab-content.active {
+        display: block;
+        animation: fadeIn 0.3s ease-out;
+    }
 
-        .metric-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 16px;
-        }
+    /* Metric Grid */
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
 
-        .metric-label {
-            font-size: 12px;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 8px;
-        }
+      /* Ink Palette */
+      .ink-palette {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1rem;
+      }
 
-        .metric-value {
-            font-size: 24px;
-            font-weight: 600;
-            font-family: 'JetBrains Mono', monospace;
-        }
+      .image-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 1.5rem;
+      }
 
-        .btn-primary {
-            background: var(--blue-brand);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+      .image-pair {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 1.25rem;
+      }
 
-        .btn-primary:hover {
-            background: #2563eb;
-            transform: translateY(-1px);
-        }
+    .image-panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+    }
 
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+    .image-frame {
+        width: 100%;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-default);
+        background: var(--bg-elevated);
+        display: block;
+        max-height: 360px;
+        object-fit: contain;
+    }
 
-        .upload-zone {
-            background: rgba(12, 18, 28, 0.9);
-            border: 2px dashed rgba(255, 255, 255, 0.12);
-            border-radius: 12px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
+      .ink-item {
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          padding: 1rem;
+          background: var(--bg-elevated);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-default);
+      }
 
-        .upload-zone:hover {
-            border-color: rgba(68, 215, 208, 0.5);
-            background: rgba(17, 27, 42, 0.9);
-        }
+      .ink-card {
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-lg);
+          padding: 1rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+      }
 
-        .hidden { display: none; }
+      .ink-card-header {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 0.75rem;
+      }
 
-        .warning-badge {
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #f59e0b;
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            display: inline-block;
-            margin: 4px;
-        }
+      .ink-card-title {
+          font-weight: 600;
+          font-size: 0.95rem;
+      }
 
-        .cluster-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+      .ink-card-role {
+          font-size: 0.75rem;
+          color: var(--text-dim);
+      }
 
-        .cluster-color {
-            width: 40px;
-            height: 40px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
+      .ink-swatch-stack {
+          display: grid;
+          gap: 0.5rem;
+      }
 
-        .zone-canvas {
-            max-width: 100%;
-            border-radius: 8px;
-        }
-    </style>
-</head>
-<body>
-    <div class="min-h-screen p-6">
-        <!-- Header -->
-        <div class="max-w-7xl mx-auto mb-8">
-            <h1 class="text-3xl font-bold mb-2">📋 Copy Specification Analysis</h1>
-            <p class="text-text-dim">시판 렌즈 리버스 엔지니어링 - 복제를 위한 잉크 팔레트 및 특성 정보 추출</p>
-        </div>
+      .ink-swatch-row {
+          display: grid;
+          grid-template-columns: 52px 1fr;
+          align-items: center;
+          gap: 0.5rem;
+      }
 
-        <!-- Upload Section -->
-        <div class="max-w-7xl mx-auto mb-8">
-            <div class="terminal-panel p-6">
-                <h2 class="text-xl font-semibold mb-4">이미지 업로드</h2>
+      .ink-swatch-label {
+          font-size: 0.7rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          color: var(--text-dim);
+      }
 
-                <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-                    <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
-                    <div id="uploadPlaceholder">
-                        <div class="text-4xl mb-4">📁</div>
-                        <div class="text-text-secondary mb-2">클릭하여 이미지 선택</div>
-                        <div class="text-text-dim text-sm">PNG, JPG 지원</div>
-                    </div>
-                    <div id="fileInfo" class="hidden">
-                        <div class="text-text-secondary mb-2">선택된 파일:</div>
-                        <div id="fileName" class="font-mono text-sm"></div>
+      .ink-swatch-box {
+          height: 54px;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .ink-card-meta {
+          font-size: 0.8rem;
+          color: var(--text-dim);
+      }
+
+      .ink-swatch {
+          width: 64px;
+          height: 64px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-bright);
+          flex-shrink: 0;
+      }
+
+    .ink-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+      .ink-name {
+          font-weight: 600;
+          font-size: 0.95rem;
+          margin-bottom: 0.25rem;
+      }
+
+    .ink-lab {
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        color: var(--text-dim);
+    }
+
+    .ink-simulator {
+        margin-top: 1.75rem;
+        padding: 1.25rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-default);
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.02), rgba(11, 15, 25, 0.7));
+    }
+
+    .sim-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .sim-header-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+
+    .title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .sim-title {
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+
+    .sim-controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .sim-control {
+        background: rgba(10, 15, 26, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-md);
+        padding: 0.75rem;
+    }
+
+    .sim-control label {
+        display: block;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        margin-bottom: 0.5rem;
+    }
+
+    .sim-bg-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .sim-bg-btn {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-primary);
+        font-size: 0.72rem;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sim-bg-btn.active {
+        border-color: rgba(34, 211, 238, 0.6);
+        box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15);
+    }
+
+    .sim-slider {
+        width: 100%;
+        accent-color: #22d3ee;
+    }
+
+    .sim-thickness-value {
+        margin-top: 0.35rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .ink-sim-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1rem;
+    }
+
+    .sim-card {
+        background: rgba(10, 14, 22, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-lg);
+        padding: 0.9rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .sim-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .sim-card-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .sim-k-tag {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 0.2rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text-dim);
+    }
+
+    .sim-k-tag.clear {
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.2);
+    }
+
+    .sim-k-tag.translucent {
+        color: #facc15;
+        background: rgba(250, 204, 21, 0.2);
+    }
+
+    .sim-k-tag.deep {
+        color: #fb7185;
+        background: rgba(251, 113, 133, 0.2);
+    }
+
+    .sim-previews {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .sim-swatch {
+        height: 90px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 0.4rem;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.75);
+        background: #2a2a2a;
+    }
+
+    .iris-preview {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.5) 70%);
+    }
+
+    .iris-base {
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.5) 60%),
+            radial-gradient(circle at 50% 50%, rgba(var(--bg-rgb, 60, 40, 20), 1) 0%, rgba(var(--bg-rgb, 60, 40, 20), 0.85) 60%, rgba(0, 0, 0, 0.6) 100%);
+        filter: saturate(1.1) contrast(1.05);
+    }
+
+    .iris-ink {
+        position: absolute;
+        inset: 0;
+        background: rgba(var(--ink-rgb, 120, 80, 40), 0.9);
+        mix-blend-mode: multiply;
+    }
+
+    .sim-meta {
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .badge-gray {
+        background: rgba(148, 163, 184, 0.2);
+        color: #94a3b8;
+    }
+
+    .badge-success {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .badge-warning {
+        background: rgba(251, 191, 36, 0.2);
+        color: #facc15;
+        border: 1px solid rgba(251, 191, 36, 0.4);
+    }
+
+    .badge-danger {
+        background: rgba(248, 113, 113, 0.2);
+        color: #f87171;
+        border: 1px solid rgba(248, 113, 113, 0.4);
+    }
+
+    .warning-alert {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 6px;
+        background: rgba(255, 237, 213, 0.1);
+        border: 1px solid rgba(251, 146, 60, 0.6);
+        color: #fdba74;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .comparison-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        margin: 10px 0 16px;
+        background: rgba(15, 23, 42, 0.5);
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .preview-card {
+        text-align: center;
+    }
+
+    .circle-preview {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+        background-color: #2f2f2f;
+        margin-bottom: 8px;
+        transition: background-color 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .circle-preview.with-overlay::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url("/static/images/lens_glare_overlay.png") center/cover no-repeat;
+        opacity: 0.6;
+        mix-blend-mode: screen;
+        pointer-events: none;
+    }
+
+    .arrow-divider {
+        font-size: 22px;
+        color: rgba(148, 163, 184, 0.6);
+    }
+
+    .label {
+        font-size: 12px;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .k-value-panel {
+        background: rgba(15, 23, 42, 0.9);
+        color: #cbd5f5;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .k-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .grade-badge {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 700;
+        background: rgba(148, 163, 184, 0.2);
+        color: #cbd5f5;
+    }
+
+    /* Chart Container */
+    .chart-container {
+        position: relative;
+        height: 300px;
+        background: var(--bg-panel);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+    }
+
+    /* Pattern Quality */
+    .quality-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-full);
+        font-weight: 700;
+        font-size: var(--font-size-sm);
+    }
+
+    .quality-excellent {
+        background: var(--color-success);
+        color: white;
+    }
+
+    .quality-good {
+        background: var(--color-info);
+        color: white;
+    }
+
+    .quality-fair {
+        background: var(--color-warning);
+        color: var(--text-inverse);
+    }
+
+    .quality-poor {
+        background: var(--color-error);
+        color: white;
+    }
+
+    /* Download Button */
+    .download-section {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">단독 샘플 분석</h1>
+        <p class="text-secondary">STD 없이 샘플 자체의 품질을 종합적으로 평가합니다</p>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="terminal-panel p-6 mb-6">
+        <h2 class="text-xl font-bold mb-6">이미지 업로드</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <!-- White Background -->
+            <div>
+                <label class="block text-sm font-semibold text-secondary mb-2">
+                    White 배경 이미지 <span class="text-error">*</span>
+                </label>
+                <div class="relative">
+                    <input type="file" id="fileWhite" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                    <div class="terminal-input flex items-center justify-between pointer-events-none">
+                        <span id="fileWhiteName" class="text-dim truncate">파일 선택...</span>
+                        <i class="fa-solid fa-upload"></i>
                     </div>
                 </div>
+            </div>
 
-                <!-- Analysis Options -->
-                <div class="mt-6 p-4 bg-surface-elevated rounded-lg border border-white/10">
-                    <h3 class="text-sm font-semibold mb-3 text-text-secondary">분석 옵션</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="expectedInkCount" class="block text-sm text-text-secondary mb-2">
-                                Expected Ink Count (k) <span class="text-yellow-warning">⚠️ 중요</span>
-                            </label>
-                            <select id="expectedInkCount" class="w-full bg-surface-dark text-text-primary border border-white/10 rounded px-3 py-2 text-sm">
-                                <option value="auto">자동 감지 (권장)</option>
-                                <option value="1">1 (단색)</option>
-                                <option value="2">2</option>
-                                <option value="3" selected>3 (RGB)</option>
-                                <option value="4">4 (CMYK)</option>
-                                <option value="5">5</option>
-                            </select>
-                            <p class="text-xs text-text-dim mt-1">렌즈의 잉크 색상 개수를 지정합니다. '자동 감지'는 개발 중입니다.</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm text-text-secondary mb-2">분석 모드</label>
-                            <select id="analysisMode" class="w-full bg-surface-dark text-text-primary border border-white/10 rounded px-3 py-2 text-sm">
-                                <option value="all" selected>전체 분석 (권장)</option>
-                                <option value="gate,ink,radial">핵심만 (Gate + Ink + Radial)</option>
-                                <option value="gate">Gate만 (빠른 체크)</option>
-                            </select>
-                            <p class="text-xs text-text-dim mt-1">분석할 항목을 선택합니다.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4 flex gap-4">
-                    <button id="analyzeBtn" class="btn-primary" onclick="runAnalysis()" disabled>
-                        분석 시작
-                    </button>
-                    <div id="analysisStatus" class="text-text-dim flex items-center hidden">
-                        <div class="animate-spin mr-2">⚙️</div>
-                        분석 중...
+            <!-- Black Background (Optional) -->
+            <div>
+                <label class="block text-sm font-semibold text-secondary mb-2">
+                    Black 배경 이미지 (선택)
+                </label>
+                <div class="relative">
+                    <input type="file" id="fileBlack" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-10">
+                    <div class="terminal-input flex items-center justify-between pointer-events-none">
+                        <span id="fileBlackName" class="text-dim truncate">파일 선택...</span>
+                        <i class="fa-solid fa-upload"></i>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Results Section -->
-        <div id="resultsSection" class="max-w-7xl mx-auto hidden">
-
-            <!-- ========== OPERATOR SUMMARY (최상단 강조) ========== -->
-            <div id="operatorSummary" class="mb-6 p-6 rounded-lg border-2">
-                <!-- Decision Badge (크게) -->
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-4">
-                        <div id="operatorDecision" class="text-3xl font-bold px-6 py-3 rounded-lg">
-                            <!-- PASS / RECAPTURE / HOLD -->
-                        </div>
-                        <div id="operatorGrade" class="text-2xl font-mono">
-                            <!-- A / B / C / D / F -->
-                        </div>
-                    </div>
-                    <div id="operatorSeverity" class="text-sm font-semibold px-3 py-1 rounded">
-                        <!-- LOW / MEDIUM / HIGH -->
-                    </div>
-                </div>
-
-                <!-- Top 2 Reasons -->
-                <div id="operatorReasons" class="mb-4 space-y-2">
-                    <!-- Reason 1 -->
-                    <!-- Reason 2 -->
-                </div>
-
-                <!-- Action (가장 중요!) -->
-                <div id="operatorAction" class="p-4 bg-yellow-warning/20 border-l-4 border-yellow-warning rounded">
-                    <div class="text-sm font-semibold mb-1">📋 조치사항</div>
-                    <div id="operatorActionText" class="text-base font-bold">
-                        <!-- 렌즈 고정 후 초점 재조정하고 재촬영하세요. -->
-                    </div>
-                </div>
+        <!-- Settings -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+                <label class="block text-sm font-semibold text-secondary mb-2">예상 잉크 수</label>
+                <input type="number" id="inkCountInput" class="terminal-input" value="3" min="1" max="8">
             </div>
 
-            <!-- ========== ENGINEER KPI (접을 수 있는 패널) ========== -->
-            <details class="mb-6" open>
-                <summary class="cursor-pointer font-semibold text-lg mb-3 p-4 bg-white/5 rounded hover:bg-white/10">
-                    🔧 Engineer KPI (핵심 지표 10개)
-                </summary>
-
-                <div class="grid grid-cols-2 gap-4">
-                    <!-- QC Metrics -->
-                    <div class="p-4 bg-white/5 rounded">
-                        <div class="text-sm font-semibold mb-2 text-blue-primary">QC 품질</div>
-                        <div id="kpiQC" class="space-y-1 text-xs font-mono">
-                            <!-- sharpness, center_offset_mm, illumination_asymmetry -->
-                        </div>
-                    </div>
-
-                    <!-- Ink Metrics -->
-                    <div class="p-4 bg-white/5 rounded">
-                        <div class="text-sm font-semibold mb-2 text-green-success">잉크 분석</div>
-                        <div id="kpiInk" class="space-y-1 text-xs font-mono">
-                            <!-- detected_count, clustering_confidence, ink_area_ratios -->
-                        </div>
-                    </div>
-
-                    <!-- Pattern Metrics -->
-                    <div class="p-4 bg-white/5 rounded">
-                        <div class="text-sm font-semibold mb-2 text-purple-500">패턴 균일성</div>
-                        <div id="kpiPattern" class="space-y-1 text-xs font-mono">
-                            <!-- angular_uniformity, zone_uniformity, radial_uniformity, radial_slope, ring_contrast -->
-                        </div>
-                    </div>
-
-                    <!-- Defect Metrics -->
-                    <div class="p-4 bg-white/5 rounded">
-                        <div class="text-sm font-semibold mb-2 text-red-error">결함 검출</div>
-                        <div id="kpiDefect" class="space-y-1 text-xs font-mono">
-                            <!-- blob_count, blob_total_area -->
-                        </div>
-                    </div>
-                </div>
-            </details>
-
-            <!-- Summary Row -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-
-                <!-- Measurement QC -->
-                <div class="terminal-panel p-6">
-                    <h3 class="text-lg font-semibold mb-4">측정 신뢰도 (QC)</h3>
-                    <p class="text-text-dim text-sm mb-4">분석 유효성 체크 (복제 품질 아님)</p>
-
-                    <!-- FAIL Reasons (크게 표시) -->
-                    <div id="qcFailReasons" class="hidden mb-4 p-4 bg-red-error/20 border-2 border-red-error rounded-lg">
-                        <div class="text-red-error font-bold text-lg mb-2">❌ 측정 실패</div>
-                        <div id="qcFailReasonsList" class="space-y-2">
-                            <!-- FAIL reasons will be inserted here -->
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">Gate Check</span>
-                            <span id="qcGateStatus" class="font-semibold">-</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">Center Offset</span>
-                            <span id="qcCenterOffset" class="font-mono text-sm">-</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">Sharpness</span>
-                            <span id="qcSharpness" class="font-mono text-sm">-</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">Illumination</span>
-                            <span id="qcIllumination" class="font-mono text-sm">-</span>
-                        </div>
-                    </div>
-
-                    <!-- Action Guidance (상세 가이드) -->
-                    <div id="qcGuidance" class="mt-4 pt-4 border-t border-white/10 hidden">
-                        <div class="text-sm font-semibold mb-2 text-yellow-warning">💡 재촬영 방법</div>
-                        <div id="qcGuidanceContent" class="space-y-2 text-xs text-text-secondary">
-                            <!-- Guidance items will be inserted here -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Copy Summary -->
-                <div class="terminal-panel p-6">
-                    <h3 class="text-lg font-semibold mb-4">복제 정보 요약</h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">검출된 잉크 수</span>
-                            <span id="copySummaryInkCount" class="font-semibold text-blue-brand">-</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">클러스터링 신뢰도</span>
-                            <span id="copySummaryConfidence" class="font-mono text-sm">-</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-text-secondary">방사형 패턴</span>
-                            <span id="copySummaryRadialPattern" class="text-sm">-</span>
-                        </div>
-                    </div>
-                    <div class="mt-4 pt-4 border-t border-white/10">
-                        <button id="exportBtn" class="btn-primary w-full" onclick="exportCopySpec()">
-                            📥 Copy Spec 다운로드
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Image Preview -->
-                <div class="terminal-panel p-6">
-                    <h3 class="text-lg font-semibold mb-4">이미지</h3>
-                    <div class="flex gap-2 mb-2">
-                        <button class="text-sm px-3 py-1 rounded bg-blue-brand text-white" onclick="showImage('original')">Original</button>
-                        <button class="text-sm px-3 py-1 rounded bg-slate-700 text-text-secondary" onclick="showImage('overlay')">Overlay</button>
-                    </div>
-                    <img id="previewImage" src="" alt="Preview" class="w-full rounded-lg border border-white/10">
-                </div>
+            <div>
+                <label class="block text-sm font-semibold text-secondary mb-2">분석 범위</label>
+                <select id="analysisScope" class="terminal-input">
+                    <option value="all">전체 분석</option>
+                    <option value="gate,color,ink">빠른 분석</option>
+                </select>
             </div>
 
-            <!-- Export Section -->
-            <div class="mb-6 flex justify-end">
-                <button class="btn-primary flex items-center gap-2" onclick="exportCopySpec()">
-                    <span>📥</span>
-                    <span>Copy Spec JSON 다운로드</span>
+            <div class="flex items-end">
+                <button id="btnAnalyze" class="btn btn-primary w-full">
+                    <i class="fa-solid fa-play mr-2"></i>
+                    분석시작
                 </button>
             </div>
-
-            <!-- 🎨 Ink Palette (핵심 복제 정보) -->
-            <div class="terminal-panel p-6 mb-6">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <h2 class="text-xl font-bold">🎨 Ink Palette (Core Copy Info)</h2>
-                        <p class="text-text-dim text-sm mt-1">복제를 위한 핵심 잉크 색상 정보</p>
-                    </div>
-                    <span class="px-3 py-1 bg-blue-brand/20 text-blue-brand rounded-full text-sm font-semibold">Priority 1</span>
-                </div>
-                <div class="grid grid-cols-3 gap-4 mb-4">
-                    <div class="metric-card">
-                        <div class="metric-label">검출된 잉크 수 (k)</div>
-                        <div id="inkClusterCount" class="text-2xl font-bold text-blue-brand">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">클러스터링 신뢰도</div>
-                        <div id="inkConfidence" class="text-xl font-mono">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">정렬 방식</div>
-                        <div id="inkSortPolicy" class="text-sm font-mono text-text-secondary">-</div>
-                    </div>
-                </div>
-                <div id="inkClustersGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <!-- Cluster cards will be inserted here -->
-                </div>
-            </div>
-
-            <!-- 📐 Radial Profile (분포 패턴) -->
-            <div class="terminal-panel p-6 mb-6">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <h2 class="text-xl font-bold">📐 Radial Profile (Distribution Pattern)</h2>
-                        <p class="text-text-dim text-sm mt-1">중심에서 외곽으로의 색상 분포 패턴</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-4 gap-4 mb-4">
-                    <div class="metric-card">
-                        <div class="metric-label">Inner L*</div>
-                        <div id="radialInner" class="text-xl font-mono">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Outer L*</div>
-                        <div id="radialOuter" class="text-xl font-mono">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Uniformity</div>
-                        <div id="radialUniformity" class="text-xl font-mono">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">패턴 타입</div>
-                        <div id="radialPatternType" class="text-sm text-text-secondary">-</div>
-                    </div>
-                </div>
-                <canvas id="radialProfileChart" height="100"></canvas>
-            </div>
-
-            <!-- 🔍 Pattern Quality (질감/도트) -->
-            <div class="terminal-panel p-6 mb-6">
-                <h3 class="text-lg font-semibold mb-4">🔍 패턴 품질 (Texture/Dots)</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div class="metric-card">
-                        <div class="metric-label">Angular Uniformity</div>
-                        <div id="patternAngular" class="metric-value text-lg">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Center Blobs</div>
-                        <div id="patternBlobs" class="metric-value text-lg">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Contrast</div>
-                        <div id="patternContrast" class="metric-value text-lg">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Edge Density</div>
-                        <div id="patternEdge" class="metric-value text-lg">-</div>
-                    </div>
-                </div>
-
-                <!-- Pattern Visualizations -->
-                <div id="patternImages" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                    <div>
-                        <div class="text-sm text-text-secondary mb-2">Overlay (Zone Boundaries)</div>
-                        <img id="patternOverlayImg" src="" alt="Pattern Overlay" class="w-full rounded-lg border border-white/10">
-                    </div>
-                    <div id="patternHeatmapContainer" class="hidden">
-                        <div class="text-sm text-text-secondary mb-2">Heatmap (Anomaly Detection)</div>
-                        <img id="patternHeatmapImg" src="" alt="Pattern Heatmap" class="w-full rounded-lg border border-white/10">
-                    </div>
-                </div>
-            </div>
-
-            <!-- 📊 Color Distribution (참고용) -->
-            <div class="terminal-panel p-6 mb-6">
-                <h3 class="text-lg font-semibold mb-4">📊 색상 분포 (Lab) - 참고용</h3>
-                <div class="grid grid-cols-3 gap-4 mb-4">
-                    <div class="metric-card">
-                        <div class="metric-label">L* (밝기)</div>
-                        <div id="colorL" class="text-text-secondary font-mono text-sm">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">a* (Red-Green)</div>
-                        <div id="colorA" class="text-text-secondary font-mono text-sm">-</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">b* (Blue-Yellow)</div>
-                        <div id="colorB" class="text-text-secondary font-mono text-sm">-</div>
-                    </div>
-                </div>
-                <canvas id="colorHistogramChart" height="80"></canvas>
-            </div>
-
-            <!-- 🧭 Zone Analysis (Advanced) -->
-            <div class="terminal-panel p-6 mb-6">
-                <div class="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 class="text-lg font-semibold">🧭 영역별 분석 (Zone) - Advanced</h3>
-                        <p class="text-text-dim text-sm mt-1">각도별 색상 편차 감지 (방향성 불균형 체크)</p>
-                    </div>
-                    <span class="px-2 py-1 bg-slate-700 text-text-dim rounded text-xs">Optional</span>
-                </div>
-                <div class="mb-4">
-                    <span class="text-text-dim">Zone Uniformity: </span>
-                    <span id="zoneUniformity" class="font-semibold text-text-secondary">-</span>
-                </div>
-                <canvas id="zoneCanvas" class="zone-canvas" width="400" height="400"></canvas>
-            </div>
-
-            <!-- Warnings -->
-            <div id="warningsSection" class="terminal-panel p-6 hidden">
-                <h3 class="text-lg font-semibold mb-4">⚠️ 경고</h3>
-                <div id="warningsList" class="space-y-2">
-                    <!-- Warning badges will be inserted here -->
-                </div>
-            </div>
-
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="/static/js/v7/state.js"></script>
-    <script src="/static/js/v7/utils.js"></script>
-    <script src="/static/js/v7/api.js"></script>
-    <script src="/static/js/v7/single_analysis.js"></script>
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden">
+        <!-- Summary Card -->
+        <div class="terminal-panel p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-bold">종합 요약</h2>
+                <div id="qualityBadge"></div>
+            </div>
 
-    <script>
-        let selectedFile = null;
-        let currentArtifacts = {};
-        let currentAnalysisResult = null;  // Store for export
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">품질 점수</div>
+                    <div id="qualityScore" class="metric-value">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">감지 잉크 수</div>
+                    <div id="detectedInks" class="metric-value">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">평균 Coverage</div>
+                    <div id="avgCoverage" class="metric-value">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Color Uniformity</div>
+                    <div id="colorUniformity" class="metric-value">-</div>
+                </div>
+            </div>
+        </div>
 
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        <!-- Tabs -->
+        <div class="terminal-panel p-6">
+            <div class="result-tabs">
+                <button class="result-tab-btn active" data-tab="palette">
+                    <i class="fa-solid fa-palette mr-2"></i>
+                    잉크 팔레트
+                </button>
+                <button class="result-tab-btn" data-tab="radial">
+                    <i class="fa-solid fa-chart-pie mr-2"></i>
+                    방사형 분포
+                </button>
+                <button class="result-tab-btn" data-tab="plate-legacy" style="display:none">
+                    <i class="fa-solid fa-layer-group mr-2"></i>
+                    판 분리 분석
+                </button>
+                <button class="result-tab-btn" data-tab="plate-black-legacy" style="display:none">
+                    <i class="fa-solid fa-circle-half-stroke mr-2"></i>
+                    Plate Black
+                </button>
+                <button class="result-tab-btn" data-tab="details">
+                    <i class="fa-solid fa-list mr-2"></i>
+                    상세 지표
+                </button>
+            </div>
 
-            selectedFile = file;
-            document.getElementById('uploadPlaceholder').classList.add('hidden');
-            document.getElementById('fileInfo').classList.remove('hidden');
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('analyzeBtn').disabled = false;
-        }
+            <!-- Tab Contents -->
+              <div class="result-tab-content active" data-tab-content="palette">
+                  <h3 class="text-lg font-bold mb-4">감지된 잉크 색상</h3>
+                  <div class="image-panel">
+                      <div class="image-pair">
+                          <div>
+                              <div class="flex items-center justify-between mb-3">
+                                  <h4 class="text-base font-semibold">White Image</h4>
+                                  <span id="whiteOriginalMeta" class="text-xs text-dim"></span>
+                              </div>
+                              <img id="whiteOriginalImage" class="image-frame hidden" alt="White original">
+                          </div>
+                          <div>
+                              <div class="flex items-center justify-between mb-3">
+                                  <h4 class="text-base font-semibold">Black Image</h4>
+                                  <span id="blackOriginalMeta" class="text-xs text-dim"></span>
+                              </div>
+                              <img id="blackOriginalImage" class="image-frame hidden" alt="Black original">
+                          </div>
+                      </div>
+                      <div class="mt-6">
+                          <h4 class="text-sm font-semibold mb-2">Ink Palette</h4>
+                          <div id="inkPaletteContainer" class="ink-palette"></div>
+                      </div>
+                      <div class="ink-simulator">
+                          <div class="sim-header-group">
+                              <div class="title-row">
+                                  <div>
+                                      <div class="sim-title">Intrinsic Color Simulation</div>
+                                      <div class="text-xs text-dim">Beer-Lambert preview using intrinsic k</div>
+                                  </div>
+                                  <div class="flex items-center gap-2">
+                                      <span id="trustBadge" class="badge badge-gray">Loading</span>
+                                      <span id="simStatus" class="text-xs text-dim"></span>
+                                  </div>
+                              </div>
+                              <div id="simWarningBox" class="warning-alert" style="display:none;">
+                                  <span class="icon">!</span>
+                                  <span id="simWarningText"></span>
+                              </div>
+                          </div>
+                          <div class="sim-controls">
+                              <div class="sim-control">
+                                  <label>Background</label>
+                                  <div class="sim-bg-buttons" id="simBgButtons"></div>
+                              </div>
+                              <div class="sim-control">
+                                  <label>Thickness</label>
+                                  <input id="simThickness" class="sim-slider" type="range" min="0.5" max="2.0" step="0.1" value="1.0">
+                                  <div id="simThicknessValue" class="sim-thickness-value">1.0x</div>
+                              </div>
+                          </div>
+                          <div id="inkSimulationGrid" class="ink-sim-grid"></div>
+                          <div id="inkSimulationEmpty" class="text-xs text-dim hidden">No intrinsic k data available.</div>
+                      </div>
+                  </div>
+              </div>
 
-        async function runAnalysis() {
-            if (!selectedFile) return;
+            <div class="result-tab-content" data-tab-content="radial">
+                <h3 class="text-lg font-bold mb-4">방사형 분포 패턴</h3>
+                <div class="chart-container">
+                    <canvas id="radialChart"></canvas>
+                </div>
+            </div>
 
-            const analyzeBtn = document.getElementById('analyzeBtn');
-            const statusEl = document.getElementById('analysisStatus');
+            <div class="result-tab-content" data-tab-content="plate-legacy" style="display:none">
+                <h3 class="text-lg font-bold mb-4">판 분리 분석</h3>
+                <div id="plateSourceToggleLegacy" class="flex flex-wrap items-center gap-2 mb-4 hidden">
+                    <button id="plateSourcePlateLegacy" class="btn btn-secondary text-xs px-2 py-1">Plate</button>
+                    <button id="plateSourceLiteLegacy" class="btn btn-secondary text-xs px-2 py-1">Plate-Lite</button>
+                    <span id="plateSourceLabelLegacy" class="text-xs text-dim ml-auto"></span>
+                </div>
+                <div id="plateAnalysisContainerLegacy"></div>
+            </div>
 
-            analyzeBtn.disabled = true;
-            statusEl.classList.remove('hidden');
+            <div class="result-tab-content" data-tab-content="plate-black-legacy" style="display:none">
+                <h3 class="text-lg font-bold mb-4">Plate Black</h3>
+                <div id="plateBlackAnalysisContainerLegacy"></div>
+            </div>
 
-            try {
-                // Get user options
-                const inkCountSelect = document.getElementById('expectedInkCount');
-                const modeSelect = document.getElementById('analysisMode');
-                const inkCount = inkCountSelect.value;
-                const analysisMode = modeSelect.value;
+            <div class="result-tab-content" data-tab-content="details">
+                <h3 class="text-lg font-bold mb-4">상세 측정 지표</h3>
+                <div id="detailsContainer"></div>
+            </div>
+        </div>
 
-                const formData = new FormData();
-                formData.append('files', selectedFile);
-                formData.append('analysis_modes', analysisMode);
+        <!-- Download Section -->
+        <div class="download-section mt-6">
+            <h3 class="text-lg font-bold mb-2">분석 결과 다운로드</h3>
+            <p class="text-sm text-secondary mb-4">Copy Spec JSON 형식으로 저장</p>
+            <button id="btnDownloadSpec" class="btn btn-success">
+                <i class="fa-solid fa-download mr-2"></i>
+                Copy Spec 다운로드
+            </button>
+        </div>
+    </div>
 
-                // Add expected_ink_count if not auto
-                if (inkCount !== 'auto') {
-                    formData.append('expected_ink_count', inkCount);
-                }
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="bg-surface p-8 rounded-lg shadow-2xl text-center">
+            <div class="spinner spinner-lg mb-4">
+                <i class="fa-solid fa-spinner fa-spin text-4xl text-primary"></i>
+            </div>
+            <p class="text-lg font-semibold">분석 중...</p>
+            <p class="text-sm text-secondary mt-2">잠시만 기다려주세요</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-                const response = await v7.api.apiCall('/api/v7/analyze_single', 'POST', formData, 'operator', false);
+{% block extra_scripts %}
+<!-- ES6 Modules -->
+<script type="module">
+    // Import core modules
+    import { appState } from '/static/js/core/state.js';
+    import { apiClient } from '/static/js/core/api.js';
 
-                if (response && response.results && response.results.length > 0) {
-                    const result = response.results[0];
-                    currentAnalysisResult = result;  // Store for export
-                    v7.singleAnalysis.renderResults(result);
-                    document.getElementById('resultsSection').classList.remove('hidden');
-                } else {
-                    alert('분석 결과를 받지 못했습니다.');
-                }
+    // Import utilities
+    import { byId } from '/static/js/utils/helpers.js';
+    import { showNotification } from '/static/js/utils/notifications.js';
 
-            } catch (error) {
-                console.error('Analysis failed:', error);
-                alert('분석 실패: ' + error.message);
-            } finally {
-                analyzeBtn.disabled = false;
-                statusEl.classList.add('hidden');
-            }
-        }
+    // Import feature module
+    import { initSingleAnalysis, runSingleAnalysis } from '/static/js/features/analysis/single.js';
 
-        function showImage(type) {
-            const img = document.getElementById('previewImage');
-            if (currentArtifacts[type]) {
-                img.src = currentArtifacts[type];
-            }
-        }
+    // Import visualization modules
+    import * as visuals from '/static/js/components/visuals.js';
 
-        // Store artifacts globally
-        window.setArtifacts = function(artifacts) {
-            currentArtifacts = artifacts;
-            if (artifacts.original) {
-                document.getElementById('previewImage').src = artifacts.original;
-            }
-        };
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+        initSingleAnalysis();
 
-        // Export Copy Spec to JSON
-        function exportCopySpec() {
-            if (!currentAnalysisResult) {
-                alert('분석 결과가 없습니다. 먼저 이미지를 분석해주세요.');
-                return;
-            }
+        // Global debug access
+        window.appState = appState;
+        window.apiClient = apiClient;
 
-            const analysis = currentAnalysisResult.analysis;
-            const metadata = currentAnalysisResult.metadata || {};
+        // For backward compatibility
+        window.v7 = window.v7 || {};
+        window.v7.render = visuals;
+    });
+</script>
 
-            // Build copy specification JSON
-            const copySpec = {
-                metadata: {
-                    source_file: selectedFile ? selectedFile.name : 'unknown',
-                    analysis_timestamp: new Date().toISOString(),
-                    engine_version: 'v7',
-                    purpose: 'Copy Specification for Lens Replication'
-                },
+<script>
+    // Tab switching (file handlers are in single.js initSingleAnalysis)
+    document.querySelectorAll('.result-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.dataset.tab;
 
-                // QC Information (measurement validity)
-                qc: {
-                    gate_passed: analysis.gate?.passed || false,
-                    center_offset_mm: analysis.gate?.scores?.center_offset_mm || null,
-                    sharpness_score: analysis.gate?.scores?.sharpness_score || null,
-                    illumination_asymmetry: analysis.gate?.scores?.illumination_asymmetry || null
-                },
+            // Update buttons
+            document.querySelectorAll('.result-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
 
-                // Ink Palette (Priority 1 - Core Copy Info)
-                ink_palette: {
-                    detected_count: analysis.ink?.k || 0,
-                    clustering_confidence: analysis.ink?.confidence || 0,
-                    sort_policy: 'L_asc (dark to light)',
-                    clusters: (analysis.ink?.clusters || []).map(cluster => ({
-                        ink_id: cluster.id,
-                        lab_centroid_cie: cluster.centroid_lab_cie || cluster.centroid_lab,  // CIE L*a*b* (recommended)
-                        lab_centroid_cv8: cluster.centroid_lab_cv8,  // OpenCV 8-bit (legacy)
-                        rgb_hex: cluster.mean_hex,
-                        area_ratio: cluster.area_ratio,
-                        role: cluster.id === 0 ? 'ink' : 'gap/background'
-                    })),
-                    _note: 'lab_centroid_cie uses CIE scale (L:0-100, a/b:-128~+127). Use this for ΔE calculations.'
-                },
-
-                // Radial Profile (Distribution Pattern)
-                radial_profile: {
-                    summary: {
-                        inner_mean_L: analysis.radial?.summary?.inner_mean_L || null,
-                        outer_mean_L: analysis.radial?.summary?.outer_mean_L || null,
-                        uniformity: analysis.radial?.summary?.uniformity || null,
-                        pattern_type: (() => {
-                            const inner = analysis.radial?.summary?.inner_mean_L || 0;
-                            const outer = analysis.radial?.summary?.outer_mean_L || 0;
-                            const diff = Math.abs(inner - outer);
-                            if (diff < 2) return 'Uniform';
-                            return inner > outer ? 'Fade Out (Center Darker)' : 'Fade In (Edge Darker)';
-                        })(),
-                        _note: 'Summary values use CIE L*a*b* scale'
-                    },
-                    profiles_cie: {
-                        L_mean: analysis.radial?.profile_cie?.L_mean || analysis.radial?.profile?.L_mean || [],
-                        a_mean: analysis.radial?.profile_cie?.a_mean || analysis.radial?.profile?.a_mean || [],
-                        b_mean: analysis.radial?.profile_cie?.b_mean || analysis.radial?.profile?.b_mean || []
-                    },
-                    profiles_cv8: {
-                        L_mean: analysis.radial?.profile_cv8?.L_mean || [],
-                        a_mean: analysis.radial?.profile_cv8?.a_mean || [],
-                        b_mean: analysis.radial?.profile_cv8?.b_mean || []
-                    },
-                    _note: 'Use profiles_cie for proper color interpretation. CIE scale: L:0-100, a/b:-128~+127'
-                },
-
-                // Pattern Quality (Texture/Dots)
-                pattern: {
-                    angular_uniformity: analysis.pattern?.angular_uniformity || null,
-                    center_blobs: {
-                        blob_count: analysis.pattern?.center_blobs?.blob_count || 0,
-                        total_area: analysis.pattern?.center_blobs?.total_area || 0
-                    },
-                    contrast: analysis.pattern?.contrast || null,
-                    edge_density: analysis.pattern?.edge_density || null
-                },
-
-                // Color Distribution (Reference)
-                color_distribution: {
-                    L_cie: analysis.color?.L_cie || analysis.color?.L || {},
-                    a_cie: analysis.color?.a_cie || analysis.color?.a || {},
-                    b_cie: analysis.color?.b_cie || analysis.color?.b || {},
-                    L_cv8: analysis.color?.L_cv8 || {},
-                    a_cv8: analysis.color?.a_cv8 || {},
-                    b_cv8: analysis.color?.b_cv8 || {},
-                    _note: 'Use *_cie values for proper color interpretation. CIE scale: L:0-100, a/b:-128~+127'
-                },
-
-                // Zone Analysis (Advanced)
-                zones: {
-                    zone_uniformity: analysis.zones?.zone_uniformity || null,
-                    num_zones: analysis.zones?.num_zones || 8,
-                    zones: analysis.zones?.zones || []
-                },
-
-                // Warnings
-                warnings: analysis.warnings || []
-            };
-
-            // Create download
-            const jsonStr = JSON.stringify(copySpec, null, 2);
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const filename = selectedFile ?
-                selectedFile.name.replace(/\.[^/.]+$/, '') + '_copy_spec.json' :
-                'lens_copy_spec.json';
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            console.log('Copy spec exported:', filename);
-        }
-    </script>
-</body>
-</html>
+            // Update content
+            document.querySelectorAll('.result-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelector(`[data-tab-content="${tabName}"]`).classList.add('active');
+        });
+    });
+</script>
+{% endblock %}

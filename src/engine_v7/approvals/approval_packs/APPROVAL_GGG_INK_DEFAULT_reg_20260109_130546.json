@@ -1,0 +1,82 @@
+{
+  "schema_version": "approval_pack.v1",
+  "approval_id": "ap_reg_20260109_130546_GGG_INK_DEFAULT",
+  "generated_at": "2026-01-09T13:05:50.609123",
+  "context": {
+    "sku": "GGG",
+    "ink": "INK_DEFAULT"
+  },
+  "decision": {
+    "action": "ACTIVATE",
+    "status": "NEEDS_REVIEW",
+    "summary_line": "STD_ACCEPTABLE | warn+2",
+    "policy": {
+      "activation_allowed_only_for": [
+        "STD_ACCEPTABLE"
+      ],
+      "role_required": "Approver"
+    }
+  },
+  "baseline_active": {
+    "active_snapshot_path": "",
+    "snapshot": {
+      "min_pairwise_separation": null,
+      "sep_threshold": null,
+      "warnings": [],
+      "geom_consistency": {}
+    }
+  },
+  "candidate_std": {
+    "registration_id": "reg_20260109_130546",
+    "decision": {
+      "label": "STD_ACCEPTABLE",
+      "reason_codes": [],
+      "reason_messages": []
+    },
+    "summary": {
+      "min_pairwise_separation": 7.795336723327637,
+      "sep_threshold": 1.0,
+      "warnings": [
+        "WITHIN_MODE_THRESHOLD_DISABLED",
+        "GEOM_THRESHOLD_DISABLED"
+      ],
+      "geom_consistency": {
+        "center_drift_px": 45.60877227783203,
+        "radius_drift_ratio": 0.3902091681957245,
+        "passed": null
+      }
+    }
+  },
+  "compare_to_active": {
+    "delta": {
+      "min_pairwise_separation": null
+    },
+    "warnings_diff": {
+      "added": [
+        "GEOM_THRESHOLD_DISABLED",
+        "WITHIN_MODE_THRESHOLD_DISABLED"
+      ],
+      "removed": []
+    }
+  },
+  "impact_preview": {
+    "status": "NOT_AVAILABLE",
+    "notes": [
+      "metrics_report not attached at registration time"
+    ]
+  },
+  "review": {
+    "v2_flags": {
+      "schema": "v2_flags.v1",
+      "severity": "OK",
+      "flags": []
+    }
+  },
+  "final": {
+    "status": "APPROVED",
+    "action": "ACTIVATE",
+    "approved_at": "2026-01-09T13:05:54.026800",
+    "approved_by": "SYSTEM",
+    "active_snapshot_path": "active_snapshots\\GGG_INK_DEFAULT_20260109_130553.json"
+  }
+}

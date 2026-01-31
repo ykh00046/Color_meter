@@ -1,0 +1,248 @@
+{% extends "_base_layout.html" %}
+
+{% block title %}Design System Demo | Color Meter{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-12">
+    <!-- Header -->
+    <div class="mb-12">
+        <h1 class="text-3xl font-bold mb-4">Design System Demo</h1>
+        <p class="text-secondary">Phase 1 기초 인프라 검증 페이지</p>
+    </div>
+
+    <!-- Test Notifications -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Notification System</h2>
+        <div class="flex gap-4 flex-wrap">
+            <button class="btn btn-success" onclick="testSuccessNotification()">
+                <i class="fa-solid fa-check"></i>
+                Success Toast
+            </button>
+            <button class="btn btn-error" onclick="testErrorNotification()">
+                <i class="fa-solid fa-exclamation"></i>
+                Error Toast
+            </button>
+            <button class="btn btn-warning" onclick="testWarningNotification()">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                Warning Toast
+            </button>
+            <button class="btn btn-primary" onclick="testInfoNotification()">
+                <i class="fa-solid fa-info"></i>
+                Info Toast
+            </button>
+        </div>
+    </section>
+
+    <!-- Button Components -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Button Components</h2>
+        <div class="flex gap-4 flex-wrap items-center">
+            <button class="btn btn-primary">Primary Button</button>
+            <button class="btn btn-secondary">Secondary Button</button>
+            <button class="btn btn-success">Success Button</button>
+            <button class="btn btn-warning">Warning Button</button>
+            <button class="btn btn-error">Error Button</button>
+            <button class="btn btn-primary" disabled>Disabled</button>
+            <button class="btn-icon btn-primary">
+                <i class="fa-solid fa-heart"></i>
+            </button>
+        </div>
+    </section>
+
+    <!-- Cards -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Card Components</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="card">
+                <div class="card-header">Standard Card</div>
+                <p class="text-secondary">This is a standard card with header and body content.</p>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Total Inspections</div>
+                <div class="metric-value">1,234</div>
+            </div>
+
+            <div class="metric-card border-success">
+                <div class="metric-label">Pass Rate</div>
+                <div class="metric-value text-success">98.5<span class="text-sm ml-1">%</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tabs -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Tab Components</h2>
+        <div id="tabDemo"></div>
+    </section>
+
+    <!-- Typography -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Typography</h2>
+        <div class="space-y-4">
+            <h1>Heading 1</h1>
+            <h2>Heading 2</h2>
+            <h3>Heading 3</h3>
+            <h4>Heading 4</h4>
+            <h5>Heading 5</h5>
+            <h6>Heading 6</h6>
+            <p class="text-primary">Primary text color</p>
+            <p class="text-secondary">Secondary text color</p>
+            <p class="text-dim">Dim text color</p>
+            <p class="font-mono">Monospace font (코드용)</p>
+        </div>
+    </section>
+
+    <!-- Form Elements -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Form Elements</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="demoInput">Text Input</label>
+                <input type="text" id="demoInput" class="terminal-input" placeholder="Enter text...">
+            </div>
+            <div>
+                <label for="demoSelect">Select Input</label>
+                <select id="demoSelect" class="terminal-input">
+                    <option>Option 1</option>
+                    <option>Option 2</option>
+                    <option>Option 3</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <!-- State Management Demo -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">State Management</h2>
+        <div class="card">
+            <div class="flex gap-4 mb-4">
+                <button class="btn btn-primary" onclick="testStateUpdate()">
+                    Update State
+                </button>
+                <button class="btn btn-secondary" onclick="testStateSubscribe()">
+                    Subscribe to State
+                </button>
+                <button class="btn btn-error" onclick="testStateReset()">
+                    Reset State
+                </button>
+            </div>
+            <div id="stateOutput" class="terminal-panel p-4 font-mono text-xs">
+                <div class="text-dim">State output will appear here...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Data Table -->
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-6">Data Table</h2>
+        <div class="card">
+            <div id="tableDemo"></div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script type="module">
+    import { Components } from '/static/js/components/base.js';
+    import { showNotification, showSuccess, showError, showWarning, showInfo } from '/static/js/utils/notifications.js';
+    import { appState } from '/static/js/core/state.js';
+
+    // Make functions global for onclick handlers
+    window.testSuccessNotification = () => showSuccess('Operation completed successfully!');
+    window.testErrorNotification = () => showError('Something went wrong!');
+    window.testWarningNotification = () => showWarning('Please check your input.');
+    window.testInfoNotification = () => showInfo('New features are available.');
+
+    // Tab demo
+    const tabContainer = document.getElementById('tabDemo');
+    const tabs = [
+        {
+            id: 'tab1',
+            label: 'Tab 1',
+            icon: 'fa-solid fa-home',
+            content: createTabContent('This is content for Tab 1')
+        },
+        {
+            id: 'tab2',
+            label: 'Tab 2',
+            icon: 'fa-solid fa-star',
+            content: createTabContent('This is content for Tab 2')
+        },
+        {
+            id: 'tab3',
+            label: 'Tab 3',
+            icon: 'fa-solid fa-gear',
+            content: createTabContent('This is content for Tab 3')
+        }
+    ];
+
+    function createTabContent(text) {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.textContent = text;
+        return div;
+    }
+
+    const tabSystem = Components.createTabs(tabs, (tabId) => {
+        console.log('Tab changed to:', tabId);
+    });
+    tabContainer.appendChild(tabSystem);
+
+    // State management demo
+    window.testStateUpdate = () => {
+        const newValue = Math.floor(Math.random() * 1000);
+        appState.setState('inspection.lastResult', { value: newValue });
+        showInfo(`State updated: value = ${newValue}`);
+        displayState();
+    };
+
+    window.testStateSubscribe = () => {
+        const unsubscribe = appState.subscribe('inspection.lastResult', (value) => {
+            showSuccess(`State changed: ${JSON.stringify(value)}`);
+        });
+
+        // Store unsubscribe function
+        window._stateUnsubscribe = unsubscribe;
+        showInfo('Subscribed to state changes');
+    };
+
+    window.testStateReset = () => {
+        appState.resetState('inspection');
+        showWarning('State reset');
+        displayState();
+    };
+
+    function displayState() {
+        const output = document.getElementById('stateOutput');
+        const currentState = appState.dump();
+        output.innerHTML = `<pre>${JSON.stringify(currentState, null, 2)}</pre>`;
+    }
+
+    // Data table demo
+    const tableContainer = document.getElementById('tableDemo');
+    const sampleData = [
+        { id: 1, name: 'SKU_A', status: 'Pass', date: '2026-01-17' },
+        { id: 2, name: 'SKU_B', status: 'Fail', date: '2026-01-17' },
+        { id: 3, name: 'SKU_C', status: 'Pass', date: '2026-01-16' },
+    ];
+
+    const columns = [
+        { key: 'id', label: 'ID' },
+        { key: 'name', label: 'Product' },
+        {
+            key: 'status',
+            label: 'Status',
+            formatter: (value) => value === 'Pass' ? '✓ Pass' : '✗ Fail'
+        },
+        { key: 'date', label: 'Date' },
+    ];
+
+    const table = Components.createDataTable(sampleData, columns);
+    tableContainer.appendChild(table);
+
+    // Initial state display
+    displayState();
+</script>
+{% endblock %}

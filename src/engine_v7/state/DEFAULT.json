@@ -1,0 +1,22 @@
+{
+  "sku": "DEFAULT",
+  "last_mode": "MID",
+  "history": [
+    {
+      "ts": 1768237077,
+      "mode": "MID"
+    },
+    {
+      "ts": 1768237445,
+      "mode": "MID"
+    },
+    {
+      "ts": 1768237526,
+      "mode": "MID"
+    },
+    {
+      "ts": 1768237527,
+      "mode": "MID"
+    }
+  ]
+}

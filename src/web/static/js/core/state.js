@@ -34,7 +34,6 @@ class AppState {
         uploadedFile: null,
         uploadedBlackFile: null,
         result: null,
-        simulationMethod: 'area_ratio', // 'area_ratio' | 'mask_based'
       },
 
       // Products (v7 Legacy)
@@ -206,7 +205,6 @@ class AppState {
         uploadedFile: null,
         uploadedBlackFile: null,
         result: null,
-        simulationMethod: 'area_ratio',
       },
     };
 

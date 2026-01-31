@@ -14,33 +14,69 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from src.pipeline import InspectionPipeline, PipelineError
+# Rate limiting (Quick Win: DoS prevention)
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+
+    RATE_LIMIT_ENABLED = True
+except ImportError:
+    RATE_LIMIT_ENABLED = False
+    Limiter = None
+
+from src.config.v7_paths import V7_RESULTS
 from src.services.analysis_service import AnalysisService
+from src.services.inspection_service import InspectionPipeline, PipelineError
 from src.utils.file_io import read_json
-from src.visualizer import InspectionVisualizer, VisualizerConfig
 
 logger = logging.getLogger("web")
 
 # PHASE7: Image caching for parameter recomputation
-IMAGE_CACHE_MAX = 100
-IMAGE_CACHE_TTL_SEC = 60 * 30  # 30 minutes
+# Security: Reduced limits to prevent memory exhaustion
+IMAGE_CACHE_MAX_ENTRIES = 20  # Max number of cached images
+IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024  # 500MB max total cache size
+IMAGE_CACHE_TTL_SEC = 60 * 15  # 15 minutes TTL (reduced from 30)
 image_cache: Dict[str, Tuple[np.ndarray, float]] = {}
 cache_lock = asyncio.Lock()
+_cache_total_bytes = 0  # Track total memory usage
+
+
+def _get_image_bytes(img: np.ndarray) -> int:
+    """Get memory size of numpy image array"""
+    return img.nbytes if img is not None else 0
 
 
 def _evict_old_cache() -> None:
+    """Evict expired and excess cache entries to prevent memory leaks"""
+    global _cache_total_bytes
     now = time()
+
+    # 1. Remove expired entries first
     expired = [k for k, (_, ts) in image_cache.items() if now - ts > IMAGE_CACHE_TTL_SEC]
     for k in expired:
-        image_cache.pop(k, None)
+        entry = image_cache.pop(k, None)
+        if entry:
+            _cache_total_bytes -= _get_image_bytes(entry[0])
 
-    if len(image_cache) <= IMAGE_CACHE_MAX:
-        return
+    # 2. Remove oldest entries if over count limit
+    while len(image_cache) > IMAGE_CACHE_MAX_ENTRIES:
+        oldest_key = min(image_cache.keys(), key=lambda k: image_cache[k][1])
+        entry = image_cache.pop(oldest_key, None)
+        if entry:
+            _cache_total_bytes -= _get_image_bytes(entry[0])
+        logger.debug(f"Cache evicted (count limit): {oldest_key}")
 
-    # Evict oldest entries by timestamp
-    to_evict = sorted(image_cache.items(), key=lambda item: item[1][1])[: len(image_cache) - IMAGE_CACHE_MAX]
-    for k, _ in to_evict:
-        image_cache.pop(k, None)
+    # 3. Remove oldest entries if over memory limit
+    while _cache_total_bytes > IMAGE_CACHE_MAX_BYTES and image_cache:
+        oldest_key = min(image_cache.keys(), key=lambda k: image_cache[k][1])
+        entry = image_cache.pop(oldest_key, None)
+        if entry:
+            _cache_total_bytes -= _get_image_bytes(entry[0])
+        logger.debug(f"Cache evicted (memory limit): {oldest_key}")
+
+    # Ensure counter doesn't go negative
+    _cache_total_bytes = max(0, _cache_total_bytes)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -48,23 +84,48 @@ RESULTS_DIR = BASE_DIR.parent / "results" / "web"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+BATCH_BASE_DIR = (BASE_DIR.parent / "data").resolve()
+BATCH_ZIP_MAX_SIZE_MB = 200
+BATCH_ZIP_MAX_UNCOMPRESSED_MB = 500
+BATCH_ZIP_MAX_FILES = 2000
 
 app = FastAPI(title="Color Meter Web UI", version="0.2")
+
+# Rate Limiting Configuration (Quick Win: DoS prevention)
+if RATE_LIMIT_ENABLED:
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    logger.info("Rate limiting enabled")
+else:
+    limiter = None
+    logger.warning("Rate limiting disabled (slowapi not installed)")
+
+
+def rate_limit(limit_string: str):
+    """Conditional rate limit decorator - only applies if slowapi is installed."""
+
+    def decorator(func):
+        if RATE_LIMIT_ENABLED and limiter:
+            return limiter.limit(limit_string)(func)
+        return func
+
+    return decorator
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled server error")
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    # Security: Don't expose internal exception details to client
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Mount v7 results for visualization artifacts
-V7_RESULTS_DIR = BASE_DIR.parent / "results" / "v7" / "web"
-V7_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/v7_results", StaticFiles(directory=str(V7_RESULTS_DIR)), name="v7_results")
+V7_RESULTS.mkdir(parents=True, exist_ok=True)
+app.mount("/v7_results", StaticFiles(directory=str(V7_RESULTS)), name="v7_results")
 
 analysis_service = AnalysisService()
 
@@ -87,11 +148,8 @@ async def startup_event():
 
 
 # Include API routers
-from src.web.routers import inspection, sku, std, test, v7
+from src.web.routers import inspection, v7
 
-app.include_router(std.router)
-app.include_router(test.router)
-app.include_router(sku.router)
 app.include_router(inspection.router)
 app.include_router(v7.router)
 
@@ -102,7 +160,9 @@ def load_sku_config(sku: str, config_dir: Path = Path("config/sku_db")) -> dict:
     try:
         cfg_path = safe_sku_path(sku, config_dir)
     except SecurityError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid SKU: {str(e)}")
+        # Security: Log the actual error, but don't expose details to client
+        logger.warning(f"SKU validation failed for '{sku}': {e}")
+        raise HTTPException(status_code=400, detail="Invalid SKU format")
 
     if not cfg_path.exists():
         raise HTTPException(status_code=404, detail=f"SKU config not found: {sku}")
@@ -132,13 +192,43 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
 
     dest_dir = dest_dir.resolve()
     with zipfile.ZipFile(zip_path, "r") as zf:
+        if len(zf.infolist()) > BATCH_ZIP_MAX_FILES:
+            raise HTTPException(status_code=400, detail="ZIP contains too many files")
+        total_uncompressed = 0
         for member in zf.infolist():
             member_path = (dest_dir / member.filename).resolve()
             try:
                 member_path.relative_to(dest_dir)
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid zip entry path")
+            total_uncompressed += member.file_size
+            if total_uncompressed > BATCH_ZIP_MAX_UNCOMPRESSED_MB * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="ZIP contents too large to extract")
         zf.extractall(dest_dir)
+
+
+def _safe_batch_dir(batch_dir: str) -> Path:
+    candidate = Path(batch_dir).resolve()
+    try:
+        candidate.relative_to(BATCH_BASE_DIR)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"batch_dir must be under {BATCH_BASE_DIR}",
+        )
+    if not candidate.exists() or not candidate.is_dir():
+        raise HTTPException(status_code=404, detail="batch_dir not found or not a directory")
+    return candidate
+
+
+def _get_upload_size(upload: UploadFile) -> Optional[int]:
+    try:
+        upload.file.seek(0, 2)
+        size = upload.file.tell()
+        upload.file.seek(0)
+        return int(size)
+    except Exception:
+        return None
 
 
 def cleanup_old_results(max_age_hours: int = 24, max_results: int = 100):
@@ -235,6 +325,12 @@ async def calibration_page(request: Request):
     return templates.TemplateResponse("calibration.html", {"request": request})
 
 
+@app.get("/design_system_demo", response_class=HTMLResponse)
+async def design_system_demo_page(request: Request):
+    """Design System Demo - Phase 1 verification page"""
+    return templates.TemplateResponse("design_system_demo.html", {"request": request})
+
+
 # ================================
 # Helper Functions for /inspect endpoint
 # ================================
@@ -247,6 +343,9 @@ async def validate_and_save_file(file: UploadFile, run_id: str, run_dir: Path) -
         tuple: (file_content, input_path, original_name)
     """
     from src.utils.security import validate_file_extension, validate_file_size
+
+    # Constants for image validation
+    MAX_IMAGE_DIMENSION = 8192  # 8K max to prevent DoS
 
     # File validation
     if not file.filename:
@@ -261,6 +360,22 @@ async def validate_and_save_file(file: UploadFile, run_id: str, run_dir: Path) -
 
     if not validate_file_size(file_size, max_size_mb=10):
         raise HTTPException(status_code=413, detail=f"File too large: {file_size / 1024 / 1024:.1f}MB (max 10MB)")
+
+    # Validate image dimensions (Quick Win: DoS prevention)
+    try:
+        img_array = np.frombuffer(file_content, np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Invalid image file: could not decode")
+        h, w = img.shape[:2]
+        if h > MAX_IMAGE_DIMENSION or w > MAX_IMAGE_DIMENSION:
+            raise HTTPException(
+                status_code=400, detail=f"Image too large: {w}x{h} (max {MAX_IMAGE_DIMENSION}x{MAX_IMAGE_DIMENSION})"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {e}")
 
     # Save file
     original_name = file.filename
@@ -293,115 +408,6 @@ def parse_inspection_options(options: Optional[str]) -> bool:
         return False
 
 
-def _load_std_reference(sku_config: dict) -> Tuple[Optional[np.ndarray], Optional[Any]]:
-    params = sku_config.get("params", {})
-    std_ref_path = params.get("std_ref_image_path") or params.get("std_ref_path")
-    if not std_ref_path:
-        return None, None
-
-    path = Path(std_ref_path)
-    if not path.is_absolute():
-        path = (BASE_DIR / path).resolve()
-    else:
-        path = path.resolve()
-
-    try:
-        path.relative_to(BASE_DIR.resolve())
-    except ValueError:
-        logger.warning(f"STD reference path outside base dir: {path}")
-        return None, None
-
-    if not path.exists():
-        logger.warning(f"STD reference image not found: {path}")
-        return None, None
-
-    img_bgr = cv2.imread(str(path))
-    if img_bgr is None:
-        logger.warning(f"STD reference image load failed: {path}")
-        return None, None
-
-    try:
-        from src.core.lens_detector import DetectorConfig, LensDetector
-
-        lens_detector = LensDetector(DetectorConfig())
-        lens_detection = lens_detector.detect(img_bgr)
-        if lens_detection is None:
-            logger.warning("STD reference lens detection failed")
-            return None, None
-        return img_bgr, lens_detection
-    except Exception as exc:
-        logger.warning(f"STD reference lens detection error: {exc}")
-        return None, None
-
-
-def run_2d_zone_analysis(img_bgr, lens_detection, sku_config: dict, run_dir: Path):
-    """Run 2D zone analysis using zone_analyzer_2d.
-
-    Returns:
-        tuple: (result_2d, debug_info_2d) or (None, None) on failure
-    """
-    try:
-        print("[INSPECT] Using 2D zone analysis (AI template)")
-        from src.core.zone_analyzer_2d import InkMaskConfig, analyze_lens_zones_2d
-
-        if img_bgr is None or lens_detection is None:
-            raise ValueError("Invalid inputs for 2D analysis")
-
-        print(
-            f"[INSPECT] lens_detection: center=({lens_detection.center_x}, {lens_detection.center_y}), "
-            f"radius={lens_detection.radius}"
-        )
-
-        params = sku_config.get("params", {})
-        debug_save_on = params.get("debug_save_on_2d")
-        if not debug_save_on:
-            debug_save_on = ["retake", "low_confidence"]
-        elif isinstance(debug_save_on, str):
-            debug_save_on = [debug_save_on]
-        debug_low_confidence = float(params.get("debug_low_confidence_threshold", 0.75))
-        std_ref_image, std_ref_lens = _load_std_reference(sku_config)
-
-        result_2d, debug_info_2d = analyze_lens_zones_2d(
-            img_bgr=img_bgr,
-            lens_detection=lens_detection,
-            sku_config=sku_config,
-            ink_mask_config=InkMaskConfig(),
-            std_ref_image=std_ref_image,
-            std_ref_lens=std_ref_lens,
-            save_debug=False,
-            save_debug_on=debug_save_on,
-            debug_low_confidence=debug_low_confidence,
-            debug_prefix=str(run_dir / "debug_2d"),
-        )
-
-        print(f"[INSPECT] 2D analysis complete: {result_2d.judgment}, ΔE={result_2d.overall_delta_e:.2f}")
-        return result_2d, debug_info_2d
-
-    except Exception as e2d:
-        print(f"[INSPECT] 2D analysis FAILED: {e2d}")
-        import traceback
-
-        traceback.print_exc()
-        return None, None
-
-
-def apply_2d_results_to_inspection(result, result_2d):
-    """Apply 2D analysis results to inspection result object."""
-    if result_2d is None:
-        return
-
-    result.judgment = result_2d.judgment
-    result.overall_delta_e = result_2d.overall_delta_e
-    result.zone_results = result_2d.zone_results
-    result.ng_reasons = result_2d.ng_reasons
-    result.confidence = result_2d.confidence
-
-    # Remove 1D data to avoid confusion
-    result.zones = []
-    result.uniformity_analysis = None
-    print("[INSPECT] Applied 2D results and removed 1D data")
-
-
 def generate_radial_analysis(result, sku_config: dict) -> tuple:
     """Generate radial profile analysis data.
 
@@ -414,15 +420,12 @@ def generate_radial_analysis(result, sku_config: dict) -> tuple:
     if rp is None or lens_detection is None:
         return None, None
 
-    zones_cfg = sku_config.get("zones", {})
-    analysis_payload = analysis_service.analyze_radial_profile(
-        profile=rp, lens_radius=float(lens_detection.radius), zones_config=zones_cfg
-    )
+    analysis_payload = analysis_service.analyze_radial_profile(profile=rp, lens_radius=float(lens_detection.r))
 
     lens_info = {
-        "center_x": float(lens_detection.center_x),
-        "center_y": float(lens_detection.center_y),
-        "radius": float(lens_detection.radius),
+        "center_x": float(lens_detection.cx),
+        "center_y": float(lens_detection.cy),
+        "radius": float(lens_detection.r),
         "confidence": float(lens_detection.confidence),
     }
 
@@ -434,119 +437,35 @@ def generate_radial_analysis(result, sku_config: dict) -> tuple:
     return analysis_payload, lens_info
 
 
-def run_ring_sector_analysis(result, enable_illumination_correction: bool):
-    """
-    Run Ring × Sector 2D analysis (PHASE7).
-
-    Refactored to use SectorSegmenter module.
-
-    Returns:
-        dict or None: ring_sector_data
-    """
-    lens_detection = getattr(result, "lens_detection", None)
-    if lens_detection is None or not hasattr(result, "image") or result.image is None:
-        return None
-
-    try:
-        from src.core.sector_segmenter import SectorConfig, SectorSegmenter
-
-        # Initialize segmenter
-        segmenter = SectorSegmenter(SectorConfig(sector_count=12, ring_boundaries=[0.0, 0.33, 0.67, 1.0]))  # 3 rings
-
-        # Run segmentation and analysis
-        segmentation_result, uniformity_data = segmenter.segment_and_analyze(
-            image_bgr=result.image,
-            center_x=float(lens_detection.center_x),
-            center_y=float(lens_detection.center_y),
-            radius=float(lens_detection.radius),
-            radial_profile=getattr(result, "radial_profile", None),
-            enable_illumination_correction=enable_illumination_correction,
-        )
-
-        # Store cells in result
-        result.ring_sector_cells = segmentation_result.cells
-
-        # Store uniformity analysis
-        if uniformity_data is not None:
-            result.uniformity_analysis = uniformity_data
-
-        # Convert to API response format
-        ring_sector_data = segmenter.format_response_data(segmentation_result.cells)
-
-        # Log ring statistics
-        ring_stats = {}
-        for cell in segmentation_result.cells:
-            if cell.ring_index not in ring_stats:
-                ring_stats[cell.ring_index] = {"count": 0, "total_pixels": 0}
-            ring_stats[cell.ring_index]["count"] += 1
-            ring_stats[cell.ring_index]["total_pixels"] += cell.pixel_count
-
-        for ring_idx, stats in sorted(ring_stats.items()):
-            logger.warning(
-                f"[DEBUG] Ring {ring_idx}: {stats['count']} cells, "
-                f"{stats['total_pixels']:,} pixels (avg {stats['total_pixels'] // stats['count']:,} per cell)"
-            )
-
-        logger.info(
-            f"2D analysis completed: {segmentation_result.total_cells} cells, "
-            f"{segmentation_result.valid_pixel_ratio*100:.1f}% valid pixels"
-        )
-
-        return ring_sector_data
-
-    except Exception as e:
-        logger.warning(f"2D analysis failed: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return None
-
-
-def create_overlay_visualization(result, run_dir: Path) -> Optional[Path]:
-    """Create overlay visualization image.
-
-    Returns:
-        Path or None: overlay_path
-    """
-    overlay_path = run_dir / "overlay.png"
-    try:
-        visualizer = InspectionVisualizer(VisualizerConfig())
-        overlay = visualizer.visualize_zone_overlay(
-            getattr(result, "image", None),
-            getattr(result, "lens_detection", None),
-            getattr(result, "zones", None),
-            result,
-            show_result=True,
-        )
-        visualizer.save_visualization(overlay, overlay_path)
-        return overlay_path
-    except Exception as viz_err:
-        logger.warning(f"Failed to create overlay: {viz_err}")
-        return None
-
-
-def save_result_json(result, debug_info_2d, use_2d_analysis: bool, run_dir: Path) -> Path:
+def save_result_json(result, run_dir: Path) -> Path:
     """Save inspection result as JSON.
 
     Returns:
         Path: output JSON file path
     """
     import json
-    from dataclasses import asdict
+    from dataclasses import asdict, fields, is_dataclass
 
     output = run_dir / "result.json"
-    result_dict = asdict(result)
+    if is_dataclass(result):
+        result_dict = {f.name: getattr(result, f.name) for f in fields(result) if f.name != "image"}
+    else:
+        result_dict = asdict(result)
 
-    # Remove 1D data if using 2D analysis
-    if use_2d_analysis and hasattr(result, "zone_results") and result.zone_results:
-        result_dict.pop("zones", None)
-        result_dict.pop("uniformity_analysis", None)
-        print("[INSPECT] Removed zones/uniformity from JSON output")
+    def _to_jsonable(value):
+        if is_dataclass(value):
+            return {k: _to_jsonable(v) for k, v in asdict(value).items()}
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, (np.integer, np.floating)):
+            return value.item()
+        if isinstance(value, dict):
+            return {k: _to_jsonable(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_to_jsonable(v) for v in value]
+        return value
 
-        # Add 2D debug info
-        if debug_info_2d is not None:
-            result_dict["debug"] = debug_info_2d
-            print(f"[INSPECT] Added debug info to JSON output: {list(debug_info_2d.keys())}")
+    result_dict = _to_jsonable(result_dict)
 
     output.write_text(json.dumps(result_dict, default=str, ensure_ascii=False, indent=2), encoding="utf-8")
     return output
@@ -600,6 +519,7 @@ def build_inspection_response(
     run_id: str,
     original_name: str,
     sku: str,
+    ink: str,
     overlay_path: Optional[Path],
     analysis_payload,
     lens_info,
@@ -616,6 +536,7 @@ def build_inspection_response(
         "run_id": run_id,
         "image": original_name,
         "sku": sku,
+        "ink": ink,
         "image_id": image_id,  # PHASE7: For parameter recomputation
         "overlay": f"/results/{run_id}/overlay.png" if overlay_path and overlay_path.exists() else None,
         "analysis": analysis_payload,
@@ -623,38 +544,21 @@ def build_inspection_response(
         "lens_info": lens_info,
         "ring_sector_cells": ring_sector_data,
         "uniformity": uniformity_data,
-        "result_path": str(output),
+        "result_path": f"/results/{run_id}",
     }
     if applied_params:
         response["applied_params"] = applied_params
 
     # Add judgment results if requested
     if run_judgment:
-        zone_results_data = []
-        if hasattr(result, "zone_results") and result.zone_results:
-            for zr in result.zone_results:
-                zone_results_data.append(
-                    {
-                        "zone_name": zr.zone_name,
-                        "measured_lab": [float(v) for v in zr.measured_lab],
-                        "target_lab": [float(v) for v in zr.target_lab] if zr.target_lab else None,
-                        "delta_e": float(zr.delta_e),
-                        "threshold": float(zr.threshold),
-                        "is_ok": zr.is_ok,
-                    }
-                )
-
         response["judgment"] = {
             "result": result.judgment,
             "overall_delta_e": float(result.overall_delta_e),
             "confidence": float(result.confidence) if hasattr(result, "confidence") else 1.0,
-            "zones_count": len(getattr(result, "zone_results", [])),
             "ng_reasons": result.ng_reasons if hasattr(result, "ng_reasons") else [],
         }
-        response["zone_results"] = zone_results_data
     else:
         response["judgment"] = None
-        response["zone_results"] = []
 
     return response
 
@@ -665,20 +569,22 @@ def build_inspection_response(
 
 
 @app.post("/inspect")
+@rate_limit("30/minute")  # Quick Win: DoS prevention
 async def inspect_image(
+    request: Request,
     file: UploadFile = File(...),
     sku: str = Form(...),
-    expected_zones: Optional[int] = Form(None),
+    ink: str = Form("INK_DEFAULT"),
     run_judgment: bool = Form(False),
     options: Optional[str] = Form(None),
-    use_2d_analysis: bool = Form(True),
 ):
     """
     Main inspection endpoint (refactored for clarity).
 
-    Handles file upload, validation, pipeline execution, 2D analysis,
-    visualization, and response generation.
+    Handles file upload, validation, pipeline execution, visualization,
+    and response generation.
     """
+    v7_payload = None
     # 1. Setup
     run_id = uuid.uuid4().hex[:8]
     run_dir = _safe_result_path(run_id)
@@ -687,13 +593,27 @@ async def inspect_image(
     # 2. File validation and save
     file_content, input_path, original_name = await validate_and_save_file(file, run_id, run_dir)
 
+    # Load image once for multiple uses
+    import cv2
+
+    img_bgr = cv2.imread(str(input_path))
+
+    # 2.5. Run V7 Engine API
+    from src.engine_v7.api import inspect_single
+
+    try:
+        if img_bgr is not None:
+            v7_payload = inspect_single(image_bgr=img_bgr, sku=sku, ink=ink, run_id=run_id)
+        else:
+            logger.warning("Failed to load image for V7 API")
+    except Exception as exc:
+        logger.warning("V7 API call failed; returning pipeline response only: %s", exc)
+
     # 3. Parse options
     enable_illumination_correction = parse_inspection_options(options)
 
     # 4. Load SKU config
     sku_config = load_sku_config(sku)
-    if expected_zones is not None:
-        sku_config.setdefault("params", {})["expected_zones"] = expected_zones
 
     # 5. Run pipeline
     pipeline = InspectionPipeline(sku_config, save_intermediates=True)
@@ -701,45 +621,42 @@ async def inspect_image(
         result = pipeline.process(
             str(input_path),
             sku,
+            ink=ink,
             save_dir=run_dir,
-            run_1d_judgment=not use_2d_analysis,
+            run_1d_judgment=True,
         )
     except PipelineError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Security: Log full error, but give generic message to client
+        logger.error(f"Pipeline processing failed: {e}")
+        raise HTTPException(status_code=400, detail="Image processing failed")
 
-    # 6. Run 2D zone analysis (optional)
-    debug_info_2d = None
+    # 6. Cache image for parameter recomputation
     image_id = None
-
-    if use_2d_analysis:
-        import cv2
-
-        img_bgr = cv2.imread(str(input_path))
-        lens_detection = getattr(result, "lens_detection", None)
-
-        if img_bgr is not None and lens_detection is not None:
-            # PHASE7: Cache image for parameter recomputation
-            image_id = str(uuid.uuid4())
-            async with cache_lock:
-                image_cache[image_id] = (img_bgr.copy(), time())
-                _evict_old_cache()
-            logger.info(f"Cached image with ID: {image_id}")
-
-            result_2d, debug_info_2d = run_2d_zone_analysis(img_bgr, lens_detection, sku_config, run_dir)
-            apply_2d_results_to_inspection(result, result_2d)
+    if img_bgr is not None:
+        global _cache_total_bytes
+        image_id = str(uuid.uuid4())
+        img_copy = img_bgr.copy()
+        async with cache_lock:
+            image_cache[image_id] = (img_copy, time())
+            _cache_total_bytes += _get_image_bytes(img_copy)
+            _evict_old_cache()
+        logger.info(
+            f"Cached image with ID: {image_id}, cache entries: {len(image_cache)}, "
+            f"cache MB: {_cache_total_bytes / 1024 / 1024:.1f}"
+        )
 
     # 7. Generate radial analysis data
     analysis_payload, lens_info = generate_radial_analysis(result, sku_config)
 
-    # 8. Run ring-sector 2D analysis (PHASE7)
-    ring_sector_data = run_ring_sector_analysis(result, enable_illumination_correction)
-    uniformity_data = getattr(result, "uniformity_analysis", None)
+    # 8. Ring-sector analysis removed (legacy dependency)
+    ring_sector_data = None
+    uniformity_data = None
 
     # 9. Create overlay visualization
-    overlay_path = create_overlay_visualization(result, run_dir)
+    overlay_path = None
 
     # 10. Save result JSON
-    output = save_result_json(result, debug_info_2d, use_2d_analysis, run_dir)
+    output = save_result_json(result, run_dir)
 
     # 10.5. Save to database history
     save_inspection_to_db(
@@ -751,10 +668,11 @@ async def inspect_image(
     )
 
     # 11. Build and return response
-    return build_inspection_response(
+    response = build_inspection_response(
         run_id=run_id,
         original_name=original_name,
         sku=sku,
+        ink=ink,
         overlay_path=overlay_path,
         analysis_payload=analysis_payload,
         lens_info=lens_info,
@@ -765,6 +683,11 @@ async def inspect_image(
         run_judgment=run_judgment,
         image_id=image_id,
     )
+    if v7_payload is not None:
+        from fastapi.encoders import jsonable_encoder
+
+        response["v7"] = jsonable_encoder(v7_payload)
+    return response
 
 
 # ================================
@@ -777,8 +700,6 @@ def validate_recompute_params(params: Dict[str, Any]) -> Dict[str, Any]:
     Validate and sanitize recomputation parameters.
 
     Allowed parameter groups:
-    - segmenter_config: detection_method, smoothing_window, min_gradient, min_delta_e,
-                       expected_zones, uniform_split_priority
     - profiler_config: num_samples, num_points, sample_percentile
     - corrector_config: method (gray_world, white_patch, auto, polynomial, gaussian)
     - sector_config: sector_count, ring_boundaries
@@ -790,13 +711,6 @@ def validate_recompute_params(params: Dict[str, Any]) -> Dict[str, Any]:
         HTTPException: If parameters are invalid
     """
     allowed_params = {
-        # Zone segmentation
-        "detection_method": ["gradient", "delta_e", "hybrid", "variable_width"],
-        "smoothing_window": (1, 100),  # (min, max)
-        "min_gradient": (0.0, 10.0),
-        "min_delta_e": (0.0, 20.0),
-        "expected_zones": (1, 20),
-        "uniform_split_priority": [True, False],
         # Radial profiling
         "num_samples": (100, 10000),
         "num_points": (50, 1000),
@@ -867,13 +781,6 @@ def apply_params_to_config(sku_config: dict, params: Dict[str, Any]) -> dict:
 
     # Map parameters to config structure
     param_mapping = {
-        # Zone segmentation
-        "detection_method": ("params", "detection_method"),
-        "smoothing_window": ("params", "smoothing_window"),
-        "min_gradient": ("params", "min_gradient"),
-        "min_delta_e": ("params", "min_delta_e"),
-        "expected_zones": ("params", "expected_zones"),
-        "uniform_split_priority": ("params", "uniform_split_priority"),
         # Radial profiling
         "num_samples": ("params", "num_samples"),
         "num_points": ("params", "num_points"),
@@ -895,7 +802,9 @@ def apply_params_to_config(sku_config: dict, params: Dict[str, Any]) -> dict:
 
 
 @app.post("/recompute")
+@rate_limit("60/minute")  # Quick Win: DoS prevention
 async def recompute_analysis(
+    request: Request,
     image_id: str = Form(...),
     sku: str = Form(...),
     params: Optional[str] = Form(None),
@@ -918,10 +827,6 @@ async def recompute_analysis(
 
     Example params:
         {
-            "detection_method": "variable_width",
-            "smoothing_window": 7,
-            "min_gradient": 0.8,
-            "expected_zones": 5,
             "correction_method": "auto"
         }
     """
@@ -936,7 +841,10 @@ async def recompute_analysis(
             )
         img_bgr, cached_at = entry
         if time() - cached_at > IMAGE_CACHE_TTL_SEC:
-            image_cache.pop(image_id, None)
+            global _cache_total_bytes
+            removed_entry = image_cache.pop(image_id, None)
+            if removed_entry:
+                _cache_total_bytes -= _get_image_bytes(removed_entry[0])
             raise HTTPException(
                 status_code=404,
                 detail=f"Image ID expired: {image_id}. Please re-upload the image.",
@@ -980,38 +888,32 @@ async def recompute_analysis(
             str(temp_image_path),
             sku,
             save_dir=run_dir,
-            run_1d_judgment=False,
+            run_1d_judgment=True,
         )
     except PipelineError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Security: Log full error, but give generic message to client
+        logger.error(f"Pipeline recompute failed: {e}")
+        raise HTTPException(status_code=400, detail="Image reprocessing failed")
 
-    # 6. Run 2D zone analysis
-    debug_info_2d = None
-    lens_detection = getattr(result, "lens_detection", None)
-
-    if lens_detection is not None:
-        result_2d, debug_info_2d = run_2d_zone_analysis(img_bgr, lens_detection, sku_config, run_dir)
-        apply_2d_results_to_inspection(result, result_2d)
-
-    # 7. Generate radial analysis data
+    # 6. Generate radial analysis data
     analysis_payload, lens_info = generate_radial_analysis(result, sku_config)
 
-    # 8. Run ring-sector 2D analysis
-    enable_illumination_correction = param_overrides.get("correction_method") not in [None, "none"]
-    ring_sector_data = run_ring_sector_analysis(result, enable_illumination_correction)
-    uniformity_data = getattr(result, "uniformity_analysis", None)
+    # 7. Ring-sector analysis removed (legacy dependency)
+    ring_sector_data = None
+    uniformity_data = None
 
-    # 9. Create overlay visualization
-    overlay_path = create_overlay_visualization(result, run_dir)
+    # 8. Create overlay visualization
+    overlay_path = None
 
-    # 10. Save result JSON
-    output = save_result_json(result, debug_info_2d, True, run_dir)
+    # 9. Save result JSON
+    output = save_result_json(result, run_dir)
 
-    # 11. Build and return response (same format as /inspect)
+    # 10. Build and return response (same format as /inspect)
     response = build_inspection_response(
         run_id=run_id,
         original_name=f"recompute_{image_id}",
         sku=sku,
+        ink="INK_DEFAULT",
         overlay_path=overlay_path,
         analysis_payload=analysis_payload,
         lens_info=lens_info,
@@ -1028,11 +930,12 @@ async def recompute_analysis(
 
 
 @app.post("/batch")
+@rate_limit("10/minute")  # Quick Win: DoS prevention (heavy operation)
 async def batch_inspect(
+    request: Request,
     sku: str = Form(...),
     batch_dir: Optional[str] = Form(None),
     batch_zip: Optional[UploadFile] = File(None),
-    expected_zones: Optional[int] = Form(None),
 ):
     """
     배치 검사: 서버 경로 또는 ZIP 업로드 중 하나를 선택.
@@ -1048,10 +951,18 @@ async def batch_inspect(
 
     image_paths = []
     if batch_dir:
-        image_paths = list(Path(batch_dir).glob("*.jpg"))
+        safe_dir = _safe_batch_dir(batch_dir)
+        image_paths = list(safe_dir.glob("*.jpg"))
     elif batch_zip:
         # ZIP 업로드를 inputs 폴더에 저장 후 해제
-        zip_path = input_dir / batch_zip.filename
+        from src.utils.security import sanitize_filename
+
+        upload_size = _get_upload_size(batch_zip)
+        if upload_size is not None and upload_size > BATCH_ZIP_MAX_SIZE_MB * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="ZIP file too large")
+
+        zip_name = sanitize_filename(batch_zip.filename or "batch.zip")
+        zip_path = input_dir / zip_name
         with zip_path.open("wb") as f:
             shutil.copyfileobj(batch_zip.file, f)
         _safe_extract_zip(zip_path, input_dir)
@@ -1061,8 +972,6 @@ async def batch_inspect(
         raise HTTPException(status_code=404, detail="No jpg images found for batch processing")
 
     sku_config = load_sku_config(sku)
-    if expected_zones is not None:
-        sku_config.setdefault("params", {})["expected_zones"] = expected_zones
 
     pipeline = InspectionPipeline(sku_config)
     output_csv = run_dir / "batch.csv"
@@ -1104,7 +1013,9 @@ async def get_result_file(run_id: str, filename: str):
 
 
 @app.post("/inspect_v2")
+@rate_limit("30/minute")  # Quick Win: DoS prevention
 async def inspect_v2(
+    request: Request,
     file: UploadFile = File(...),
     sku: str = Form(...),
     smoothing_window: int = Form(5),
@@ -1148,84 +1059,16 @@ async def inspect_v2(
             image_path=str(input_path),
             sku=sku,
             save_dir=run_dir,
-            run_1d_judgment=False,
+            run_1d_judgment=True,
         )
 
         logger.info(f"[INSPECT_V2] Pipeline completed: {inspection_result.judgment}")
-
-        # 2D zone analysis 실행 (기존 /inspect와 동일)
-        logger.info("[INSPECT_V2] Running 2D zone analysis...")
-        import cv2
-
-        from src.core.zone_analyzer_2d import InkMaskConfig, analyze_lens_zones_2d
-
-        # 이미지 로드
-        img_bgr = cv2.imread(str(input_path))
-        if img_bgr is None:
-            raise ValueError(f"Failed to load image: {input_path}")
-
-        # lens_detection 확인
-        lens_detection = getattr(inspection_result, "lens_detection", None)
-        if lens_detection is None:
-            raise ValueError("lens_detection not found in pipeline result")
-
-        params = sku_config.get("params", {})
-        debug_save_on = params.get("debug_save_on_2d")
-        if not debug_save_on:
-            debug_save_on = ["retake", "low_confidence"]
-        elif isinstance(debug_save_on, str):
-            debug_save_on = [debug_save_on]
-        debug_low_confidence = float(params.get("debug_low_confidence_threshold", 0.75))
-        std_ref_image, std_ref_lens = _load_std_reference(sku_config)
-
-        # 2D 분석 실행
-        result_2d, debug_info_2d = analyze_lens_zones_2d(
-            img_bgr=img_bgr,
-            lens_detection=lens_detection,
-            sku_config=sku_config,
-            ink_mask_config=InkMaskConfig(),
-            std_ref_image=std_ref_image,
-            std_ref_lens=std_ref_lens,
-            save_debug=False,
-            save_debug_on=debug_save_on,
-            debug_low_confidence=debug_low_confidence,
-            debug_prefix=str(run_dir / "debug_2d"),
-        )
-
-        # Zone 결과를 2D로 교체 (기존 /inspect와 동일)
-        inspection_result.judgment = result_2d.judgment
-        inspection_result.overall_delta_e = result_2d.overall_delta_e
-        inspection_result.zone_results = result_2d.zone_results
-        inspection_result.ng_reasons = result_2d.ng_reasons
-        inspection_result.confidence = result_2d.confidence
-
-        # 운영 UX 필드들도 복사 (P1 + Step 1 + 잉크 분석)
-        inspection_result.decision_trace = result_2d.decision_trace
-        inspection_result.next_actions = result_2d.next_actions
-        inspection_result.retake_reasons = result_2d.retake_reasons
-        inspection_result.analysis_summary = result_2d.analysis_summary
-        inspection_result.confidence_breakdown = result_2d.confidence_breakdown
-        inspection_result.risk_factors = result_2d.risk_factors
-        inspection_result.ink_analysis = result_2d.ink_analysis  # 잉크 정보!
-
-        logger.info(f"[INSPECT_V2] 2D analysis completed: {inspection_result.judgment}")
 
         # 3. Judgment 데이터 추출 (2D 결과 사용, 운영 UX 개선)
         judgment_result = {
             "result": inspection_result.judgment,
             "overall_delta_e": float(inspection_result.overall_delta_e),
             "confidence": float(inspection_result.confidence) if hasattr(inspection_result, "confidence") else 1.0,
-            "zones": [
-                {
-                    "name": z.zone_name,
-                    "delta_e": float(z.delta_e),
-                    "threshold": float(z.threshold) if hasattr(z, "threshold") else 0.0,
-                    "is_ok": z.is_ok,
-                    # Diff 정보 추가 (운영 UX): 색상 변화 방향
-                    "diff": z.diff,
-                }
-                for z in inspection_result.zone_results
-            ],
             # 운영 UX: decision_trace, next_actions, retake_reasons 승격
             "decision_trace": (
                 inspection_result.decision_trace if hasattr(inspection_result, "decision_trace") else None
@@ -1254,31 +1097,20 @@ async def inspect_v2(
         if rp is None:
             raise ValueError("Radial profile not available in inspection result")
 
-        # zones_config는 현재 사용하지 않지만 인터페이스 호환성을 위해 None 전달 가능
         # analyze_radial_profile 내부에서 v7 analyze_profile 호출
-        # smoothing_window, gradient_threshold는 현재 서비스 메서드에서 하드코딩 되어 있으나,
-        # 필요하다면 AnalysisService를 확장하여 인자로 받도록 수정 가능.
-        # 여기서는 기본값 사용.
         analysis_result = analysis_service.analyze_radial_profile(
             profile=rp,
-            lens_radius=float(inspection_result.lens_detection.radius),
+            lens_radius=float(inspection_result.lens_detection.r),
         )
 
         # 5. lens_info 추가 (overlay용)
         ld = inspection_result.lens_detection
         analysis_result["lens_info"] = {
-            "center_x": float(ld.center_x),
-            "center_y": float(ld.center_y),
-            "radius_px": float(ld.radius),
+            "center_x": float(ld.cx),
+            "center_y": float(ld.cy),
+            "radius_px": float(ld.r),
             "confidence": float(ld.confidence),
         }
-
-        # 6. debug 정보 추가 (2D zone analysis 디버그)
-        if debug_info_2d is not None:
-            analysis_result["debug"] = debug_info_2d
-            logger.info(f"[INSPECT_V2] Added debug info: {list(debug_info_2d.keys())}")
-        else:
-            logger.warning("[INSPECT_V2] No debug_info_2d available")
 
         # 7. 응답 반환
         return {
@@ -1291,7 +1123,8 @@ async def inspect_v2(
 
     except Exception as e:
         logger.error(f"Analysis failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Security: Don't expose internal error details to client
+        raise HTTPException(status_code=500, detail="Analysis failed")
 
 
 # ================================
@@ -1389,12 +1222,3 @@ def _detect_outliers(test_results: list, threshold: float = 2.0) -> list:
             outliers.append(t["filename"])
 
     return outliers
-
-
-def _resolve_ink_mapping(sku_config: dict, zone_names: list[str]) -> dict[str, str]:
-    mapping = sku_config.get("params", {}).get("ink_mapping") or sku_config.get("ink_mapping") or {}
-    if not mapping:
-        return {name: "ink1" for name in zone_names}
-
-    normalized = {str(k).upper(): str(v) for k, v in mapping.items()}
-    return {name: normalized.get(name.upper(), "ink1") for name in zone_names}

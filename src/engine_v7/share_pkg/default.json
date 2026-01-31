@@ -1,0 +1,149 @@
+{
+  "polar": {
+    "R": 260,
+    "T": 720
+  },
+  "gate": {
+    "center_off_max": 0.12,
+    "blur_min": 40.0,
+    "illum_max": 0.1,
+    "diagnostic_on_fail": true
+  },
+  "signature": {
+    "r_start": 0.1,
+    "r_end": 0.95,
+    "corr_min": 0.92,
+    "de_mean_max": 10.0,
+    "de_p95_max": 18.0,
+    "use_band_model": true,
+    "band_k": 2.5,
+    "fail_ratio_max": 0.08,
+    "use_weighted_segments": true,
+    "segments": [
+      {
+        "name": "inner",
+        "start": 0.0,
+        "end": 0.33,
+        "weight": 1.2
+      },
+      {
+        "name": "mid",
+        "start": 0.33,
+        "end": 0.66,
+        "weight": 1.0
+      },
+      {
+        "name": "outer",
+        "start": 0.66,
+        "end": 1.0,
+        "weight": 1.4
+      }
+    ],
+    "segment_fail_ratio_max": 0.18,
+    "use_segment_k": true,
+    "segment_k": {
+      "inner": 2.8,
+      "mid": 2.5,
+      "outer": 2.8
+    }
+  },
+  "anomaly": {
+    "r_start": 0.15,
+    "r_end": 0.95,
+    "angular_unif_max": 0.18,
+    "center_frac": 0.28,
+    "center_blob_max": 1,
+    "center_blob_min_area": 25,
+    "enable_heatmap": true,
+    "heatmap_downsample_T": 180,
+    "heatmap_downsample_R": 130
+  },
+  "registration": {
+    "order_check_enabled": false,
+    "order_metric": "L_mean",
+    "order_direction": "asc",
+    "sep_threshold": 1.0,
+    "max_within_std": null
+  },
+  "mode_stability": {
+    "enabled": true,
+    "window": 10,
+    "emit_shift_flag": true
+  },
+  "white_balance": {
+    "enabled": true,
+    "optical_zone_ratio": 0.3,
+    "p_low": 50.0,
+    "p_high": 99.0
+  },
+  "plate": {
+    "norm_size": 512,
+    "r_bg": 0.35,
+    "r_clear_guard": 0.43,
+    "r_exclude_outer": 0.92,
+    "outer_shadow_ratio": 0.92,
+    "outer_shadow_percentile": 10.0,
+    "registration_min_score": 0.15,
+    "registration_ecc_enabled": true,
+    "registration_ecc_warp": "euclidean",
+    "registration_ecc_max_iter": 50,
+    "registration_ecc_eps": 1e-5,
+    "registration_ecc_min_cc": 0.1,
+    "registration_ecc_min_apply_cc": 0.2,
+    "registration_ecc_use_grad": false,
+    "registration_ecc_use_mask": true,
+    "registration_ecc_mask_r0": 0.25,
+    "registration_ecc_mask_r1": 0.98,
+    "registration_orb_enabled": true,
+    "registration_orb_max_features": 2000,
+    "registration_orb_min_inlier_ratio": 0.2,
+    "registration_orb_edge_threshold": 15,
+    "registration_orb_patch_size": 31,
+    "registration_orb_fast_threshold": 10,
+    "registration_max_dy_px": 4.0,
+    "alpha_clear_th": 0.08,
+    "alpha_print_th": 0.25,
+    "alpha_print_th_mode": "stats",
+    "alpha_stats_k": 2.5,
+    "alpha_stats_floor": 0.2,
+    "alpha_otsu_min": 0.1,
+    "alpha_otsu_max": 0.6,
+    "alpha_otsu_floor": 0.3,
+    "alpha_otsu_fallback": 0.25,
+    "alpha_print_th_core": 0.40,
+    "alpha_mask_blur_ksize": 3,
+    "alpha_print_percentile": 30.0,
+    "alpha_percentile_floor": 0.2,
+    "alpha_percentile_use_full": true,
+    "alpha_ring_percentile": null,
+    "alpha_dot_th": 0.2,
+    "alpha_dot_percentile": null,
+    "alpha_print_transition_th": 0.25,
+    "alpha_print_core_th": 0.35,
+    "clear_l_th": 80.0,
+    "alpha_clip": [
+      0.02,
+      0.98
+    ],
+    "spatial_bg_enabled": true,
+    "spatial_bg_r_outer": 0.98,
+    "spatial_bg_stride": 4,
+    "r_clear": 0.4,
+    "r_outer_bg": 0.98,
+    "wb_outer_min_delta": 5.0,
+    "wb_outer_action": "swap",
+    "wb_diff_min": 3.0,
+    "wb_denom_min": 30.0,
+    "r_ring0": 0.7,
+    "r_ring1": 0.95,
+    "alpha_ring_th": 0.45,
+    "ring_morph_ksize": 7,
+    "ink_core_erode_px": 2,
+    "ink_block_size": 4,
+    "ink_dist_weight": 1.0,
+    "ink_bg_white_l_max": 98.0,
+    "ink_bg_black_l_min": 5.0,
+    "valid_erode_px": 2,
+    "ink_cluster_min_dist": 4.0
+  }
+}

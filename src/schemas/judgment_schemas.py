@@ -90,7 +90,6 @@ class ConfidenceScore(BaseModel):
 
     # Confidence factors (all 0-100)
     lens_detection_confidence: float = Field(..., description="Lens detection quality", ge=0.0, le=100.0)
-    zone_segmentation_confidence: float = Field(..., description="Zone segmentation quality", ge=0.0, le=100.0)
     alignment_confidence: float = Field(..., description="Alignment quality", ge=0.0, le=100.0)
     data_completeness: float = Field(..., description="Data completeness (zones, profile, etc.)", ge=0.0, le=100.0)
 
@@ -102,7 +101,6 @@ class ConfidenceScore(BaseModel):
             "example": {
                 "confidence": 92.0,
                 "lens_detection_confidence": 98.0,
-                "zone_segmentation_confidence": 90.0,
                 "alignment_confidence": 95.0,
                 "data_completeness": 85.0,
                 "recommendation": "HIGH",

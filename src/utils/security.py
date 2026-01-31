@@ -133,3 +133,44 @@ def validate_file_size(file_size: int, max_size_mb: int = 10) -> bool:
     """
     max_size_bytes = max_size_mb * 1024 * 1024
     return file_size <= max_size_bytes
+
+
+def sanitize_filename(filename: str) -> str:
+    """
+    파일명 안전화 (Path traversal 방지)
+
+    디렉토리 경로 제거, 위험 문자 치환, 빈 이름 처리
+
+    Args:
+        filename: 원본 파일명 (경로 포함 가능)
+
+    Returns:
+        안전한 파일명 (basename만, 영숫자/._- 만 허용)
+
+    Example:
+        >>> sanitize_filename("../../../etc/passwd")
+        'etc_passwd'
+        >>> sanitize_filename("image (1).jpg")
+        'image__1_.jpg'
+        >>> sanitize_filename("")
+        'unnamed'
+    """
+    # 1. Extract basename only (remove directory path)
+    safe_name = Path(filename).name
+
+    # 2. Replace unsafe characters with underscore
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", safe_name)
+
+    # 3. Remove leading dots (hidden files / path tricks)
+    safe_name = safe_name.lstrip(".")
+
+    # 4. Ensure not empty
+    if not safe_name:
+        safe_name = "unnamed"
+
+    # 5. Limit length (filesystem safety)
+    if len(safe_name) > 200:
+        ext = Path(safe_name).suffix
+        safe_name = safe_name[: 200 - len(ext)] + ext
+
+    return safe_name
