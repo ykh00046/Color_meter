@@ -60,11 +60,24 @@ def _masked_rgb_stat(
     *,
     stat: str = "mean",
     trim_frac: float = 0.0,
+    exclude_saturated: bool = True,
 ) -> np.ndarray | None:
-    """Compute masked RGB statistic for robustness against highlights/speckles."""
+    """Compute masked RGB statistic for robustness against highlights/speckles.
+
+    When exclude_saturated=True, pixels with any channel at 0 or 255
+    (sensor saturation) are removed before computing the statistic.
+    """
     if mask is None or mask.sum() == 0:
         return None
     rgb_vals = polar_bgr[mask][:, ::-1].astype(np.float32)  # (N,3) RGB
+
+    # Exclude fully saturated / fully black pixels (sensor clipping)
+    if exclude_saturated and rgb_vals.shape[0] > 0:
+        not_saturated = ~np.any((rgb_vals <= 0.5) | (rgb_vals >= 254.5), axis=1)
+        if not_saturated.sum() >= max(10, rgb_vals.shape[0] // 10):
+            rgb_vals = rgb_vals[not_saturated]
+        # else: too few non-saturated → keep all (trim_frac will still help)
+
     stat = str(stat or "mean").lower()
 
     if stat == "median":
@@ -144,9 +157,9 @@ def compute_intrinsic_colors(
     ref_black = intrinsic_cfg.get("ref_black_srgb")
     gamma = float(intrinsic_cfg.get("gamma", 2.2))
     outer_frac = float(intrinsic_cfg.get("outer_bg_frac", 0.95))
-    transfer = str(intrinsic_cfg.get("transfer", "gamma"))
-    obs_stat = str(intrinsic_cfg.get("obs_stat", "mean"))
-    obs_trim_frac = float(intrinsic_cfg.get("obs_trim_frac", 0.0))
+    transfer = str(intrinsic_cfg.get("transfer", "srgb_eotf"))
+    obs_stat = str(intrinsic_cfg.get("obs_stat", "trimmed_mean"))
+    obs_trim_frac = float(intrinsic_cfg.get("obs_trim_frac", 0.15))
     bg_stat = str(intrinsic_cfg.get("bg_stat", "median"))
     bg_pct_lo = float(intrinsic_cfg.get("bg_pct_lo", 0.0))
     bg_pct_hi = float(intrinsic_cfg.get("bg_pct_hi", 100.0))
@@ -227,17 +240,33 @@ def compute_intrinsic_colors(
         ):
             mask_for_intrinsic = color_masks[preferred_color_id]
         if min_white_brightness is not None:
+            mwb = float(min_white_brightness)
             bright = (
-                white_brightness_map >= float(min_white_brightness)
+                white_brightness_map >= mwb
                 if white_brightness_map is not None
-                else (polar_white_bgr.astype(np.float32).mean(axis=2) >= float(min_white_brightness))
+                else (polar_white_bgr.astype(np.float32).mean(axis=2) >= mwb)
             )
             filtered = mask & bright
             min_keep = max(10, int(mask.sum() * min_bright_keep_ratio))
             if filtered.sum() >= min_keep:
                 mask_for_intrinsic = filtered
             else:
-                warnings.append("INTRINSIC_BRIGHTNESS_FILTER_EMPTY_FALLBACK")
+                # Stepwise fallback: relax threshold to 70%, then 50%
+                applied_relaxed = False
+                for relax_factor, relax_label in [(0.7, "RELAXED_70pct"), (0.5, "RELAXED_50pct")]:
+                    bright_relaxed = (
+                        white_brightness_map >= mwb * relax_factor
+                        if white_brightness_map is not None
+                        else (polar_white_bgr.astype(np.float32).mean(axis=2) >= mwb * relax_factor)
+                    )
+                    filtered_relaxed = mask & bright_relaxed
+                    if filtered_relaxed.sum() >= min_keep:
+                        mask_for_intrinsic = filtered_relaxed
+                        warnings.append(f"INTRINSIC_BRIGHTNESS_FILTER_{relax_label}")
+                        applied_relaxed = True
+                        break
+                if not applied_relaxed:
+                    warnings.append("INTRINSIC_BRIGHTNESS_FILTER_EMPTY_FALLBACK")
 
         obs_w_rgb = _masked_rgb_stat(polar_white_bgr, mask_for_intrinsic, stat=obs_stat, trim_frac=obs_trim_frac)
         obs_b_rgb = _masked_rgb_stat(polar_black_bgr, mask_for_intrinsic, stat=obs_stat, trim_frac=obs_trim_frac)

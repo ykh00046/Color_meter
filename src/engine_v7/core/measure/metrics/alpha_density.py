@@ -39,6 +39,7 @@ class AlphaFallbackLevel(Enum):
 
     L1_RADIAL = "L1_radial"  # alpha_i(r) - per-cluster radial profile
     L2_ZONE = "L2_zone"  # alpha_zone_i - per-cluster zone averages
+    L2_PLATE_LITE = "L2_plate_lite"  # plate_lite per-ink alpha (between L2 and L3)
     L3_GLOBAL = "L3_global"  # alpha_global or default 1.0
 
 
@@ -131,6 +132,28 @@ DEFAULT_ALPHA_CONFIG = {
     "transition_boundary_weight": 0.5,
     "transition_boundary_width": 3,
     "transition_config": None,
+    # ── Clip-exclusion (Priority 3) ──
+    "clip_exclude_enabled": True,  # Exclude clipped pixels from alpha stats
+    # ── Quality gate (valid-pixel based) ──
+    # "quality_fail": {
+    #     "valid_ratio_min": 0.35,    # min valid pixel ratio after clip exclusion
+    #     "valid_pixels_min": 30000,  # min valid pixel count
+    #     "nan_ratio": 0.10,          # max NaN ratio among non-clipped pixels
+    #     "moire_severity": 0.20,     # max moire severity
+    # },
+    # ── Small-cluster early-exit (Priority 2) ──
+    "min_pixels_for_l1": 20000,  # Skip L1 if mask has fewer pixels
+    # ── plate_lite fallback (Priority 1) ──
+    # Hierarchy: L1 > L2 > L2_plate_lite > L3
+    # plate_lite alpha is used ONLY when L1 and L2 both fail
+    "plate_lite_clamp_min": 0.05,  # Safety clamp lower bound
+    "plate_lite_clamp_max": 0.98,  # Safety clamp upper bound
+    # Runtime keys (injected by pipeline, not user-configurable):
+    # "_plate_lite_alpha_candidates": {color_id: alpha_mean, ...}
+    # "_plate_lite_inks": [{alpha_mean, area_ratio, ink_key}, ...]
+    # "_moire_severity": float
+    # "_verification_enabled": bool
+    # "_verification_agreement": float
 }
 
 
@@ -458,6 +481,10 @@ def apply_alpha_fallback(
     confidence_threshold_l2: float = 0.4,
     min_valid_bins_ratio: float = 0.5,
     lerp_blend: bool = True,
+    plate_lite_alpha: Optional[float] = None,
+    plate_lite_clamp: Tuple[float, float] = (0.05, 0.98),
+    min_pixels_for_l1: int = 0,
+    mask_pixel_count: int = 0,
 ) -> Tuple[float, AlphaFallbackLevel, Optional[str]]:
     """
     Apply 3-tier fallback to get final alpha value.
@@ -465,6 +492,7 @@ def apply_alpha_fallback(
     Fallback hierarchy:
     - L1: Use radial profile mean if quality >= threshold
     - L2: Use zone-weighted average if zone confidence >= threshold
+    - L2.5: Use plate_lite per-ink alpha if available (between L2 and L3)
     - L3: Use global alpha (or default 1.0)
 
     When lerp_blend is True, values are blended based on confidence:
@@ -478,51 +506,81 @@ def apply_alpha_fallback(
         confidence_threshold_l2: Min confidence for L2
         min_valid_bins_ratio: Min ratio of valid bins for L1
         lerp_blend: Enable confidence-weighted blending
+        plate_lite_alpha: Optional plate_lite per-ink alpha_mean (L2.5 fallback)
+        plate_lite_clamp: Clamp range for plate_lite alpha (safety)
+        min_pixels_for_l1: Skip L1 evaluation if mask has fewer pixels
+        mask_pixel_count: Actual pixel count in the cluster mask
 
     Returns:
         (alpha_value, fallback_level, fallback_reason)
     """
-    # Try L1: Radial profile
-    if (
-        radial_profile.quality >= min_valid_bins_ratio
-        and np.nanmean(radial_profile.confidence) >= confidence_threshold_l1
-    ):
+    # Priority 2: Skip L1 for very small clusters (pixel-starved)
+    l1_skipped_reason = None
+    if min_pixels_for_l1 > 0 and 0 < mask_pixel_count < min_pixels_for_l1:
+        l1_skipped_reason = f"pixels={mask_pixel_count}<min={min_pixels_for_l1}"
+    else:
+        # Try L1: Radial profile
+        if (
+            radial_profile.quality >= min_valid_bins_ratio
+            and np.nanmean(radial_profile.confidence) >= confidence_threshold_l1
+        ):
+            # Weighted mean of radial profile
+            valid_mask = ~np.isnan(radial_profile.alpha_values)
+            if np.any(valid_mask):
+                weights = radial_profile.confidence[valid_mask]
+                values = radial_profile.alpha_values[valid_mask]
 
-        # Weighted mean of radial profile
-        valid_mask = ~np.isnan(radial_profile.alpha_values)
-        if np.any(valid_mask):
-            weights = radial_profile.confidence[valid_mask]
-            values = radial_profile.alpha_values[valid_mask]
+                if weights.sum() > 0:
+                    alpha_l1 = float(np.average(values, weights=weights))
 
-            if weights.sum() > 0:
-                alpha_l1 = float(np.average(values, weights=weights))
+                    if lerp_blend:
+                        # Blend with L2 based on L1 confidence
+                        l1_conf = radial_profile.quality
+                        l2_alpha = _compute_zone_weighted_alpha(zone_profile)
+                        alpha_final = alpha_l1 * l1_conf + l2_alpha * (1 - l1_conf)
+                    else:
+                        alpha_final = alpha_l1
 
-                if lerp_blend:
-                    # Blend with L2 based on L1 confidence
-                    l1_conf = radial_profile.quality
-                    l2_alpha = _compute_zone_weighted_alpha(zone_profile)
-                    alpha_final = alpha_l1 * l1_conf + l2_alpha * (1 - l1_conf)
-                else:
-                    alpha_final = alpha_l1
+                    return alpha_final, AlphaFallbackLevel.L1_RADIAL, None
 
-                return alpha_final, AlphaFallbackLevel.L1_RADIAL, None
+        l1_skipped_reason = f"L1_quality={radial_profile.quality:.2f}<{min_valid_bins_ratio}"
 
-    # Try L2: Zone profile
-    zone_conf = (zone_profile.inner_conf + zone_profile.mid_conf + zone_profile.outer_conf) / 3
-    if zone_conf >= confidence_threshold_l2:
+    # Try L2: Zone profile — use weighted confidence of zones that have data
+    zone_confs = []
+    zone_vals = []
+    for zv, zc in [
+        (zone_profile.inner, zone_profile.inner_conf),
+        (zone_profile.mid, zone_profile.mid_conf),
+        (zone_profile.outer, zone_profile.outer_conf),
+    ]:
+        if zc > 0:
+            zone_confs.append(zc)
+            zone_vals.append(zv)
+
+    if zone_confs:
+        zone_conf_effective = float(np.mean(zone_confs))
+    else:
+        zone_conf_effective = 0.0
+
+    if zone_conf_effective >= confidence_threshold_l2:
         alpha_l2 = _compute_zone_weighted_alpha(zone_profile)
 
         if lerp_blend:
             # Blend with L3 based on L2 confidence
-            alpha_final = alpha_l2 * zone_conf + global_alpha * (1 - zone_conf)
+            alpha_final = alpha_l2 * zone_conf_effective + global_alpha * (1 - zone_conf_effective)
         else:
             alpha_final = alpha_l2
 
-        reason = f"L1_quality={radial_profile.quality:.2f}<{min_valid_bins_ratio}"
-        return alpha_final, AlphaFallbackLevel.L2_ZONE, reason
+        return alpha_final, AlphaFallbackLevel.L2_ZONE, l1_skipped_reason
+
+    # Try L2.5: plate_lite per-ink alpha (if available)
+    if plate_lite_alpha is not None:
+        clamped = float(np.clip(plate_lite_alpha, plate_lite_clamp[0], plate_lite_clamp[1]))
+        reason = f"{l1_skipped_reason}; L2_zone_conf={zone_conf_effective:.2f}<{confidence_threshold_l2}"
+        return clamped, AlphaFallbackLevel.L2_PLATE_LITE, reason
 
     # L3: Global fallback
-    reason = f"L2_conf={zone_conf:.2f}<{confidence_threshold_l2}"
+    reason = f"{l1_skipped_reason}; L2_conf={zone_conf_effective:.2f}<{confidence_threshold_l2}"
     return global_alpha, AlphaFallbackLevel.L3_GLOBAL, reason
 
 
@@ -600,80 +658,108 @@ def compute_effective_density(
 
     T, R = polar_alpha.shape
 
-    # P2-2: Separate quality_fail thresholds from clip parameters
-    # clip_min/max: computation stabilization (always applied)
-    # quality_fail: L1/L2 禁止 판단 (별도 임계값)
-    #
-    # Config structure (supports both flat and nested):
-    #   {
-    #     "alpha_clip_min": 0.02,          # Flat (legacy)
-    #     "alpha_clip_max": 0.98,
-    #     "quality_fail": {                 # Nested (P2-2)
-    #       "nan_ratio": 0.10,
-    #       "clip_ratio": 0.30,
-    #       "moire_severity": 0.20
-    #     }
-    #   }
+    # ── Quality Gate: valid-pixel based policy ──────────────────────────
+    # 1. Build valid-pixel mask (exclude NaN + clipped at boundaries)
+    # 2. Gate on valid_ratio / valid_count / nan_ratio (NOT raw clip_ratio)
+    # 3. clip_ratio is kept for diagnostics only
     alpha_clip_min = config.get("alpha_clip_min", 0.02)
     alpha_clip_max = config.get("alpha_clip_max", 0.98)
-
-    # P2-2: Get quality_fail thresholds (nested or flat for backward compat)
-    quality_fail_cfg = config.get("quality_fail", {})
-    qf_nan_threshold = quality_fail_cfg.get("nan_ratio", config.get("quality_gate_nan_threshold", 0.10))
-    qf_clip_threshold = quality_fail_cfg.get("clip_ratio", config.get("quality_gate_clip_threshold", 0.30))
-    qf_moire_threshold = quality_fail_cfg.get("moire_severity", 0.20)
 
     total_pixels = T * R
     nan_count = int(np.sum(np.isnan(polar_alpha)))
     nan_ratio = nan_count / total_pixels if total_pixels > 0 else 0.0
 
-    # Count clipped pixels (at min or max boundary)
+    # Count clipped pixels (diagnostic)
     clip_at_min = int(np.sum(polar_alpha <= alpha_clip_min + 0.001))
     clip_at_max = int(np.sum(polar_alpha >= alpha_clip_max - 0.001))
     clip_count = clip_at_min + clip_at_max
-    clip_ratio = clip_count / total_pixels if total_pixels > 0 else 0.0
+    clip_ratio_raw = clip_count / total_pixels if total_pixels > 0 else 0.0
 
-    # P2-2: Moire severity from metadata if available (passed from registration-less)
+    # Valid pixels after excluding NaN + clipped
+    valid_after_clip = (
+        ~np.isnan(polar_alpha) & (polar_alpha > alpha_clip_min + 0.001) & (polar_alpha < alpha_clip_max - 0.001)
+    )
+    valid_pixels_after_clip = int(valid_after_clip.sum())
+    valid_ratio_after_clip = valid_pixels_after_clip / total_pixels if total_pixels > 0 else 0.0
+
+    # NaN ratio among non-clipped pixels (stricter)
+    non_clip = total_pixels - clip_count
+    nan_ratio_after_clip = nan_count / non_clip if non_clip > 0 else nan_ratio
+
+    # Moire severity from registration-less alpha (if available)
     moire_severity = float(config.get("_moire_severity", 0.0))
 
-    # P2-2: Quality fail checks (separate from clip computation)
+    # Quality gate thresholds (valid-pixel based)
+    quality_fail_cfg = config.get("quality_fail", {})
+    qf_valid_ratio_min = float(quality_fail_cfg.get("valid_ratio_min", 0.35))
+    qf_valid_pixels_min = int(quality_fail_cfg.get("valid_pixels_min", 30000))
+    qf_nan_threshold = float(quality_fail_cfg.get("nan_ratio", config.get("quality_gate_nan_threshold", 0.10)))
+    qf_moire_threshold = float(quality_fail_cfg.get("moire_severity", 0.20))
+
     quality_fail_reasons = []
-    if nan_ratio > qf_nan_threshold:
-        quality_fail_reasons.append(f"nan_ratio={nan_ratio:.1%}>{qf_nan_threshold:.0%}")
-    if clip_ratio > qf_clip_threshold:
-        quality_fail_reasons.append(f"clip_ratio={clip_ratio:.1%}>{qf_clip_threshold:.0%}")
+    if valid_ratio_after_clip < qf_valid_ratio_min:
+        quality_fail_reasons.append(f"valid_ratio={valid_ratio_after_clip:.1%}<{qf_valid_ratio_min:.0%}")
+    if valid_pixels_after_clip < qf_valid_pixels_min:
+        quality_fail_reasons.append(f"valid_pixels={valid_pixels_after_clip}<{qf_valid_pixels_min}")
+    if nan_ratio_after_clip > qf_nan_threshold:
+        quality_fail_reasons.append(f"nan_ratio={nan_ratio_after_clip:.1%}>{qf_nan_threshold:.0%}")
     if moire_severity > qf_moire_threshold:
         quality_fail_reasons.append(f"moire={moire_severity:.2f}>{qf_moire_threshold:.2f}")
 
+    # plate_lite availability can soften the gate
+    has_plate_lite = bool(config.get("_plate_lite_alpha_candidates") or config.get("_plate_lite_inks"))
+
     alpha_quality_failed = len(quality_fail_reasons) > 0
 
-    if alpha_quality_failed:
-        reason = "alpha_quality_fail: " + ", ".join(quality_fail_reasons)
+    # Debug diagnostics (always emitted for tuning)
+    _quality_gate_debug = {
+        "clip_ratio_raw": round(clip_ratio_raw, 4),
+        "clip_at_min": clip_at_min,
+        "clip_at_max": clip_at_max,
+        "valid_ratio_after_clip": round(valid_ratio_after_clip, 4),
+        "valid_pixels_after_clip": valid_pixels_after_clip,
+        "nan_ratio_after_clip": round(nan_ratio_after_clip, 4),
+        "moire_severity": round(moire_severity, 4),
+        "has_plate_lite": has_plate_lite,
+        "gate_passed": not alpha_quality_failed or has_plate_lite,
+    }
 
-        warnings.append(
-            f"ALPHA_QUALITY_GATE_FAILED nan={nan_ratio:.1%} clip={clip_ratio:.1%} moire={moire_severity:.2f}"
-        )
-        # Return area_ratio as effective_density (alpha=1.0) due to poor quality
-        clusters = {}
-        for color_id, area_ratio in area_ratios.items():
-            clusters[color_id] = ClusterAlphaResult(
-                color_id=color_id,
-                area_ratio=area_ratio,
-                radial_profile=None,
-                zone_profile=None,
-                alpha_global=1.0,
-                effective_density=area_ratio,
-                alpha_used=1.0,
-                fallback_level=AlphaFallbackLevel.L3_GLOBAL,
-                fallback_reason=reason,
+    if alpha_quality_failed:
+        if has_plate_lite:
+            # plate_lite available → soft pass (plate_lite will serve as fallback)
+            warnings.append(
+                f"ALPHA_QUALITY_GATE_SOFT_PASS(plate_lite) "
+                f"valid={valid_ratio_after_clip:.1%} pixels={valid_pixels_after_clip} "
+                f"nan={nan_ratio_after_clip:.1%} moire={moire_severity:.2f}"
             )
-        return AlphaDensityResult(
-            clusters=clusters,
-            global_alpha=1.0,
-            global_alpha_std=0.0,
-            config_used=config,
-            warnings=warnings,
-        )
+        else:
+            reason = "alpha_quality_fail: " + ", ".join(quality_fail_reasons)
+            warnings.append(
+                f"ALPHA_QUALITY_GATE_FAILED "
+                f"valid={valid_ratio_after_clip:.1%} pixels={valid_pixels_after_clip} "
+                f"nan={nan_ratio_after_clip:.1%} clip_raw={clip_ratio_raw:.1%} "
+                f"moire={moire_severity:.2f}"
+            )
+            clusters = {}
+            for color_id, area_ratio in area_ratios.items():
+                clusters[color_id] = ClusterAlphaResult(
+                    color_id=color_id,
+                    area_ratio=area_ratio,
+                    radial_profile=None,
+                    zone_profile=None,
+                    alpha_global=1.0,
+                    effective_density=area_ratio,
+                    alpha_used=1.0,
+                    fallback_level=AlphaFallbackLevel.L3_GLOBAL,
+                    fallback_reason=reason,
+                )
+            return AlphaDensityResult(
+                clusters=clusters,
+                global_alpha=1.0,
+                global_alpha_std=0.0,
+                config_used={**config, "_quality_gate_debug": _quality_gate_debug},
+                warnings=warnings,
+            )
 
     if config.get("transition_weights_enabled") and alpha_weight_map is None and polar_lab is not None:
         from .transition_detector import TransitionConfig, create_alpha_weight_map
@@ -691,13 +777,35 @@ def compute_effective_density(
         )
         warnings.append(f"ALPHA_WEIGHT_MAP_APPLIED mean_weight={weight_meta.get('mean_weight', 1.0):.3f}")
 
+    # Priority 3: Clip-exclusion mask — exclude pixels at clip boundaries
+    # from radial/zone/global alpha computation for cleaner statistics
+    clip_exclude_enabled = bool(config.get("clip_exclude_enabled", True))
+    if clip_exclude_enabled:
+        valid_alpha_mask = (
+            ~np.isnan(polar_alpha) & (polar_alpha > alpha_clip_min + 0.001) & (polar_alpha < alpha_clip_max - 0.001)
+        )
+        # Build a cleaned alpha map: set clipped pixels to NaN so they're excluded
+        polar_alpha_clean = polar_alpha.copy()
+        polar_alpha_clean[~valid_alpha_mask] = np.nan
+        clean_ratio = float(valid_alpha_mask.sum()) / total_pixels if total_pixels > 0 else 0.0
+        if clean_ratio < 0.3:
+            # Too few valid pixels after clip exclusion, fall back to raw
+            polar_alpha_clean = polar_alpha
+            warnings.append(f"CLIP_EXCLUDE_INSUFFICIENT valid={clean_ratio:.1%}, using raw alpha")
+        else:
+            excluded_pct = 1.0 - clean_ratio
+            if excluded_pct > 0.05:
+                warnings.append(f"CLIP_EXCLUDE_APPLIED excluded={excluded_pct:.1%}")
+    else:
+        polar_alpha_clean = polar_alpha
+
     # Compute global alpha (for L3 fallback)
     # Use all pixels with any cluster mask
     combined_mask = np.zeros((T, R), dtype=bool)
     for mask in cluster_masks.values():
         combined_mask |= mask.astype(bool)
 
-    global_alpha, global_alpha_std, _ = compute_alpha_global(polar_alpha, combined_mask, alpha_weight_map)
+    global_alpha, global_alpha_std, _ = compute_alpha_global(polar_alpha_clean, combined_mask, alpha_weight_map)
 
     # P2-3: Adjust confidence thresholds based on verification agreement
     # If verification shows disagreement, increase thresholds → more likely to fallback to L3
@@ -725,15 +833,26 @@ def compute_effective_density(
         adjusted_conf_l1 = base_conf_l1
         adjusted_conf_l2 = base_conf_l2
 
+    # Priority 1: Extract plate_lite per-ink alpha candidates
+    plate_lite_candidates = config.get("_plate_lite_alpha_candidates", {})
+    plate_lite_clamp = (
+        float(config.get("plate_lite_clamp_min", 0.05)),
+        float(config.get("plate_lite_clamp_max", 0.98)),
+    )
+
+    # Priority 2: min_pixels threshold for L1 early-exit
+    min_pixels_for_l1 = int(config.get("min_pixels_for_l1", 20000))
+
     # Process each cluster
     clusters: Dict[str, ClusterAlphaResult] = {}
 
     for color_id, mask in cluster_masks.items():
         area_ratio = area_ratios.get(color_id, 0.0)
+        mask_pixel_count = int(mask.sum())
 
-        # L1: Radial profile
+        # L1: Radial profile (using clip-excluded alpha)
         radial_profile = compute_alpha_radial_1d(
-            polar_alpha,
+            polar_alpha_clean,
             mask,
             weight_map=alpha_weight_map,
             n_bins=config["n_r_bins"],
@@ -743,17 +862,20 @@ def compute_effective_density(
             min_samples_ratio=config["min_samples_ratio"],
         )
 
-        # L2: Zone profile
+        # L2: Zone profile (using clip-excluded alpha)
         zone_profile = compute_alpha_zone(
-            polar_alpha,
+            polar_alpha_clean,
             mask,
             weight_map=alpha_weight_map,
             inner_end=config["zone_inner_end"],
             mid_end=config["zone_mid_end"],
         )
 
-        # L3: Global alpha (cluster-specific)
-        cluster_alpha, cluster_std, n_samples = compute_alpha_global(polar_alpha, mask, alpha_weight_map)
+        # L3: Global alpha (cluster-specific, using clip-excluded alpha)
+        cluster_alpha, cluster_std, n_samples = compute_alpha_global(polar_alpha_clean, mask, alpha_weight_map)
+
+        # Resolve plate_lite alpha for this cluster (if available)
+        pl_alpha = plate_lite_candidates.get(color_id)
 
         # Apply fallback (P2-3: use adjusted thresholds based on verification)
         alpha_used, fallback_level, fallback_reason = apply_alpha_fallback(
@@ -764,6 +886,10 @@ def compute_effective_density(
             confidence_threshold_l2=adjusted_conf_l2,
             min_valid_bins_ratio=config["min_valid_bins_ratio"],
             lerp_blend=config["lerp_blend_enabled"],
+            plate_lite_alpha=pl_alpha,
+            plate_lite_clamp=plate_lite_clamp,
+            min_pixels_for_l1=min_pixels_for_l1,
+            mask_pixel_count=mask_pixel_count,
         )
 
         # Compute effective density
@@ -772,6 +898,8 @@ def compute_effective_density(
         # Track warnings
         if fallback_level == AlphaFallbackLevel.L3_GLOBAL:
             warnings.append(f"ALPHA_L3_FALLBACK_{color_id}")
+        elif fallback_level == AlphaFallbackLevel.L2_PLATE_LITE:
+            warnings.append(f"ALPHA_L2_PLATE_LITE_{color_id} pl_alpha={pl_alpha:.3f}")
         elif fallback_level == AlphaFallbackLevel.L2_ZONE:
             warnings.append(f"ALPHA_L2_FALLBACK_{color_id}")
 
@@ -791,7 +919,7 @@ def compute_effective_density(
         clusters=clusters,
         global_alpha=global_alpha,
         global_alpha_std=global_alpha_std,
-        config_used=config,
+        config_used={**config, "_quality_gate_debug": _quality_gate_debug},
         warnings=warnings,
     )
 

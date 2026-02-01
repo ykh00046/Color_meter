@@ -150,20 +150,28 @@ def build_color_masks(
     segmentation_k: Optional[int] = None,
     plate_kpis: Optional[Dict[str, Any]] = None,
     sample_mask_override: Optional[np.ndarray] = None,
+    _polar_override: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
     """
     Generate per-color binary masks using k-means segmentation.
     Includes Soft Gate support via plate_kpis.
+
+    If _polar_override is provided (T, R, 3) BGR polar image, geometry
+    detection and polar conversion are skipped.  This is an internal
+    parameter used by build_color_masks_multi_source().
     """
     v2_cfg = cfg.get("v2_ink", {})
     warnings: List[str] = []
 
     # 1. Detect lens geometry and convert to polar
-    if geom is None:
-        geom = detect_lens_circle(test_bgr)
-
     polar_R, polar_T = get_polar_dims(cfg)
-    polar = to_polar(test_bgr, geom, R=polar_R, T=polar_T)
+    if _polar_override is not None:
+        polar = _polar_override
+        polar_T, polar_R = polar.shape[:2]
+    else:
+        if geom is None:
+            geom = detect_lens_circle(test_bgr)
+        polar = to_polar(test_bgr, geom, R=polar_R, T=polar_T)
     lab_map = to_cie_lab(polar)  # (T, R, 3) - CIE Lab scale
 
     # 2. Build ROI mask and sample ink candidates
@@ -487,9 +495,9 @@ def build_color_masks(
         "sample_meta": sample_meta,
         "radial_bins": radial_bins,
         "geom": {
-            "cx": float(geom.cx),
-            "cy": float(geom.cy),
-            "r": float(geom.r),
+            "cx": float(geom.cx) if geom is not None else 0.0,
+            "cy": float(geom.cy) if geom is not None else 0.0,
+            "r": float(geom.r) if geom is not None else 0.0,
         },
     }
     if warnings:
@@ -770,6 +778,7 @@ def build_color_masks_with_retry(
     use_primary_extraction: bool = False,
     plate_kpis: Optional[Dict[str, Any]] = None,
     sample_mask_override: Optional[np.ndarray] = None,
+    _polar_override: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
     """
     Build color masks with 2-pass retry logic and Soft Gate scaling.
@@ -779,13 +788,19 @@ def build_color_masks_with_retry(
     """
     # Use V2 algorithm if requested AND no Hard Gate mask
     # When sample_mask_override is provided, fall back to v1 for proper Hard Gate support
-    if use_primary_extraction and sample_mask_override is None:
+    if use_primary_extraction and sample_mask_override is None and _polar_override is None:
         # Note: build_color_masks_v2 doesn't support sample_mask_override yet
         return build_color_masks_v2(test_bgr, cfg, expected_k, geom)
 
     # Pass 1: Try with expected_k
     masks1, meta1 = build_color_masks(
-        test_bgr, cfg, expected_k, geom, plate_kpis=plate_kpis, sample_mask_override=sample_mask_override
+        test_bgr,
+        cfg,
+        expected_k,
+        geom,
+        plate_kpis=plate_kpis,
+        sample_mask_override=sample_mask_override,
+        _polar_override=_polar_override,
     )
 
     # Calculate confidence
@@ -836,6 +851,7 @@ def build_color_masks_with_retry(
         segmentation_k=expected_k + 1,
         plate_kpis=plate_kpis,
         sample_mask_override=sample_mask_override,
+        _polar_override=_polar_override,
     )
     confidence2 = calculate_segmentation_confidence(meta2, expected_k)
 
@@ -998,6 +1014,24 @@ def compute_cluster_effective_densities(
         color_id = color_info["color_id"]
         area_ratios[color_id] = color_info.get("area_ratio", 0.0)
 
+    # Priority 1: Map plate_lite per-ink alpha to cluster color_ids by area_ratio ordering
+    # plate_lite inks are pre-sorted by area_ratio desc in single_analyzer
+    effective_cfg = dict(alpha_cfg) if alpha_cfg else {}
+    pl_inks = effective_cfg.pop("_plate_lite_inks", None)
+    if pl_inks and area_ratios:
+        # Sort clusters by area_ratio descending to align with plate_lite ink ordering
+        sorted_clusters = sorted(area_ratios.items(), key=lambda x: x[1], reverse=True)
+        pl_candidates = {}
+        for idx, (color_id, _) in enumerate(sorted_clusters):
+            if idx < len(pl_inks):
+                pl_alpha = pl_inks[idx].get("alpha_mean")
+                if pl_alpha is not None and pl_alpha > 0.01:
+                    pl_candidates[color_id] = float(pl_alpha)
+        if pl_candidates:
+            effective_cfg["_plate_lite_alpha_candidates"] = pl_candidates
+    else:
+        effective_cfg = effective_cfg
+
     # Compute effective densities
     result: AlphaDensityResult = compute_effective_density(
         polar_alpha=polar_alpha,
@@ -1005,7 +1039,7 @@ def compute_cluster_effective_densities(
         area_ratios=area_ratios,
         alpha_weight_map=alpha_weight_map,
         polar_lab=polar_lab,
-        cfg=alpha_cfg,
+        cfg=effective_cfg,
     )
 
     # Update metadata with effective densities
@@ -1020,9 +1054,11 @@ def compute_cluster_effective_densities(
             color_info["alpha_fallback_reason"] = cluster_result.fallback_reason
 
     # Add summary to metadata
+    quality_gate_debug = result.config_used.get("_quality_gate_debug", {})
     updated_metadata["alpha_analysis"] = {
         "global_alpha": round(result.global_alpha, 4),
         "global_alpha_std": round(result.global_alpha_std, 4),
+        "quality_gate": quality_gate_debug,
         "warnings": result.warnings,
     }
 
@@ -1246,6 +1282,155 @@ def stabilize_labels_with_reference(
         stabilized_metadata.setdefault("warnings", []).append("LABEL_MATCH_INCOMPLETE")
 
     return stabilized_masks, stabilized_metadata
+
+
+def build_color_masks_multi_source(
+    test_bgr: np.ndarray,
+    black_bgr: np.ndarray,
+    cfg: Dict[str, Any],
+    expected_k: int,
+    geom: Optional[LensGeometry] = None,
+    plate_kpis: Optional[Dict[str, Any]] = None,
+    sample_mask_override: Optional[np.ndarray] = None,
+    white_clusters_meta: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Tuple[Dict[str, np.ndarray], Dict[str, Any]]]:
+    """
+    Generate alternative color segmentations from diff (white-black) and black images.
+
+    The diff image approximates transmittance by removing backlight contribution.
+    The black image captures light scattered/emitted through the lens on a dark field.
+
+    After clustering, clusters are reordered to match the white-based cluster order
+    using greedy Lab-distance matching.
+
+    Args:
+        test_bgr: White backlight image (BGR)
+        black_bgr: Black backlight image (BGR)
+        cfg: Configuration dict
+        expected_k: Expected number of ink colors
+        geom: Optional pre-computed lens geometry
+        plate_kpis: Optional plate KPIs for soft gate
+        sample_mask_override: Optional mask for hard gate
+        white_clusters_meta: Color metadata from white clustering for order matching
+
+    Returns:
+        Dict with keys "diff" and "black", each mapping to (masks, metadata) tuple
+    """
+    from ...signature.radial_signature import to_polar
+
+    if geom is None:
+        geom = detect_lens_circle(test_bgr)
+
+    polar_R, polar_T = get_polar_dims(cfg)
+
+    # Convert both images to polar with the same geometry
+    white_polar = to_polar(test_bgr, geom, R=polar_R, T=polar_T)
+    black_polar = to_polar(black_bgr, geom, R=polar_R, T=polar_T)
+
+    # Diff image in polar space: clip(white - black, 0, 255) → transmittance-proportional
+    diff_polar = np.clip(white_polar.astype(np.int16) - black_polar.astype(np.int16), 0, 255).astype(np.uint8)
+
+    results: Dict[str, Tuple[Dict[str, np.ndarray], Dict[str, Any]]] = {}
+
+    # 1. Diff-based clustering (polar override → skip geometry detection + polar conversion)
+    try:
+        diff_masks, diff_meta = build_color_masks_with_retry(
+            test_bgr,
+            cfg,
+            expected_k,
+            geom=geom,
+            plate_kpis=plate_kpis,
+            sample_mask_override=sample_mask_override,
+            _polar_override=diff_polar,
+        )
+        diff_meta["source"] = "diff_white_minus_black"
+        results["diff"] = (diff_masks, diff_meta)
+    except Exception as e:
+        results["diff"] = (
+            {f"color_{i}": np.zeros((polar_T, polar_R), dtype=bool) for i in range(expected_k)},
+            {"colors": [], "error": str(e), "source": "diff_white_minus_black"},
+        )
+
+    # 2. Black-based clustering (polar override → skip geometry detection + polar conversion)
+    try:
+        black_masks, black_meta = build_color_masks_with_retry(
+            test_bgr,
+            cfg,
+            expected_k,
+            geom=geom,
+            plate_kpis=plate_kpis,
+            sample_mask_override=sample_mask_override,
+            _polar_override=black_polar,
+        )
+        black_meta["source"] = "black_backlight"
+        results["black"] = (black_masks, black_meta)
+    except Exception as e:
+        results["black"] = (
+            {f"color_{i}": np.zeros((polar_T, polar_R), dtype=bool) for i in range(expected_k)},
+            {"colors": [], "error": str(e), "source": "black_backlight"},
+        )
+
+    # 3. Reorder clusters to match white clustering order (greedy Lab matching)
+    if white_clusters_meta:
+        white_centroids = []
+        for c in white_clusters_meta:
+            if c.get("lab_centroid_cie") is not None:
+                white_centroids.append(np.array(c["lab_centroid_cie"], dtype=np.float64))
+            elif c.get("centroid_lab_cie") is not None:
+                white_centroids.append(np.array(c["centroid_lab_cie"], dtype=np.float64))
+            elif c.get("centroid_lab") is not None:
+                white_centroids.append(np.array(c["centroid_lab"], dtype=np.float64))
+            else:
+                white_centroids.append(np.array([50.0, 0.0, 0.0]))
+
+        for source_key in ("diff", "black"):
+            masks, meta = results[source_key]
+            alt_colors = meta.get("colors", [])
+            if not alt_colors or len(alt_colors) != len(white_centroids):
+                continue
+
+            # Extract alt centroids
+            alt_centroids = []
+            for c in alt_colors:
+                if c.get("lab_centroid_cie") is not None:
+                    alt_centroids.append(np.array(c["lab_centroid_cie"], dtype=np.float64))
+                else:
+                    alt_centroids.append(np.array([50.0, 0.0, 0.0]))
+
+            # Greedy matching: for each white cluster, find closest unmatched alt cluster
+            n = len(white_centroids)
+            used = set()
+            order = [0] * n
+            for wi in range(n):
+                best_dist = float("inf")
+                best_ai = 0
+                for ai in range(n):
+                    if ai in used:
+                        continue
+                    d = float(np.sqrt(np.sum((white_centroids[wi] - alt_centroids[ai]) ** 2)))
+                    if d < best_dist:
+                        best_dist = d
+                        best_ai = ai
+                used.add(best_ai)
+                order[wi] = best_ai
+
+            # Reorder masks and colors
+            reordered_masks = {}
+            reordered_colors = []
+            for new_idx, old_idx in enumerate(order):
+                old_color_id = f"color_{old_idx}"
+                new_color_id = f"color_{new_idx}"
+                if old_color_id in masks:
+                    reordered_masks[new_color_id] = masks[old_color_id]
+                if old_idx < len(alt_colors):
+                    c = dict(alt_colors[old_idx])
+                    c["color_id"] = new_color_id
+                    reordered_colors.append(c)
+
+            meta["colors"] = reordered_colors
+            results[source_key] = (reordered_masks, meta)
+
+    return results
 
 
 def build_color_masks_with_reference(

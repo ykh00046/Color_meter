@@ -581,12 +581,44 @@ def _analyze_ink_segmentation(
             intrinsic_meta["alignment"] = align_info
             metadata["intrinsic_color"] = intrinsic_meta
 
+        # Multi-source segmentation (diff, black) when black_bgr available
+        alt_segmentations = {}
+        if black_bgr is not None:
+            try:
+                from ..measure.segmentation.color_masks import build_color_masks_multi_source
+
+                white_clusters_meta = metadata.get("colors", [])
+                multi_results = build_color_masks_multi_source(
+                    test_bgr,
+                    black_bgr,
+                    cfg,
+                    expected_k=expected_k,
+                    geom=geom,
+                    plate_kpis=plate_kpis,
+                    sample_mask_override=plate_ink_mask,
+                    white_clusters_meta=white_clusters_meta,
+                )
+                alt_segmentations = multi_results
+            except Exception as e:
+                logger.warning(f"Multi-source segmentation failed: {e}")
+
         # Calculate total ROI pixels for area_ratio conversion
         R, T = get_polar_dims(cfg)
         total_pixels = R * T  # Approximate - actual ROI may be smaller
 
         # Convert to legacy format
         result = _convert_color_masks_to_legacy_format(metadata, total_pixels)
+
+        # Add alt_clusters from multi-source segmentation
+        if alt_segmentations:
+            alt_clusters = {}
+            for src_key, (src_masks, src_meta) in alt_segmentations.items():
+                src_legacy = _convert_color_masks_to_legacy_format(src_meta, total_pixels)
+                alt_clusters[src_key] = {
+                    "clusters": src_legacy.get("clusters", []),
+                    "method": src_meta.get("source", src_key),
+                }
+            result["alt_clusters"] = alt_clusters
 
         # Add alpha summary if computed
         if alpha_summary is not None:
@@ -1142,7 +1174,7 @@ def analyze_single_sample(
     # P1-1: Registration-less Polar Alpha option
     # When enabled, compute alpha directly in polar coordinates without 2D registration
     alpha_cfg = cfg.get("alpha", {})
-    registrationless_enabled = bool(alpha_cfg.get("registrationless_enabled", False))
+    registrationless_enabled = bool(alpha_cfg.get("registrationless_enabled", True))
 
     if registrationless_enabled and black_bgr is not None:
         from ..measure.metrics.alpha_density import build_polar_alpha_registrationless
@@ -1332,6 +1364,26 @@ def analyze_single_sample(
             if not verification.get("error"):
                 alpha_cfg["_verification_enabled"] = True
                 alpha_cfg["_verification_agreement"] = verification.get("agreement_score", 1.0)
+
+        # Priority 1: Inject plate_lite per-ink alpha_mean as fallback candidates
+        # Mapping is deferred to compute_cluster_effective_densities (area_ratio sort)
+        if "plate_lite" in results:
+            pl_inks = results["plate_lite"].get("inks", [])
+            if pl_inks:
+                # Sort by area_ratio descending (largest ink region first)
+                pl_sorted = sorted(pl_inks, key=lambda x: x.get("area_ratio", 0), reverse=True)
+                alpha_cfg["_plate_lite_inks"] = [
+                    {
+                        "alpha_mean": float(ink.get("alpha_mean", 0)),
+                        "area_ratio": float(ink.get("area_ratio", 0)),
+                        "ink_key": ink.get("ink_key", ""),
+                    }
+                    for ink in pl_sorted
+                ]
+                logger.debug(
+                    f"plate_lite alpha injected: {len(pl_sorted)} inks, "
+                    f"alpha_means={[round(i.get('alpha_mean', 0), 3) for i in pl_sorted]}"
+                )
 
         results["ink"] = _analyze_ink_segmentation(
             test_bgr,
