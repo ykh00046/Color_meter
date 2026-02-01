@@ -86,6 +86,12 @@ def _resolve_cfg_path(sku: Optional[str]) -> Path:
     base_path = V7_ROOT / "configs" / "default.json"
     if not sku:
         return base_path
+    from src.utils.security import SecurityError, validate_sku_identifier
+
+    try:
+        validate_sku_identifier(sku)
+    except SecurityError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     sku_path = REPO_ROOT / "config" / "sku_db" / f"{sku}.json"
     return sku_path if sku_path.exists() else base_path
 
@@ -190,6 +196,11 @@ def _require_role(expected: str, user_role: Optional[str]) -> None:
     """
     Enforce role-based access control.
 
+    Role hierarchy: admin > approver > operator > viewer
+    Higher roles include all lower permissions.
+
+    Disable via V7_RBAC_ENABLED=0 env var for development.
+
     Args:
         expected: Required role (e.g., 'operator', 'approver', 'admin')
         user_role: Role from X-User-Role header
@@ -197,8 +208,32 @@ def _require_role(expected: str, user_role: Optional[str]) -> None:
     Raises:
         HTTPException: If role is missing or insufficient
     """
-    # Role checks are disabled for now.
-    return
+    if not _env_flag("V7_RBAC_ENABLED"):
+        return
+
+    _ROLE_HIERARCHY = {"viewer": 0, "operator": 1, "approver": 2, "admin": 3}
+
+    role = (user_role or "").strip().lower()
+    expected_lower = expected.strip().lower()
+
+    if expected_lower not in _ROLE_HIERARCHY:
+        logger.warning("Unknown expected role: %s", expected)
+        raise HTTPException(status_code=500, detail="Internal role configuration error")
+
+    if not role:
+        raise HTTPException(status_code=401, detail="Missing X-User-Role header")
+
+    if role not in _ROLE_HIERARCHY:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Unknown role: '{role}'. Valid roles: {', '.join(_ROLE_HIERARCHY)}",
+        )
+
+    if _ROLE_HIERARCHY[role] < _ROLE_HIERARCHY[expected_lower]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Insufficient role: '{role}' < required '{expected_lower}'",
+        )
 
 
 async def _save_uploads(files: List[UploadFile], run_dir: Path, max_mb: int = 10) -> List[Path]:

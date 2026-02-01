@@ -298,6 +298,16 @@ def extract_plate_gate(
     env_enforce = _env_bool("V7_PAIR_ENFORCE")
     enforce_pair = env_enforce if env_enforce is not None else bool(plate_cfg.get("pair_enforce", False))
 
+    enforce_mode = str(plate_cfg.get("pair_enforce_mode", "hard_soft")).strip().lower()
+    env_mode = os.getenv("V7_PAIR_ENFORCE_MODE")
+    if env_mode:
+        enforce_mode = env_mode.strip().lower()
+
+    if enforce_mode in ("hard", "hard_only"):
+        pair_ok_effective = bool(pair_ok_hard)
+    else:
+        pair_ok_effective = bool(pair_ok)
+
     result = {
         "ink_mask_core_polar": ink_mask_core_polar,
         "valid_polar": valid_polar,
@@ -317,6 +327,8 @@ def extract_plate_gate(
             "pair_ok_hard": bool(pair_ok_hard),
             "pair_ok_soft": bool(pair_ok_soft),
             "pair_ok": pair_ok,
+            "pair_ok_effective": bool(pair_ok_effective),
+            "pair_enforce_mode": enforce_mode,
             "pair_lf_cos_max": float(lf_max),
         },
         "registration": {
@@ -325,7 +337,7 @@ def extract_plate_gate(
         },
     }
 
-    if enforce_pair and not pair_ok:
+    if enforce_pair and not pair_ok_effective:
         result["gate_quality"]["usable"] = False
         result["gate_quality"]["reason"] = "pair_mismatch"
 

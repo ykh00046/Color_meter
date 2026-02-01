@@ -2,9 +2,10 @@
 V7 Plate Gate & Calibration sub-router.
 
 Routes:
-  POST /plate_gate          - Extract plate gate masks
-  POST /intrinsic_calibrate - Calibrate intrinsic color references
-  POST /intrinsic_simulate  - Simulate lens appearance (Beer-Lambert)
+  POST /plate_gate              - Extract plate gate masks
+  POST /intrinsic_calibrate     - Calibrate intrinsic color references
+  POST /intrinsic_simulate      - Simulate lens appearance (Beer-Lambert)
+  POST /expected_color_verify   - Verify observed vs expected lens color
 """
 
 from __future__ import annotations
@@ -275,6 +276,8 @@ async def extract_plate_gate_api(
         "pair_ok": gate_quality.get("pair_ok"),
         "pair_ok_hard": gate_quality.get("pair_ok_hard"),
         "pair_ok_soft": gate_quality.get("pair_ok_soft"),
+        "pair_ok_effective": gate_quality.get("pair_ok_effective"),
+        "pair_enforce_mode": gate_quality.get("pair_enforce_mode"),
         "registration": {
             "method": registration.get("method", "unknown"),
             "swapped": bool(registration.get("swapped", False)),
@@ -314,6 +317,15 @@ async def intrinsic_calibrate_api(
     Calibrate intrinsic color references from empty white/black plate images.
     """
     _require_role("operator", x_user_role)
+
+    # ── Input validation ──
+    if not (0.05 <= center_crop <= 1.0):
+        raise HTTPException(status_code=400, detail=f"center_crop must be 0.05~1.0, got {center_crop}")
+    if gamma is not None and not (0.5 <= gamma <= 5.0):
+        raise HTTPException(status_code=400, detail=f"gamma must be 0.5~5.0, got {gamma}")
+    allowed_modes = {"FIXED", "AUTO", "SCANNER"}
+    if str(mode).upper() not in allowed_modes:
+        raise HTTPException(status_code=400, detail=f"mode must be one of {allowed_modes}, got '{mode}'")
 
     allowed_exts = [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"]
 
@@ -402,3 +414,116 @@ async def intrinsic_simulate_api(
         "thickness": float(thickness),
         "transmittance_preview": np.round(t_preview, 6).tolist(),
     }
+
+
+@router.post("/expected_color_verify")
+async def expected_color_verify_api(
+    x_user_role: Optional[str] = Header(default=""),
+    observed_lab: str = Form(...),
+    expected_lab: Optional[str] = Form(None),
+    k_rgb: Optional[str] = Form(None),
+    bg_srgb: Optional[str] = Form(None),
+    thickness: float = Form(1.0),
+    gamma: float = Form(2.2),
+    transfer: Optional[str] = Form(None),
+    sku: Optional[str] = Form(None),
+    threshold: float = Form(3.5),
+):
+    """
+    Verify observed lens color against expected color.
+
+    Two modes:
+      1. Direct: provide observed_lab and expected_lab as CIE Lab [L, a, b].
+      2. Simulated: provide observed_lab, k_rgb, and bg_srgb.
+         The expected color is computed via Beer-Lambert simulation,
+         then converted to Lab for comparison.
+
+    The transfer function ("gamma" or "srgb_eotf") is resolved in order:
+      1. Explicit transfer parameter
+      2. SKU config intrinsic_color.transfer
+      3. Default "gamma"
+
+    Returns ΔE2000 distance, pass/fail judgment, and interpretation.
+    """
+    _require_role("operator", x_user_role)
+
+    # Parse observed Lab
+    try:
+        obs_lab = json.loads(observed_lab)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON for observed_lab")
+    if not (isinstance(obs_lab, list) and len(obs_lab) == 3):
+        raise HTTPException(status_code=400, detail="observed_lab must be [L, a, b]")
+
+    exp_lab: list | None = None
+    transfer_used = None
+
+    # Mode 1: Direct expected Lab
+    if expected_lab is not None:
+        try:
+            exp_lab = json.loads(expected_lab)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON for expected_lab")
+        if not (isinstance(exp_lab, list) and len(exp_lab) == 3):
+            raise HTTPException(status_code=400, detail="expected_lab must be [L, a, b]")
+
+    # Mode 2: Simulate from k_rgb + bg_srgb
+    elif k_rgb is not None and bg_srgb is not None:
+        try:
+            k_vals = json.loads(k_rgb)
+            bg_vals = json.loads(bg_srgb)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON for k_rgb or bg_srgb")
+        if not (isinstance(k_vals, list) and len(k_vals) == 3):
+            raise HTTPException(status_code=400, detail="k_rgb must be length-3 array")
+        if not (isinstance(bg_vals, list) and len(bg_vals) == 3):
+            raise HTTPException(status_code=400, detail="bg_srgb must be length-3 array")
+
+        # Resolve transfer function from explicit param -> SKU config -> default
+        if transfer is not None:
+            transfer_used = transfer.strip().lower()
+        else:
+            cfg = _load_cfg(sku)
+            transfer_used = str((cfg.get("intrinsic_color") or {}).get("transfer", "gamma")).strip().lower()
+
+        from src.engine_v7.core.measure.metrics.intrinsic_color import simulate_physical
+
+        simulated_srgb = simulate_physical(
+            np.array(k_vals, dtype=np.float32),
+            np.array(bg_vals, dtype=np.float32),
+            gamma=float(gamma),
+            thickness=float(thickness),
+            transfer=transfer_used,
+        )
+        # Convert sRGB to CIE Lab via float32 path (avoids uint8 quantization)
+        srgb_f32 = (np.clip(simulated_srgb, 0, 255).astype(np.float32) / 255.0).reshape(1, 1, 3)
+        lab_f32 = cv2.cvtColor(srgb_f32, cv2.COLOR_RGB2Lab)[0, 0]
+        exp_lab = [float(lab_f32[0]), float(lab_f32[1]), float(lab_f32[2])]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either expected_lab or both k_rgb and bg_srgb",
+        )
+
+    from src.engine_v7.core.simulation.validation import validate_simulation_accuracy
+
+    result = validate_simulation_accuracy(
+        simulated_lab=exp_lab,
+        measured_lab=obs_lab,
+        sample_id="expected_color_verify",
+        target_delta_e=float(threshold),
+    )
+
+    response = {
+        "schema_version": "expected_color_verify.v1",
+        "observed_lab": [round(x, 2) for x in obs_lab],
+        "expected_lab": [round(x, 2) for x in exp_lab],
+        "delta_e_76": result["delta_e_76"],
+        "delta_e_00": result["delta_e_00"],
+        "threshold": float(threshold),
+        "passed": result["passed"],
+        "interpretation": result["interpretation"],
+    }
+    if transfer_used is not None:
+        response["transfer"] = transfer_used
+    return response

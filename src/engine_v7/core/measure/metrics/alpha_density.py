@@ -103,6 +103,103 @@ class AlphaDensityResult:
 
 
 # ==============================================================================
+# Quality Gate: evaluate alpha map validity before per-cluster fallback
+# ==============================================================================
+
+
+@dataclass
+class AlphaGateDecision:
+    """Result of alpha quality gate evaluation."""
+
+    passed: bool
+    reason: str
+    metrics: Dict[str, Any]
+
+
+def _safe_ratio(num: float, den: float) -> float:
+    return float(num) / float(den) if den > 0 else 0.0
+
+
+def evaluate_alpha_quality_gate(
+    alpha_map: np.ndarray,
+    *,
+    alpha_clip_min: float = 0.02,
+    alpha_clip_max: float = 0.98,
+    nan_ratio_max: float = 0.10,
+    moire_score: Optional[float] = None,
+    moire_max: float = 0.20,
+    valid_ratio_after_min: float = 0.40,
+    valid_pixels_after_min: int = 30_000,
+) -> AlphaGateDecision:
+    """
+    Quality Gate: decide whether per-cluster L1/L2 is trustworthy or force L3.
+
+    Gate is based on **post-clip-exclusion validity**, not raw clip ratio.
+    ``clip_ratio_raw`` is kept as a diagnostic metric only.
+
+    Args:
+        alpha_map: (T, R) float alpha map
+        alpha_clip_min/max: clip boundaries used during alpha computation
+        nan_ratio_max: max NaN ratio (among raw total pixels)
+        moire_score: optional moire severity (0-1)
+        moire_max: hard-cut for moire
+        valid_ratio_after_min: min ratio of valid (non-NaN, non-clipped) pixels
+        valid_pixels_after_min: min absolute count of valid pixels
+
+    Returns:
+        AlphaGateDecision with pass/fail, reason, and full diagnostic metrics.
+    """
+    total_pixels = alpha_map.size
+
+    # Raw counts
+    nan_mask = ~np.isfinite(alpha_map)
+    clip_at_min = int(np.sum(alpha_map <= alpha_clip_min + 0.001))
+    clip_at_max = int(np.sum(alpha_map >= alpha_clip_max - 0.001))
+    raw_nan = int(np.sum(nan_mask))
+    raw_clip = clip_at_min + clip_at_max
+
+    # Valid = not NaN and not clipped
+    valid_mask = ~nan_mask & (alpha_map > alpha_clip_min + 0.001) & (alpha_map < alpha_clip_max - 0.001)
+    raw_good = int(valid_mask.sum())
+
+    nan_ratio_raw = _safe_ratio(raw_nan, total_pixels)
+    clip_ratio_raw = _safe_ratio(raw_clip, total_pixels)
+    valid_ratio_after = _safe_ratio(raw_good, total_pixels)
+
+    metrics: Dict[str, Any] = {
+        "total_pixels": total_pixels,
+        "raw_nan": raw_nan,
+        "raw_clip": raw_clip,
+        "raw_good": raw_good,
+        "clip_at_min": clip_at_min,
+        "clip_at_max": clip_at_max,
+        "nan_ratio_raw": round(nan_ratio_raw, 4),
+        "clip_ratio_raw": round(clip_ratio_raw, 4),
+        "valid_ratio_after_clip": round(valid_ratio_after, 4),
+        "valid_pixels_after_clip": raw_good,
+        "moire_severity": round(float(moire_score), 4) if moire_score is not None else None,
+    }
+
+    # ── Hard fails ──
+    if total_pixels == 0:
+        return AlphaGateDecision(False, "EMPTY_ALPHA_MAP", metrics)
+
+    if moire_score is not None and moire_score > moire_max:
+        return AlphaGateDecision(False, "MOIRE_TOO_HIGH", metrics)
+
+    if raw_good < valid_pixels_after_min:
+        return AlphaGateDecision(False, "TOO_FEW_VALID_PIXELS_AFTER_CLIP", metrics)
+
+    if valid_ratio_after < valid_ratio_after_min:
+        return AlphaGateDecision(False, "VALID_RATIO_TOO_LOW_AFTER_CLIP", metrics)
+
+    if nan_ratio_raw > nan_ratio_max:
+        return AlphaGateDecision(False, "NAN_RATIO_TOO_HIGH", metrics)
+
+    return AlphaGateDecision(True, "OK", metrics)
+
+
+# ==============================================================================
 # Configuration defaults
 # ==============================================================================
 
@@ -132,15 +229,15 @@ DEFAULT_ALPHA_CONFIG = {
     "transition_boundary_weight": 0.5,
     "transition_boundary_width": 3,
     "transition_config": None,
-    # ── Clip-exclusion (Priority 3) ──
+    # ── Clip-exclusion ──
     "clip_exclude_enabled": True,  # Exclude clipped pixels from alpha stats
-    # ── Quality gate (valid-pixel based) ──
-    # "quality_fail": {
-    #     "valid_ratio_min": 0.35,    # min valid pixel ratio after clip exclusion
-    #     "valid_pixels_min": 30000,  # min valid pixel count
-    #     "nan_ratio": 0.10,          # max NaN ratio among non-clipped pixels
-    #     "moire_severity": 0.20,     # max moire severity
-    # },
+    # ── Quality gate (valid-pixel based, evaluated by evaluate_alpha_quality_gate) ──
+    "quality_gate": {
+        "valid_ratio_after_min": 0.40,  # min valid pixel ratio after clip exclusion
+        "valid_pixels_after_min": 30000,  # min valid pixel count (adjust for resolution)
+        "nan_ratio_max": 0.10,  # max NaN ratio (raw)
+        "moire_max": 0.20,  # max moire severity (hard-cut)
+    },
     # ── Small-cluster early-exit (Priority 2) ──
     "min_pixels_for_l1": 20000,  # Skip L1 if mask has fewer pixels
     # ── plate_lite fallback (Priority 1) ──
@@ -658,86 +755,51 @@ def compute_effective_density(
 
     T, R = polar_alpha.shape
 
-    # ── Quality Gate: valid-pixel based policy ──────────────────────────
-    # 1. Build valid-pixel mask (exclude NaN + clipped at boundaries)
-    # 2. Gate on valid_ratio / valid_count / nan_ratio (NOT raw clip_ratio)
-    # 3. clip_ratio is kept for diagnostics only
+    # ── Quality Gate: delegate to evaluate_alpha_quality_gate() ─────────
     alpha_clip_min = config.get("alpha_clip_min", 0.02)
     alpha_clip_max = config.get("alpha_clip_max", 0.98)
-
-    total_pixels = T * R
-    nan_count = int(np.sum(np.isnan(polar_alpha)))
-    nan_ratio = nan_count / total_pixels if total_pixels > 0 else 0.0
-
-    # Count clipped pixels (diagnostic)
-    clip_at_min = int(np.sum(polar_alpha <= alpha_clip_min + 0.001))
-    clip_at_max = int(np.sum(polar_alpha >= alpha_clip_max - 0.001))
-    clip_count = clip_at_min + clip_at_max
-    clip_ratio_raw = clip_count / total_pixels if total_pixels > 0 else 0.0
-
-    # Valid pixels after excluding NaN + clipped
-    valid_after_clip = (
-        ~np.isnan(polar_alpha) & (polar_alpha > alpha_clip_min + 0.001) & (polar_alpha < alpha_clip_max - 0.001)
-    )
-    valid_pixels_after_clip = int(valid_after_clip.sum())
-    valid_ratio_after_clip = valid_pixels_after_clip / total_pixels if total_pixels > 0 else 0.0
-
-    # NaN ratio among non-clipped pixels (stricter)
-    non_clip = total_pixels - clip_count
-    nan_ratio_after_clip = nan_count / non_clip if non_clip > 0 else nan_ratio
-
-    # Moire severity from registration-less alpha (if available)
     moire_severity = float(config.get("_moire_severity", 0.0))
 
-    # Quality gate thresholds (valid-pixel based)
-    quality_fail_cfg = config.get("quality_fail", {})
-    qf_valid_ratio_min = float(quality_fail_cfg.get("valid_ratio_min", 0.35))
-    qf_valid_pixels_min = int(quality_fail_cfg.get("valid_pixels_min", 30000))
-    qf_nan_threshold = float(quality_fail_cfg.get("nan_ratio", config.get("quality_gate_nan_threshold", 0.10)))
-    qf_moire_threshold = float(quality_fail_cfg.get("moire_severity", 0.20))
-
-    quality_fail_reasons = []
-    if valid_ratio_after_clip < qf_valid_ratio_min:
-        quality_fail_reasons.append(f"valid_ratio={valid_ratio_after_clip:.1%}<{qf_valid_ratio_min:.0%}")
-    if valid_pixels_after_clip < qf_valid_pixels_min:
-        quality_fail_reasons.append(f"valid_pixels={valid_pixels_after_clip}<{qf_valid_pixels_min}")
-    if nan_ratio_after_clip > qf_nan_threshold:
-        quality_fail_reasons.append(f"nan_ratio={nan_ratio_after_clip:.1%}>{qf_nan_threshold:.0%}")
-    if moire_severity > qf_moire_threshold:
-        quality_fail_reasons.append(f"moire={moire_severity:.2f}>{qf_moire_threshold:.2f}")
+    qg_cfg = config.get("quality_gate", {})
+    gate = evaluate_alpha_quality_gate(
+        polar_alpha,
+        alpha_clip_min=alpha_clip_min,
+        alpha_clip_max=alpha_clip_max,
+        nan_ratio_max=float(qg_cfg.get("nan_ratio_max", 0.10)),
+        moire_score=moire_severity if moire_severity > 0 else None,
+        moire_max=float(qg_cfg.get("moire_max", 0.20)),
+        valid_ratio_after_min=float(qg_cfg.get("valid_ratio_after_min", 0.40)),
+        valid_pixels_after_min=int(qg_cfg.get("valid_pixels_after_min", 30000)),
+    )
 
     # plate_lite availability can soften the gate
     has_plate_lite = bool(config.get("_plate_lite_alpha_candidates") or config.get("_plate_lite_inks"))
 
-    alpha_quality_failed = len(quality_fail_reasons) > 0
-
-    # Debug diagnostics (always emitted for tuning)
     _quality_gate_debug = {
-        "clip_ratio_raw": round(clip_ratio_raw, 4),
-        "clip_at_min": clip_at_min,
-        "clip_at_max": clip_at_max,
-        "valid_ratio_after_clip": round(valid_ratio_after_clip, 4),
-        "valid_pixels_after_clip": valid_pixels_after_clip,
-        "nan_ratio_after_clip": round(nan_ratio_after_clip, 4),
-        "moire_severity": round(moire_severity, 4),
+        **gate.metrics,
         "has_plate_lite": has_plate_lite,
-        "gate_passed": not alpha_quality_failed or has_plate_lite,
+        "gate_passed": gate.passed or has_plate_lite,
+        "gate_reason": gate.reason,
     }
 
-    if alpha_quality_failed:
+    if not gate.passed:
         if has_plate_lite:
             # plate_lite available → soft pass (plate_lite will serve as fallback)
             warnings.append(
                 f"ALPHA_QUALITY_GATE_SOFT_PASS(plate_lite) "
-                f"valid={valid_ratio_after_clip:.1%} pixels={valid_pixels_after_clip} "
-                f"nan={nan_ratio_after_clip:.1%} moire={moire_severity:.2f}"
+                f"reason={gate.reason} "
+                f"valid={gate.metrics.get('valid_ratio_after_clip', 0):.1%} "
+                f"pixels={gate.metrics.get('valid_pixels_after_clip', 0)} "
+                f"moire={moire_severity:.2f}"
             )
         else:
-            reason = "alpha_quality_fail: " + ", ".join(quality_fail_reasons)
+            reason = f"alpha_quality_fail: {gate.reason}"
             warnings.append(
                 f"ALPHA_QUALITY_GATE_FAILED "
-                f"valid={valid_ratio_after_clip:.1%} pixels={valid_pixels_after_clip} "
-                f"nan={nan_ratio_after_clip:.1%} clip_raw={clip_ratio_raw:.1%} "
+                f"reason={gate.reason} "
+                f"valid={gate.metrics.get('valid_ratio_after_clip', 0):.1%} "
+                f"pixels={gate.metrics.get('valid_pixels_after_clip', 0)} "
+                f"clip_raw={gate.metrics.get('clip_ratio_raw', 0):.1%} "
                 f"moire={moire_severity:.2f}"
             )
             clusters = {}
@@ -779,20 +841,21 @@ def compute_effective_density(
 
     # Priority 3: Clip-exclusion mask — exclude pixels at clip boundaries
     # from radial/zone/global alpha computation for cleaner statistics
+    total_pixels = T * R
     clip_exclude_enabled = bool(config.get("clip_exclude_enabled", True))
     if clip_exclude_enabled:
         valid_alpha_mask = (
             ~np.isnan(polar_alpha) & (polar_alpha > alpha_clip_min + 0.001) & (polar_alpha < alpha_clip_max - 0.001)
         )
-        # Build a cleaned alpha map: set clipped pixels to NaN so they're excluded
-        polar_alpha_clean = polar_alpha.copy()
-        polar_alpha_clean[~valid_alpha_mask] = np.nan
         clean_ratio = float(valid_alpha_mask.sum()) / total_pixels if total_pixels > 0 else 0.0
         if clean_ratio < 0.3:
-            # Too few valid pixels after clip exclusion, fall back to raw
+            # Too few valid pixels after clip exclusion, fall back to raw (no copy needed)
             polar_alpha_clean = polar_alpha
             warnings.append(f"CLIP_EXCLUDE_INSUFFICIENT valid={clean_ratio:.1%}, using raw alpha")
         else:
+            # Only copy when we actually need to modify values
+            polar_alpha_clean = polar_alpha.copy()
+            polar_alpha_clean[~valid_alpha_mask] = np.nan
             excluded_pct = 1.0 - clean_ratio
             if excluded_pct > 0.05:
                 warnings.append(f"CLIP_EXCLUDE_APPLIED excluded={excluded_pct:.1%}")
@@ -1002,8 +1065,6 @@ def build_alpha_map_polar(
     Returns:
         Alpha map (T, R) in polar coordinates
     """
-    import cv2
-
     from ...signature.radial_signature import to_polar
 
     # Convert to polar
@@ -1134,29 +1195,20 @@ def build_polar_alpha_registrationless(
     clip_count = int(pre_clip_at_min + pre_clip_at_max)
     clip_ratio = clip_count / total_pixels if total_pixels > 0 else 0.0
 
-    # Compute 1D radial profile using median_θ (rotation-invariant)
-    radial_profile = np.zeros(polar_R, dtype=np.float32)
-    radial_confidence = np.zeros(polar_R, dtype=np.float32)
-    radial_std = np.zeros(polar_R, dtype=np.float32)
-    radial_n_samples = np.zeros(polar_R, dtype=np.int32)
+    # Compute 1D radial profile using median_θ (rotation-invariant) — vectorized
+    radial_n_samples = np.sum(~np.isnan(alpha_2d), axis=0).astype(np.int32)  # (R,)
+    radial_profile = np.nanmedian(alpha_2d, axis=0).astype(np.float32)  # (R,)
+    radial_std = np.nanstd(alpha_2d, axis=0).astype(np.float32)  # (R,)
 
-    for r in range(polar_R):
-        samples = alpha_2d[:, r]  # All θ values at radius r
-        valid_samples = samples[~np.isnan(samples)]
-        n_valid = len(valid_samples)
-        radial_n_samples[r] = n_valid
+    # Mark insufficient-sample bins as NaN
+    insufficient = radial_n_samples < min_samples_per_bin
+    radial_profile[insufficient] = np.nan
+    radial_std[insufficient] = np.nan
 
-        if n_valid >= min_samples_per_bin:
-            radial_profile[r] = float(np.median(valid_samples))
-            radial_std[r] = float(np.std(valid_samples))
-            # Confidence based on sample count and consistency
-            sample_conf = min(1.0, n_valid / polar_T)
-            consistency_conf = max(0.0, 1.0 - radial_std[r] / 0.5)  # Lower std = higher conf
-            radial_confidence[r] = sample_conf * consistency_conf
-        else:
-            radial_profile[r] = np.nan
-            radial_std[r] = np.nan
-            radial_confidence[r] = 0.0
+    # Confidence: sample_conf * consistency_conf (vectorized)
+    sample_conf = np.minimum(1.0, radial_n_samples.astype(np.float32) / polar_T)
+    consistency_conf = np.maximum(0.0, 1.0 - radial_std / 0.5)
+    radial_confidence = np.where(insufficient, 0.0, sample_conf * consistency_conf).astype(np.float32)
 
     # Interpolate NaN values in radial profile
     valid_mask = ~np.isnan(radial_profile)
@@ -1477,20 +1529,19 @@ def verify_alpha_agreement(
         core_agreement_score = 0.0
         warnings.append(f"LOW_CORE_PIXELS: only {core_count} core pixels, using full metrics")
 
-    # Compute per-radial-bin agreement
+    # Compute per-radial-bin agreement — vectorized
     T, R = registrationless_alpha.shape
-    radial_agreement = np.zeros(R, dtype=np.float32)
-    for r in range(R):
-        reg_col = registrationless_alpha[:, r]
-        plate_col = plate_alpha_resampled[:, r]
-        col_valid = ~np.isnan(reg_col) & ~np.isnan(plate_col)
+    col_valid = ~np.isnan(registrationless_alpha) & ~np.isnan(plate_alpha_resampled)  # (T, R)
+    col_valid_count = col_valid.sum(axis=0)  # (R,)
 
-        if np.sum(col_valid) >= 10:
-            col_diff = np.abs(reg_col[col_valid] - plate_col[col_valid])
-            # Agreement = 1 - mean absolute difference (normalized)
-            radial_agreement[r] = max(0.0, 1.0 - float(np.mean(col_diff)))
-        else:
-            radial_agreement[r] = np.nan
+    abs_diff = np.where(col_valid, np.abs(registrationless_alpha - plate_alpha_resampled), 0.0)
+    mean_abs_diff = np.where(col_valid_count > 0, abs_diff.sum(axis=0) / np.maximum(col_valid_count, 1), 0.0)
+
+    radial_agreement = np.where(
+        col_valid_count >= 10,
+        np.maximum(0.0, 1.0 - mean_abs_diff),
+        np.nan,
+    ).astype(np.float32)
 
     # Compute overall agreement score
     valid_radial = radial_agreement[~np.isnan(radial_agreement)]

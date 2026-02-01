@@ -99,8 +99,10 @@ export function renderInkComparisonPalette(v2Diag, comparisonData = null) {
         const alphaDisplay = alpha != null ? (alpha * 100).toFixed(0) : "-";
         const effDensityDisplay = effectiveDensity != null ? (effectiveDensity * 100).toFixed(1) : "-";
         const fallbackLevel = c.alpha_fallback_level || "";
+        const fbMap = { L1_radial: 'L1', L2_zone: 'L2', L2_plate_lite: 'PL', L3_global: 'L3' };
+        const fbLabel = fbMap[fallbackLevel] || '';
 
-        row.title = `[Deep Analysis]\nInkness Score: ${inkness}%\nCompactness: ${compactness}\nColor Uniformity (Std): ${stdDev}\nSpatial Prior: ${(c.spatial_prior || 0).toFixed(2)}\n\n[실효 커버리지]\nAlpha (투명도): ${alphaDisplay}%\nArea: ${(areaRatio * 100).toFixed(1)}%\nEffective: ${effDensityDisplay}%\n${phenomenon.detail || ""}`;
+        row.title = `[Deep Analysis]\nInkness Score: ${inkness}%\nCompactness: ${compactness}\nColor Uniformity (Std): ${stdDev}\nSpatial Prior: ${(c.spatial_prior || 0).toFixed(2)}\n\n[실효 커버리지]\nAlpha (투명도): ${alphaDisplay}%\nFallback: ${fallbackLevel || 'N/A'}\nArea: ${(areaRatio * 100).toFixed(1)}%\nEffective: ${effDensityDisplay}%\n${phenomenon.detail || ""}`;
 
         // Build 2-column swatch HTML
         // Detect plate_lite source for label
@@ -144,7 +146,7 @@ export function renderInkComparisonPalette(v2Diag, comparisonData = null) {
                         <div class="flex justify-between"><span class="text-text-dim">Area</span><span class="text-white">${(areaRatio * 100).toFixed(1)}%</span></div>
                         <div class="flex justify-between"><span class="text-text-dim">L-Shift</span><span class="${parseFloat(dL) > 0 ? 'text-emerald-400' : 'text-rose-400'}">${dL > 0 ? '+' : ''}${dL}</span></div>
                         ${hasEffectiveDensity ? `
-                        <div class="flex justify-between"><span class="text-text-dim">Alpha</span><span class="${phenomenon.color}">${alphaDisplay}%</span></div>
+                        <div class="flex justify-between"><span class="text-text-dim">Alpha${fbLabel ? ` <span class="text-[8px] opacity-60">${fbLabel}</span>` : ''}</span><span class="${phenomenon.color}">${alphaDisplay}%</span></div>
                         <div class="flex justify-between"><span class="text-text-dim font-semibold">실효</span><span class="text-white font-semibold">${effDensityDisplay}%</span></div>
                         ` : ''}
                     </div>

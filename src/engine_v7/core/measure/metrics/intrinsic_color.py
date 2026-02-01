@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def _srgb_to_linear_gamma(srgb: np.ndarray, gamma: float) -> np.ndarray:
@@ -283,11 +286,13 @@ def compute_intrinsic_colors(
         obs_w_lin = srgb_to_lin(obs_w_rgb)
         obs_b_lin = srgb_to_lin(obs_b_rgb)
         if verbose_debug:
-            print(
-                f"DEBUG intrinsic_color obs_w_rgb max={np.max(obs_w_rgb):.3f}, "
-                f"bg_white_rgb max={np.max(bg_white_rgb):.3f}, "
-                f"obs_w_lin max={np.max(obs_w_lin):.6f}, "
-                f"bg_white_lin max={np.max(bg_white_lin):.6f}"
+            logger.debug(
+                "intrinsic_color obs_w_rgb max=%.3f, bg_white_rgb max=%.3f, "
+                "obs_w_lin max=%.6f, bg_white_lin max=%.6f",
+                np.max(obs_w_rgb),
+                np.max(bg_white_rgb),
+                np.max(obs_w_lin),
+                np.max(bg_white_lin),
             )
         diff_obs = obs_w_lin - obs_b_lin
 

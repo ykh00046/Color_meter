@@ -1,6 +1,7 @@
 # Force reload v8: Added sampling ROI info + sector uniformity analysis
 import asyncio
 import logging
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -137,7 +138,10 @@ async def startup_event():
     from src.models.database import create_tables, init_database
 
     logger.info("Initializing database...")
-    init_database(database_url="sqlite:///./color_meter.db", echo=False)
+    init_database(
+        database_url=os.getenv("DATABASE_URL", "sqlite:///./color_meter.db"),
+        echo=False,
+    )
     # Tables are already created by Alembic migration
     # create_tables() is not needed if using Alembic
     logger.info("Database initialized")

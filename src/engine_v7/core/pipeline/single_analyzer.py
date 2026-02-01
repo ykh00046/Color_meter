@@ -534,20 +534,23 @@ def _analyze_ink_segmentation(
                 # Moire severity would have been passed via config from registration-less result
                 pass  # Will be set below if available
 
-            if effective_alpha_cfg is not None or polar_alpha is not None:
-                from ..signature.radial_signature import to_polar
-                from ..utils import to_cie_lab as util_to_cie_lab
+            # Pre-compute polar_white once for reuse across alpha and intrinsic blocks
+        _polar_white_cache = None
 
-                R, T = get_polar_dims(cfg)
-                polar = to_polar(test_bgr, geom, R=R, T=T)
-                polar_lab = util_to_cie_lab(polar)
-                metadata, alpha_summary = compute_cluster_effective_densities(
-                    color_masks,
-                    metadata,
-                    polar_alpha=polar_alpha,
-                    polar_lab=polar_lab,
-                    alpha_cfg=effective_alpha_cfg,
-                )
+        if effective_alpha_cfg is not None or polar_alpha is not None:
+            from ..signature.radial_signature import to_polar
+            from ..utils import to_cie_lab as util_to_cie_lab
+
+            R, T = get_polar_dims(cfg)
+            _polar_white_cache = to_polar(test_bgr, geom, R=R, T=T)
+            polar_lab = util_to_cie_lab(_polar_white_cache)
+            metadata, alpha_summary = compute_cluster_effective_densities(
+                color_masks,
+                metadata,
+                polar_alpha=polar_alpha,
+                polar_lab=polar_lab,
+                alpha_cfg=effective_alpha_cfg,
+            )
 
         # Compute intrinsic ink colors from white/black pair if available
         if black_bgr is not None:
@@ -566,7 +569,7 @@ def _analyze_ink_segmentation(
                 except Exception as exc:
                     align_info = {"method": "align_failed", "error": str(exc)}
 
-            polar_white = to_polar(test_bgr, geom, R=R, T=T)
+            polar_white = _polar_white_cache if _polar_white_cache is not None else to_polar(test_bgr, geom, R=R, T=T)
             polar_black = to_polar(black_aligned, geom, R=R, T=T)
             intrinsic_by_color, intrinsic_meta = compute_intrinsic_colors(
                 polar_white,
@@ -639,43 +642,6 @@ def _analyze_ink_segmentation(
             "error": f"Segmentation failed: {str(e)}",
             "_meta": {"exception": str(e)},
         }
-
-
-def _lab_to_hex(lab: List[float]) -> str:
-    """
-    Convert OpenCV Lab (0-255 scale) to hex color (DEPRECATED).
-    Use _lab_cie_to_hex() instead for CIE Lab.
-    """
-    # Very rough approximation - just for visualization
-    L, a, b = lab
-
-    # Normalize to 0-255 range (rough)
-    r = int(np.clip(L + 1.5 * a, 0, 255))
-    g = int(np.clip(L - 0.5 * a + 0.5 * b, 0, 255))
-    b_val = int(np.clip(L - 2.0 * b, 0, 255))
-
-    return f"#{r:02x}{g:02x}{b_val:02x}"
-
-
-def _lab_cie_to_hex(lab_cie: List[float]) -> str:
-    """
-    Convert CIE L*a*b* to hex color using OpenCV.
-
-    Args:
-        lab_cie: [L*, a*, b*] where L*:0-100, a*/b*:-128~+127
-    """
-    from ..utils import lab_cie_to_cv8
-
-    # Convert CIE to OpenCV 8-bit
-    lab_cv8 = lab_cie_to_cv8(np.array([[lab_cie]], dtype=np.float32))
-
-    # Convert Lab to BGR using OpenCV
-    bgr = cv2.cvtColor(lab_cv8.astype(np.uint8), cv2.COLOR_LAB2BGR)
-
-    # Extract BGR values
-    b, g, r = bgr[0, 0]
-
-    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _analyze_pattern_features(test_bgr: np.ndarray, geom: LensGeometry, cfg: Dict[str, Any]) -> Dict[str, Any]:

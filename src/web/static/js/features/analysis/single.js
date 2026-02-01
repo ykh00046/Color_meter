@@ -371,6 +371,12 @@ function renderOriginalPair(data, result) {
           return;
       }
 
+      // Multi-source alt clusters (diff, black)
+      const altClusters = inkData.alt_clusters || {};
+      const diffClusters = altClusters.diff?.clusters || [];
+      const blackClusters = altClusters.black?.clusters || [];
+      const hasAlt = diffClusters.length > 0 || blackClusters.length > 0;
+
       container.innerHTML = inks.map((ink, idx) => {
           // 1. Lens clustering (raw extracted)
           const lensHex = sanitizeHexColor(
@@ -396,12 +402,72 @@ function renderOriginalPair(data, result) {
               ? `<div class="ink-swatch-box" style="background:${plateHex}" title="${plateLabel}: ${plateHex}"></div>`
               : `<div class="ink-swatch-box" style="background:#2a2a2a;display:flex;align-items:center;justify-content:center" title="No Plate Data"><span style="font-size:10px;color:#666">N/A</span></div>`;
 
-          // P2-UI: Build effective density display
+          // Observation: Black BG swatch; Computed: Diff + Intrinsic
+          let blackSwatchHtml = '';
+          let computedSectionHtml = '';
+          if (hasAlt) {
+              // Black BG swatch (observation section)
+              const blackInk = blackClusters[idx];
+              const blackHex = blackInk
+                  ? sanitizeHexColor(blackInk.mean_hex || blackInk.hex_ref || rgbToHex(labToRgb(blackInk.centroid_lab || [50, 0, 0])))
+                  : null;
+              const blackSwatch = blackHex
+                  ? `<div class="ink-swatch-box" style="background:${blackHex}" title="Black BG: ${blackHex}"></div>`
+                  : `<div class="ink-swatch-box" style="background:#2a2a2a;display:flex;align-items:center;justify-content:center" title="No Black Data"><span style="font-size:10px;color:#666">N/A</span></div>`;
+              blackSwatchHtml = `
+                  <div class="ink-swatch-row">
+                      <div class="ink-swatch-label" style="color:#a78bfa">Black BG</div>
+                      ${blackSwatch}
+                  </div>
+              `;
+
+              // Diff swatch (computed section)
+              const diffInk = diffClusters[idx];
+              const diffHex = diffInk
+                  ? sanitizeHexColor(diffInk.mean_hex || diffInk.hex_ref || rgbToHex(labToRgb(diffInk.centroid_lab || [50, 0, 0])))
+                  : null;
+              const diffSwatch = diffHex
+                  ? `<div class="ink-swatch-box" style="background:${diffHex}" title="Diff(W-B): ${diffHex}"></div>`
+                  : `<div class="ink-swatch-box" style="background:#2a2a2a;display:flex;align-items:center;justify-content:center" title="No Diff Data"><span style="font-size:10px;color:#666">N/A</span></div>`;
+
+              // Intrinsic swatch (computed section)
+              const intrinsicRgb = ink.intrinsic_ink_rgb;
+              const intrinsicHex = intrinsicRgb ? rgbToHex(intrinsicRgb) : null;
+              const intrinsicSwatch = intrinsicHex
+                  ? `<div class="ink-swatch-box" style="background:${intrinsicHex}" title="Intrinsic: ${intrinsicHex}"></div>`
+                  : `<div class="ink-swatch-box" style="background:#2a2a2a;display:flex;align-items:center;justify-content:center" title="No Intrinsic Data"><span style="font-size:10px;color:#666">N/A</span></div>`;
+
+              computedSectionHtml = `
+                  <div class="ink-section-label">계산색 (Computed)</div>
+                  <div class="ink-swatch-row">
+                      <div class="ink-swatch-label" style="color:#34d399">Diff(W-B)</div>
+                      ${diffSwatch}
+                  </div>
+                  <div class="ink-swatch-row">
+                      <div class="ink-swatch-label" style="color:#fb7185">Intrinsic</div>
+                      ${intrinsicSwatch}
+                  </div>
+              `;
+          }
+
+          // P2-UI: Build effective density display + fallback tier badge
+          const fallbackLevel = ink.alpha_fallback_level || '';
+          const fallbackBadge = (() => {
+              const map = {
+                  'L1_radial':     { label: 'L1', color: '#22c55e', title: 'Radial profile (best)' },
+                  'L2_zone':       { label: 'L2', color: '#eab308', title: 'Zone average' },
+                  'L2_plate_lite': { label: 'PL', color: '#a78bfa', title: 'Plate-Lite alpha' },
+                  'L3_global':     { label: 'L3', color: '#ef4444', title: 'Global fallback' },
+              };
+              const info = map[fallbackLevel];
+              if (!info) return '';
+              return `<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:${info.color}20;color:${info.color};border:1px solid ${info.color}40;margin-left:4px" title="${info.title}">${info.label}</span>`;
+          })();
           const effDensityHtml = hasEffDensity ? `
               <div class="ink-card-meta" style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.1)">
                   <div style="display:flex;justify-content:space-between;align-items:center">
                       <span style="color:${phenomenon.color};font-size:11px" title="${phenomenon.detail}">${phenomenon.icon} ${phenomenon.text}</span>
-                      <span style="font-size:10px;color:#888">Alpha ${alphaVal}%</span>
+                      <span style="font-size:10px;color:#888">Alpha ${alphaVal}%${fallbackBadge}</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;margin-top:2px">
                       <span style="font-size:10px;color:#888">실효 커버리지</span>
@@ -417,14 +483,17 @@ function renderOriginalPair(data, result) {
                       <div class="ink-card-role">${role}</div>
                   </div>
                   <div class="ink-swatch-stack">
+                      <div class="ink-section-label">관찰색 (Observation)</div>
                       <div class="ink-swatch-row">
-                          <div class="ink-swatch-label" style="color:#22d3ee">Cluster</div>
-                          <div class="ink-swatch-box" style="background:${lensHex}" title="Cluster: ${lensHex}"></div>
+                          <div class="ink-swatch-label" style="color:#22d3ee">White BG</div>
+                          <div class="ink-swatch-box" style="background:${lensHex}" title="White BG: ${lensHex}"></div>
                       </div>
+                      ${blackSwatchHtml}
                       <div class="ink-swatch-row">
                           <div class="ink-swatch-label" style="color:#fbbf24">${plateLabel}</div>
                           ${plateSwatch}
                       </div>
+                      ${computedSectionHtml}
                   </div>
                   <div class="ink-card-meta">Coverage: ${coverageVal}%</div>
                   ${effDensityHtml}
@@ -470,6 +539,8 @@ function renderOriginalPair(data, result) {
               msg = '렌즈가 매우 진하거나 이물질 가능성이 있습니다.';
           } else if (relevant.includes('INTRINSIC_BRIGHTNESS_FILTER_EMPTY_FALLBACK')) {
               msg = '렌즈 영역 감지에 실패했습니다.';
+          } else if (relevant.some(w => w.includes('RELAXED_70pct') || w.includes('RELAXED_50pct'))) {
+              msg = '밝기 필터를 완화하여 측정했습니다 (정확도 약간 감소).';
           }
           warnText.textContent = msg;
           return;
