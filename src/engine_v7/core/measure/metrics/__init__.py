@@ -12,9 +12,12 @@ from .alpha_density import (  # Main API; Fallback levels; Profile types; Utilit
     compute_alpha_radial_1d,
     compute_alpha_zone,
     compute_effective_density,
+    evaluate_alpha_quality_gate,
     extract_alpha_summary,
     extract_effective_densities,
 )
+from .alpha_polar import PolarAlphaResult, build_polar_alpha_registrationless
+from .alpha_verification import AlphaVerificationResult, verify_alpha_agreement
 from .transition_detector import TransitionConfig, TransitionResult, compute_transition_weights, create_alpha_weight_map
 
 __all__ = [
@@ -42,4 +45,12 @@ __all__ = [
     "TransitionResult",
     "compute_transition_weights",
     "create_alpha_weight_map",
+    # Quality gate
+    "evaluate_alpha_quality_gate",
+    # Re-exported from alpha_polar
+    "PolarAlphaResult",
+    "build_polar_alpha_registrationless",
+    # Re-exported from alpha_verification
+    "AlphaVerificationResult",
+    "verify_alpha_agreement",
 ]

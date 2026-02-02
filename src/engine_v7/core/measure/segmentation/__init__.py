@@ -3,6 +3,7 @@ from .color_masks import (  # noqa: E501
     assign_cluster_labels_to_image,
     build_alpha_from_plate_images,
     build_color_masks,
+    build_color_masks_multi_source,
     build_color_masks_v2,
     build_color_masks_with_alpha,
     build_color_masks_with_reference,
@@ -26,6 +27,8 @@ __all__ = [
     # Effective density integration
     "compute_cluster_effective_densities",
     "build_alpha_from_plate_images",
+    # Multi-source masks
+    "build_color_masks_multi_source",
     # Label stabilization (Hungarian matching)
     "stabilize_labels_with_reference",
     # Utilities

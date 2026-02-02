@@ -1108,7 +1108,6 @@ __all__ = [
     "AlphaFallbackLevel",
     "AlphaGateDecision",
     "AlphaRadialProfile",
-    "AlphaRadialProfile",
     "AlphaZoneProfile",
     "ClusterAlphaResult",
     "compute_effective_density",

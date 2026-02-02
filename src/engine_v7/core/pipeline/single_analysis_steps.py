@@ -30,7 +30,7 @@ from ..config_norm import get_polar_dims
 from ..measure.segmentation.preprocess import build_roi_mask
 from ..signature.radial_signature import build_radial_signature, to_polar
 from ..types import LensGeometry
-from ..utils import apply_white_balance, to_cie_lab
+from ..utils import to_cie_lab
 
 logger = logging.getLogger(__name__)
 
