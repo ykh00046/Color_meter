@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-01-31T13:00:00.000Z",
+  "lastUpdated": "2026-02-02T03:30:00.000Z",
   "activeFeatures": [],
   "primaryFeature": null,
   "features": {
@@ -73,17 +73,28 @@
         "analysis": "docs/archive/2026-01/v7-router-split/v7-router-split.analysis.md",
         "report": "docs/archive/2026-01/v7-router-split/v7-router-split.report.md"
       }
+    },
+    "refactor-split-large-files": {
+      "phase": "archived",
+      "matchRate": 97,
+      "iterations": 1,
+      "createdAt": "2026-01-31T08:00:00.000Z",
+      "updatedAt": "2026-02-02T03:30:00.000Z",
+      "archivedTo": "docs/04-report/",
+      "documents": {
+        "report": "docs/04-report/refactor-split-large-files.report.md"
+      }
     }
   },
   "pipeline": {
     "currentPhase": 1,
-    "level": "Dynamic",
+    "level": "Enterprise",
     "phaseHistory": []
   },
   "session": {
     "startedAt": "2026-01-30T14:06:25.553Z",
     "onboardingCompleted": true,
-    "lastActivity": "2026-01-31T15:00:00.000Z"
+    "lastActivity": "2026-02-02T03:30:00.000Z"
   },
   "history": [
     {
@@ -114,6 +125,12 @@
       "feature": "web-ui-modernization",
       "completedAt": "2026-01-31T20:00:00.000Z",
       "matchRate": 95,
+      "iterations": 1
+    },
+    {
+      "feature": "refactor-split-large-files",
+      "completedAt": "2026-02-02T03:30:00.000Z",
+      "matchRate": 97,
       "iterations": 1
     }
   ]
