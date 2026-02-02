@@ -346,14 +346,14 @@ class TestAlphaQualityGate:
         assert "alpha_quality_fail" in (cluster.fallback_reason or "")
 
     def test_quality_gate_fails_high_clip(self):
-        """When clip ratio > 30%, alpha should be skipped."""
+        """When valid ratio after clip < 40%, alpha should be skipped."""
         from core.measure.metrics.alpha_density import compute_effective_density
 
         T, R = 360, 200
         polar_alpha = np.random.uniform(0.3, 0.8, size=(T, R)).astype(np.float32)
 
-        # Set 35% to clipped values (at boundaries)
-        n_clip = int(T * R * 0.35)
+        # Set 65% to clipped values so valid_ratio_after < 0.40 threshold
+        n_clip = int(T * R * 0.65)
         clip_indices = np.random.choice(T * R, n_clip, replace=False)
         polar_alpha.flat[clip_indices[: n_clip // 2]] = 0.02  # at min clip
         polar_alpha.flat[clip_indices[n_clip // 2 :]] = 0.98  # at max clip
@@ -394,7 +394,7 @@ class TestAlphaQualityGate:
         assert "ALPHA_QUALITY_GATE_FAILED" not in warnings_default
 
         # With stricter threshold (5%), should fail
-        cfg_strict = {"quality_gate_nan_threshold": 0.05}
+        cfg_strict = {"quality_gate": {"nan_ratio_max": 0.05}}
         result_strict = compute_effective_density(polar_alpha, masks, area_ratios, cfg=cfg_strict)
         warnings_strict = " ".join(result_strict.warnings)
         assert "ALPHA_QUALITY_GATE_FAILED" in warnings_strict
@@ -414,12 +414,10 @@ class TestAlphaQualityGate:
         masks = {"ink0": np.ones((T, R), dtype=bool)}
         area_ratios = {"ink0": 0.25}
 
-        # With nested config structure
+        # With nested config structure (quality_gate section)
         cfg_nested = {
-            "quality_fail": {
-                "nan_ratio": 0.05,  # 5% - should fail
-                "clip_ratio": 0.30,
-                "moire_severity": 0.20,
+            "quality_gate": {
+                "nan_ratio_max": 0.05,  # 5% - should fail with 8% NaN
             }
         }
         result = compute_effective_density(polar_alpha, masks, area_ratios, cfg=cfg_nested)

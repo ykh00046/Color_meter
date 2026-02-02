@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, Optional, Tuple
 
@@ -27,6 +28,32 @@ from ..types import LensGeometry
 
 # Import shared helpers
 from ._helpers import mask_to_polar, mean_gray_center, mean_gray_outer, radial_mask, resize_to_square_centered
+
+_logger = logging.getLogger(__name__)
+
+
+def _safe_env_float(name: str, default: float, lo: float, hi: float) -> float:
+    """Parse env var as float with range validation; fallback on error."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        val = float(raw)
+    except (ValueError, TypeError):
+        _logger.warning("Invalid env %s=%r, using default %.4f", name, raw, default)
+        return default
+    if not (lo <= val <= hi):
+        _logger.warning(
+            "Env %s=%.4f out of range [%.4f, %.4f], using default %.4f",
+            name,
+            val,
+            lo,
+            hi,
+            default,
+        )
+        return default
+    return val
+
 
 # ==============================================================================
 # Main Gate Extraction Function
@@ -281,15 +308,14 @@ def extract_plate_gate(
     lf_min = float(plate_cfg.get("pair_lf_cos_min", 0.25))
     lf_max = float(plate_cfg.get("pair_lf_cos_max", 0.45))
 
-    env_edge_hard = os.getenv("V7_PAIR_EDGE_IOU_HARD_MIN")
-    env_lf_min = os.getenv("V7_PAIR_LF_COS_MIN")
-    env_lf_max = os.getenv("V7_PAIR_LF_COS_MAX")
-    if env_edge_hard is not None:
-        edge_hard_min = float(env_edge_hard)
-    if env_lf_min is not None:
-        lf_min = float(env_lf_min)
-    if env_lf_max is not None:
-        lf_max = float(env_lf_max)
+    edge_hard_min = _safe_env_float(
+        "V7_PAIR_EDGE_IOU_HARD_MIN",
+        edge_hard_min,
+        0.0,
+        1.0,
+    )
+    lf_min = _safe_env_float("V7_PAIR_LF_COS_MIN", lf_min, -1.0, 1.0)
+    lf_max = _safe_env_float("V7_PAIR_LF_COS_MAX", lf_max, -1.0, 1.0)
 
     pair_ok_hard = pair_edge_iou >= edge_hard_min
     pair_ok_soft = lf_min <= pair_lf_cos <= lf_max
@@ -301,7 +327,16 @@ def extract_plate_gate(
     enforce_mode = str(plate_cfg.get("pair_enforce_mode", "hard_soft")).strip().lower()
     env_mode = os.getenv("V7_PAIR_ENFORCE_MODE")
     if env_mode:
-        enforce_mode = env_mode.strip().lower()
+        env_mode_clean = env_mode.strip().lower()
+        allowed_modes = {"hard", "hard_only", "hard_soft", "soft_only"}
+        if env_mode_clean in allowed_modes:
+            enforce_mode = env_mode_clean
+        else:
+            _logger.warning(
+                "Invalid V7_PAIR_ENFORCE_MODE=%r, expected one of %s",
+                env_mode,
+                allowed_modes,
+            )
 
     if enforce_mode in ("hard", "hard_only"):
         pair_ok_effective = bool(pair_ok_hard)

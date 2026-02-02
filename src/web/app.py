@@ -33,11 +33,13 @@ from src.utils.file_io import read_json
 
 logger = logging.getLogger("web")
 
-# PHASE7: Image caching for parameter recomputation
-# Security: Reduced limits to prevent memory exhaustion
+# ── In-process image cache for parameter recomputation ──────────────────
+# Assumption: single-worker deployment (uvicorn --workers 1).
+# In multi-worker or multi-node setups this dict is NOT shared; consider
+# migrating to Redis (store as compressed bytes) or a shared-memory store.
 IMAGE_CACHE_MAX_ENTRIES = 20  # Max number of cached images
-IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024  # 500MB max total cache size
-IMAGE_CACHE_TTL_SEC = 60 * 15  # 15 minutes TTL (reduced from 30)
+IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB max total cache size
+IMAGE_CACHE_TTL_SEC = 60 * 15  # 15-minute TTL
 image_cache: Dict[str, Tuple[np.ndarray, float]] = {}
 cache_lock = asyncio.Lock()
 _cache_total_bytes = 0  # Track total memory usage
