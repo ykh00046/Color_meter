@@ -204,25 +204,25 @@ def evaluate_alpha_quality_gate(
 # ==============================================================================
 
 DEFAULT_ALPHA_CONFIG = {
-    # Radial binning
-    "n_r_bins": 20,  # Number of radial bins
-    "r_start": 0.15,  # Start radius (exclude center)
-    "r_end": 0.95,  # End radius (exclude edge)
-    # Sample gate thresholds
-    "min_samples_per_bin": 30,  # Minimum samples for valid bin
-    "min_samples_ratio": 0.005,  # Or 0.5% of theta samples
-    "min_valid_bins_ratio": 0.5,  # Need 50% valid bins for L1
-    # Confidence and fallback
-    "confidence_threshold_l1": 0.6,  # Min confidence to use L1
-    "confidence_threshold_l2": 0.4,  # Min confidence to use L2
-    "lerp_blend_enabled": True,  # Use confidence-weighted blending
-    # Zone boundaries
+    # ── Radial binning ──
+    "n_r_bins": 20,
+    "r_start": 0.15,
+    "r_end": 0.95,
+    # ── Sample gate thresholds ──
+    "min_samples_per_bin": 30,
+    "min_samples_ratio": 0.005,
+    "min_valid_bins_ratio": 0.5,
+    # ── Confidence and fallback ──
+    "confidence_threshold_l1": 0.6,
+    "confidence_threshold_l2": 0.4,
+    "lerp_blend_enabled": True,
+    # ── Zone boundaries ──
     "zone_inner_end": 0.40,
     "zone_mid_end": 0.70,
-    # Smoothing (optional)
+    # ── Smoothing (optional) ──
     "smoothing_enabled": False,
-    "smoothing_window": 3,  # Rolling median window
-    # Boundary handling
+    "smoothing_window": 3,
+    # ── Boundary handling ──
     "transition_weights_enabled": False,
     "transition_use_gradient": True,
     "transition_use_boundary": True,
@@ -230,28 +230,32 @@ DEFAULT_ALPHA_CONFIG = {
     "transition_boundary_width": 3,
     "transition_config": None,
     # ── Clip-exclusion ──
-    "clip_exclude_enabled": True,  # Exclude clipped pixels from alpha stats
-    # ── Quality gate (valid-pixel based, evaluated by evaluate_alpha_quality_gate) ──
+    "clip_exclude_enabled": True,
+    # ── Quality gate ──
     "quality_gate": {
-        "valid_ratio_after_min": 0.40,  # min valid pixel ratio after clip exclusion
-        "valid_pixels_after_min": 30000,  # min valid pixel count (adjust for resolution)
-        "nan_ratio_max": 0.10,  # max NaN ratio (raw)
-        "moire_max": 0.20,  # max moire severity (hard-cut)
+        "valid_ratio_after_min": 0.40,
+        "valid_pixels_after_min": 30000,
+        "nan_ratio_max": 0.10,
+        "moire_max": 0.20,
     },
-    # ── Small-cluster early-exit (Priority 2) ──
-    "min_pixels_for_l1": 20000,  # Skip L1 if mask has fewer pixels
-    # ── plate_lite fallback (Priority 1) ──
-    # Hierarchy: L1 > L2 > L2_plate_lite > L3
-    # plate_lite alpha is used ONLY when L1 and L2 both fail
-    "plate_lite_clamp_min": 0.05,  # Safety clamp lower bound
-    "plate_lite_clamp_max": 0.98,  # Safety clamp upper bound
-    # Runtime keys (injected by pipeline, not user-configurable):
-    # "_plate_lite_alpha_candidates": {color_id: alpha_mean, ...}
-    # "_plate_lite_inks": [{alpha_mean, area_ratio, ink_key}, ...]
-    # "_moire_severity": float
-    # "_verification_enabled": bool
-    # "_verification_agreement": float
+    # ── Small-cluster early-exit ──
+    "min_pixels_for_l1": 20000,
+    # ── plate_lite fallback (L1 > L2 > L2_plate_lite > L3) ──
+    "plate_lite_clamp_min": 0.05,
+    "plate_lite_clamp_max": 0.98,
 }
+"""Static user-configurable defaults.  Merged with caller-supplied cfg in
+``compute_effective_density()``.
+
+Runtime-injected keys (prefixed with ``_``, set by the pipeline, **never**
+placed in this dict):
+
+* ``_plate_lite_alpha_candidates`` – ``{color_id: alpha_mean, ...}``
+* ``_plate_lite_inks`` – ``[{alpha_mean, area_ratio, ink_key}, ...]``
+* ``_moire_severity`` – ``float``
+* ``_verification_enabled`` – ``bool``
+* ``_verification_agreement`` – ``float``
+"""
 
 
 # ==============================================================================
