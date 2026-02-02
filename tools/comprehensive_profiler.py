@@ -1,301 +1,146 @@
 """
-Comprehensive Performance Profiler - 2025-12-16
-
-최신 시스템 (2D Zone Analysis + InkEstimator) 기반 성능 측정
+Comprehensive v7 profiler for inspection steps.
 """
 
+from __future__ import annotations
+
+import argparse
 import gc
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
-
-import numpy as np
-import psutil
-
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root))
+from typing import Any
 
 import cv2
+import psutil
 
-from src.core.ink_estimator import InkEstimator
-from src.core.lens_detector import DetectorConfig, LensDetector
-from src.core.zone_analyzer_2d import InkMaskConfig, analyze_lens_zones_2d
-from src.utils.file_io import read_json
+from src.config.v7_paths import V7_MODELS, V7_ROOT
+from src.engine_v7.core.config_loader import load_cfg_with_sku
+from src.engine_v7.core.geometry.lens_geometry import detect_lens_circle
+from src.engine_v7.core.measure.segmentation.color_masks import build_color_masks_with_retry
+from src.engine_v7.core.model_registry import load_expected_ink_count, load_pattern_baseline, load_std_models
+from src.engine_v7.core.pipeline.analyzer import evaluate_multi
+from src.engine_v7.core.signature.radial_signature import build_radial_signature, to_polar
 
 
 @dataclass
 class StepResult:
-    """개별 단계 결과"""
-
     name: str
     time_ms: float
     memory_mb: float
     cpu_percent: float
 
 
-class ComprehensiveProfiler:
-    """포괄적 성능 프로파일러"""
-
-    def __init__(self):
-        self.process = psutil.Process()
-
-    def profile_2d_analysis(self, image_path: Path, sku_config: dict) -> tuple[List[StepResult], float]:
-        """2D Zone Analysis 전체 파이프라인 프로파일링"""
-        results = []
-
-        # Step 1: Image Loading
-        gc.collect()
-        mem_start = self.process.memory_info().rss / 1024 / 1024
-        t_start = time.perf_counter()
-
-        img_bgr = cv2.imread(str(image_path))
-        if img_bgr is None:
-            raise ValueError(f"Failed to load image: {image_path}")
-
-        t_elapsed = (time.perf_counter() - t_start) * 1000
-        mem_end = self.process.memory_info().rss / 1024 / 1024
-        results.append(
-            StepResult(
-                name="1. Image Loading",
-                time_ms=t_elapsed,
-                memory_mb=mem_end - mem_start,
-                cpu_percent=self.process.cpu_percent(),
-            )
-        )
-
-        # Step 2: Lens Detection
-        gc.collect()
-        mem_start = self.process.memory_info().rss / 1024 / 1024
-        t_start = time.perf_counter()
-
-        detector = LensDetector(DetectorConfig())
-        lens_detection = detector.detect(img_bgr)
-
-        t_elapsed = (time.perf_counter() - t_start) * 1000
-        mem_end = self.process.memory_info().rss / 1024 / 1024
-        results.append(
-            StepResult(
-                name="2. Lens Detection",
-                time_ms=t_elapsed,
-                memory_mb=mem_end - mem_start,
-                cpu_percent=self.process.cpu_percent(),
-            )
-        )
-
-        # Step 3: 2D Zone Analysis (Main Analysis)
-        gc.collect()
-        mem_start = self.process.memory_info().rss / 1024 / 1024
-        t_start = time.perf_counter()
-
-        result_2d, debug_info_2d = analyze_lens_zones_2d(
-            img_bgr=img_bgr,
-            lens_detection=lens_detection,
-            sku_config=sku_config,
-            ink_mask_config=InkMaskConfig(),
-            save_debug=False,
-        )
-
-        t_elapsed = (time.perf_counter() - t_start) * 1000
-        mem_end = self.process.memory_info().rss / 1024 / 1024
-        results.append(
-            StepResult(
-                name="3. 2D Zone Analysis",
-                time_ms=t_elapsed,
-                memory_mb=mem_end - mem_start,
-                cpu_percent=self.process.cpu_percent(),
-            )
-        )
-
-        # Step 4: Image-Based Ink Estimation (if enabled)
-        if sku_config.get("params", {}).get("enable_image_based_ink_analysis", True):
-            gc.collect()
-            mem_start = self.process.memory_info().rss / 1024 / 1024
-            t_start = time.perf_counter()
-
-            estimator = InkEstimator()
-            roi = lens_detection.roi
-            if roi:
-                x, y, w, h = roi
-                roi_image = img_bgr[y : y + h, x : x + w]
-                ink_result = estimator.estimate_from_array(roi_image)
-
-            t_elapsed = (time.perf_counter() - t_start) * 1000
-            mem_end = self.process.memory_info().rss / 1024 / 1024
-            results.append(
-                StepResult(
-                    name="4. Image-Based Ink Estimation",
-                    time_ms=t_elapsed,
-                    memory_mb=mem_end - mem_start,
-                    cpu_percent=self.process.cpu_percent(),
-                )
-            )
-
-        total_time = sum(r.time_ms for r in results)
-        return results, total_time
-
-    def profile_batch(self, image_paths: List[Path], sku_config: dict) -> Dict:
-        """배치 처리 프로파일링"""
-        gc.collect()
-        mem_start = self.process.memory_info().rss / 1024 / 1024
-        peak_mem = mem_start
-
-        t_start = time.perf_counter()
-
-        for img_path in image_paths:
-            try:
-                img_bgr = cv2.imread(str(img_path))
-                detector = LensDetector(DetectorConfig())
-                lens_detection = detector.detect(img_bgr)
-                result_2d, _ = analyze_lens_zones_2d(
-                    img_bgr=img_bgr,
-                    lens_detection=lens_detection,
-                    sku_config=sku_config,
-                    save_debug=False,
-                )
-
-                current_mem = self.process.memory_info().rss / 1024 / 1024
-                peak_mem = max(peak_mem, current_mem)
-            except Exception as e:
-                print(f"Error processing {img_path.name}: {e}")
-
-        t_elapsed = (time.perf_counter() - t_start) * 1000
-
-        return {
-            "total_time_ms": t_elapsed,
-            "avg_time_ms": t_elapsed / len(image_paths) if image_paths else 0,
-            "throughput_per_sec": len(image_paths) / (t_elapsed / 1000) if t_elapsed > 0 else 0,
-            "peak_memory_mb": peak_mem - mem_start,
-        }
-
-
-def print_step_results(results: List[StepResult], total_time: float):
-    """단계별 결과 출력"""
-    print("\n" + "=" * 90)
-    print("  Performance Profiling Results (Latest System)")
-    print("=" * 90)
-    print(f"\n{'Step':<40} {'Time (ms)':<12} {'%':<8} {'Mem (MB)':<12} {'CPU %':<8}")
-    print("-" * 90)
-
-    for r in results:
-        pct = (r.time_ms / total_time * 100) if total_time > 0 else 0
-        print(f"{r.name:<40} {r.time_ms:>10.2f}   {pct:>6.1f}%  {r.memory_mb:>10.2f}   {r.cpu_percent:>6.1f}%")
-
-    print("-" * 90)
-    print(f"{'TOTAL':<40} {total_time:>10.2f}   {'100.0%':>7}  {'-':>10}   {'-':>6}")
-    print("=" * 90 + "\n")
-
-
-def main():
-    """메인 함수"""
-    print("\n" + "=" * 90)
-    print("  COMPREHENSIVE PERFORMANCE PROFILER - Contact Lens Inspection System")
-    print("  Version: 2025-12-16 (2D Zone Analysis + InkEstimator)")
-    print("=" * 90)
-
-    # Load test images and SKU
-    data_dir = project_root / "data" / "raw_images"
-    test_images = sorted(data_dir.glob("*.jpg"))
-
-    if not test_images:
-        print("ERROR: No test images found in data/raw_images/")
-        return 1
-
-    # Load SKU config
-    sku_config_path = project_root / "config" / "sku_db" / "SKU001.json"
-    if not sku_config_path.exists():
-        print(f"ERROR: SKU config not found: {sku_config_path}")
-        return 1
-
-    sku_config = read_json(sku_config_path)
-
-    print(f"\nFound {len(test_images)} test images")
-    print(f"SKU Config: {sku_config_path.name}")
-
-    # Profile single image
-    print("\n" + "=" * 90)
-    print("  SINGLE IMAGE PROFILING")
-    print("=" * 90)
-    print(f"Image: {test_images[0].name}")
-
-    profiler = ComprehensiveProfiler()
-    results, total_time = profiler.profile_2d_analysis(test_images[0], sku_config)
-
-    print_step_results(results, total_time)
-
-    # Identify bottleneck
-    bottleneck = max(results, key=lambda r: r.time_ms)
-    print(
-        f"BOTTLENECK: {bottleneck.name} ({bottleneck.time_ms:.2f}ms, "
-        f"{bottleneck.time_ms / total_time * 100:.1f}% of total)"
+def _step(process: psutil.Process, name: str, func) -> tuple[Any, StepResult]:
+    gc.collect()
+    mem_start = process.memory_info().rss / 1024 / 1024
+    t_start = time.perf_counter()
+    result = func()
+    t_elapsed = (time.perf_counter() - t_start) * 1000
+    mem_end = process.memory_info().rss / 1024 / 1024
+    return result, StepResult(
+        name=name,
+        time_ms=t_elapsed,
+        memory_mb=mem_end - mem_start,
+        cpu_percent=process.cpu_percent(),
     )
 
-    # Batch profiling
+
+def print_results(results: list[StepResult]) -> None:
+    total = sum(r.time_ms for r in results)
     print("\n" + "=" * 90)
-    print("  BATCH PROCESSING PROFILING")
+    print("  v7 Comprehensive Profiling Results")
     print("=" * 90)
-
-    for batch_size in [1, 5, 10, 20]:
-        if batch_size > len(test_images):
-            # Repeat images to meet batch size
-            batch = (test_images * ((batch_size // len(test_images)) + 1))[:batch_size]
-        else:
-            batch = test_images[:batch_size]
-
-        print(f"\nBatch size: {batch_size} images")
-        batch_result = profiler.profile_batch(batch, sku_config)
-
-        print(f"  Total time:          {batch_result['total_time_ms']:>10.2f} ms")
-        print(f"  Avg per image:       {batch_result['avg_time_ms']:>10.2f} ms")
-        print(f"  Throughput:          {batch_result['throughput_per_sec']:>10.2f} images/sec")
-        print(f"  Peak memory:         {batch_result['peak_memory_mb']:>10.2f} MB")
-
-    # System info
-    print("\n" + "=" * 90)
-    print("  SYSTEM INFORMATION")
-    print("=" * 90)
-    import platform
-
-    print(f"  OS: {platform.system()} {platform.release()}")
-    print(f"  CPU: {psutil.cpu_count(logical=False)} cores ({psutil.cpu_count()} threads)")
-    print(f"  RAM: {psutil.virtual_memory().total / 1024 / 1024 / 1024:.1f} GB")
-    print(f"  Python: {platform.python_version()}")
-
-    # Recommendations
-    print("\n" + "=" * 90)
-    print("  OPTIMIZATION RECOMMENDATIONS")
-    print("=" * 90)
-
-    if "2D Zone Analysis" in bottleneck.name:
-        print("\n1. 2D Zone Analysis is the bottleneck:")
-        print("   - Consider reducing zone_masks resolution")
-        print("   - Optimize sector statistics calculation")
-        print("   - Cache ink_mask between SKUs if applicable")
-
-    if "Ink Estimation" in bottleneck.name:
-        print("\n2. Ink Estimation optimization:")
-        print("   - Reduce GMM max_components for faster BIC")
-        print("   - Implement early termination for single-ink cases")
-        print("   - Cache specular rejection masks")
-
-    print("\n3. General optimizations:")
-    print("   - Use NumPy vectorization for pixel operations")
-    print("   - Implement multi-threading for batch processing")
-    print("   - Consider GPU acceleration for cv2.warpPolar")
-
-    print("\n4. Memory optimization:")
-    print("   - Release debug_info when not needed")
-    print("   - Use np.float32 instead of np.float64 where possible")
-    print("   - Implement streaming for large batch jobs")
-
-    print("\n" + "=" * 90)
-    print("  Profiling Complete!")
+    print(f"\n{'Step':<44} {'Time (ms)':<12} {'%':<8} {'Mem (MB)':<12} {'CPU %':<8}")
+    print("-" * 90)
+    for r in results:
+        pct = (r.time_ms / total * 100) if total > 0 else 0
+        print(f"{r.name:<44} {r.time_ms:>10.2f}   {pct:>6.1f}%  {r.memory_mb:>10.2f}   {r.cpu_percent:>6.1f}%")
+    print("-" * 90)
+    print(f"{'TOTAL':<44} {total:>10.2f}   {'100.0%':>7}  {'-':>10}   {'-':>6}")
     print("=" * 90 + "\n")
 
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--image", required=True, help="Lens image path")
+    ap.add_argument("--sku", required=True)
+    ap.add_argument("--ink", default="INK_DEFAULT")
+    ap.add_argument("--cfg", default=str(V7_ROOT / "configs" / "default.json"))
+    ap.add_argument("--models_root", default=str(V7_MODELS))
+    ap.add_argument("--expected_ink_count", type=int, default=None)
+    args = ap.parse_args()
+
+    img_path = Path(args.image)
+    if not img_path.exists():
+        raise SystemExit(f"Image not found: {img_path}")
+
+    cfg, _, _ = load_cfg_with_sku(args.cfg, args.sku, strict_unknown=False)
+    process = psutil.Process()
+    results: list[StepResult] = []
+
+    bgr, step = _step(process, "1. Image Loading", lambda: cv2.imread(str(img_path)))
+    results.append(step)
+    if bgr is None:
+        raise SystemExit(f"Failed to read image: {img_path}")
+
+    geom, step = _step(process, "2. Lens Detection", lambda: detect_lens_circle(bgr))
+    results.append(step)
+
+    polar, step = _step(
+        process,
+        "3. Polar Transform",
+        lambda: to_polar(bgr, geom, R=int(cfg["polar"]["R"]), T=int(cfg["polar"]["T"])),
+    )
+    results.append(step)
+
+    _, step = _step(
+        process,
+        "4. Radial Signature",
+        lambda: build_radial_signature(
+            polar,
+            r_start=float(cfg["signature"]["r_start"]),
+            r_end=float(cfg["signature"]["r_end"]),
+        ),
+    )
+    results.append(step)
+
+    expected_ink_count = args.expected_ink_count
+    if expected_ink_count is None:
+        expected_ink_count = load_expected_ink_count(args.models_root, args.sku, args.ink)
+
+    if expected_ink_count and cfg.get("v2_ink", {}).get("enabled", False):
+        _, step = _step(
+            process,
+            "5. Ink Segmentation",
+            lambda: build_color_masks_with_retry(
+                bgr, cfg, expected_k=int(expected_ink_count), geom=geom, confidence_threshold=0.7, enable_retry=True
+            ),
+        )
+        results.append(step)
+
+    std_models, reasons = load_std_models(args.models_root, args.sku, args.ink)
+    if std_models is None:
+        raise SystemExit(f"STD model not found: {reasons}")
+
+    pattern_baseline, _ = load_pattern_baseline(args.models_root, args.sku, args.ink)
+    ok_log_context = {
+        "sku": args.sku,
+        "ink": args.ink,
+        "expected_ink_count_input": expected_ink_count,
+        "expected_ink_count_registry": expected_ink_count,
+    }
+
+    _, step = _step(
+        process,
+        "6. evaluate_multi (end-to-end)",
+        lambda: evaluate_multi(bgr, std_models, cfg, pattern_baseline=pattern_baseline, ok_log_context=ok_log_context),
+    )
+    results.append(step)
+
+    print_results(results)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
