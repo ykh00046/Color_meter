@@ -20,6 +20,7 @@ from .v7_activation import router as activation_router
 from .v7_inspection import router as inspection_router
 from .v7_metrics import router as metrics_router
 from .v7_plate import router as plate_router
+from .v7_production_colors import router as production_colors_router
 from .v7_registration import router as registration_router
 
 router = APIRouter(prefix="/api/v7", tags=["V7 MVP"])
@@ -29,3 +30,4 @@ router.include_router(activation_router, tags=["V7 Activation"])
 router.include_router(inspection_router, tags=["V7 Inspection"])
 router.include_router(metrics_router, tags=["V7 Metrics"])
 router.include_router(plate_router, tags=["V7 Plate"])
+router.include_router(production_colors_router, tags=["V7 Production Colors"])
